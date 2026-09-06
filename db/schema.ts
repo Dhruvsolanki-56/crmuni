@@ -41,3 +41,21 @@ export const tasks = sqliteTable('tasks', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [index('idx_tasks_workspace_status_due').on(table.workspaceId, table.status, table.dueDate)]);
+
+export const aiExtractions = sqliteTable('ai_extractions', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  interactionId: text('interaction_id').notNull().references(() => interactions.id),
+  status: text('status').notNull().default('processing'),
+  model: text('model').notNull(),
+  promptVersion: text('prompt_version').notNull(),
+  resultJson: text('result_json'),
+  errorCode: text('error_code'),
+  createdAt: integer('created_at').notNull(),
+  completedAt: integer('completed_at'),
+  confirmedAt: integer('confirmed_at'),
+  confirmedBy: text('confirmed_by'),
+}, (table) => [
+  index('idx_ai_extractions_lead_created').on(table.workspaceId, table.leadId, table.createdAt),
+]);

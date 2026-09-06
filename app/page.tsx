@@ -28,6 +28,14 @@ type SavedLead = {
   nextAction?: string; dueDate?: string; reviewStatus: string; createdAt: number;
 };
 
+type Analysis = {
+  summary: string;
+  fields: Array<{ key: string; label: string; value: string | null; confidence: number; evidence: string | null }>;
+  commitments: Array<{ title: string; due_date: string | null; owner_party: string; confidence: number; evidence: string }>;
+  score: { value: number; rationale: string };
+  risks: string[];
+};
+
 function NavItem({ icon: Icon, label, active = false }: { icon: typeof LayoutDashboard; label: string; active?: boolean }) {
   return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
 }
@@ -39,6 +47,12 @@ export default function Home() {
   const [saveError, setSaveError] = useState('');
   const [savedLead, setSavedLead] = useState<SavedLead | null>(null);
   const [capturedLeads, setCapturedLeads] = useState<SavedLead[]>([]);
+  const [reviewLead, setReviewLead] = useState<SavedLead | null>(null);
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [extractionId, setExtractionId] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
 
   useEffect(() => {
@@ -79,6 +93,28 @@ export default function Home() {
     finally { setSaving(false); }
   }
   function resetCapture(open: boolean) { setCaptureOpen(open); if (!open) setTimeout(() => { setSaved(false); setSavedLead(null); setSaveError(''); }, 150); }
+
+  function openReview(lead: SavedLead) {
+    setReviewLead(lead); setAnalysis(null); setExtractionId(''); setAnalysisError(''); setConfirmed(false);
+  }
+
+  async function analyzeConversation() {
+    if (!reviewLead) return;
+    setAnalyzing(true); setAnalysisError('');
+    try {
+      const response = await fetch('/api/analysis', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ leadId: reviewLead.id }) });
+      const data = await response.json() as { analysis?: Analysis; extractionId?: string; error?: string };
+      if (!response.ok || !data.analysis || !data.extractionId) throw new Error(data.error || 'Unable to analyze this conversation.');
+      setAnalysis(data.analysis); setExtractionId(data.extractionId);
+    } catch (error) { setAnalysisError(error instanceof Error ? error.message : 'Unable to analyze this conversation.'); }
+    finally { setAnalyzing(false); }
+  }
+
+  async function confirmAnalysis() {
+    const response = await fetch('/api/analysis/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ extractionId }) });
+    if (response.ok) { setConfirmed(true); setCapturedLeads((current) => current.map((lead) => lead.id === reviewLead?.id ? { ...lead, reviewStatus: 'confirmed' } : lead)); }
+    else setAnalysisError('Could not confirm this analysis. Please try again.');
+  }
 
   return (
     <main className="app-shell">
@@ -135,6 +171,19 @@ export default function Home() {
                 </> : <div className="success-state"><span className="success-icon"><Check /></span><p className="dialog-kicker">Lead saved</p><DialogTitle className="dialog-title">{savedLead?.fullName} is ready for review</DialogTitle><DialogDescription>The conversation is stored as source evidence. AI extraction will be added next; no facts have been invented.</DialogDescription><div className="saved-summary"><span><small>Account</small><strong>{savedLead?.company}</strong></span><span><small>Review</small><strong>Needs review</strong></span>{savedLead?.nextAction ? <span><small>Commitment</small><strong>{savedLead.nextAction}</strong></span> : null}{savedLead?.dueDate ? <span><small>Due</small><strong>{savedLead.dueDate}</strong></span> : null}</div><Button className="save-button" onClick={() => resetCapture(false)}>Back to today</Button></div>}
               </DialogContent>
             </Dialog>
+            <Dialog open={Boolean(reviewLead)} onOpenChange={(open) => { if (!open) setReviewLead(null); }}>
+              <DialogContent className="review-dialog">
+                <DialogHeader><p className="dialog-kicker">Conversation intelligence</p><DialogTitle className="dialog-title">Review {reviewLead?.fullName}</DialogTitle><DialogDescription>AI suggestions remain separate from confirmed customer facts until you approve them.</DialogDescription></DialogHeader>
+                <div className="source-note"><span>Source conversation</span><p>{reviewLead?.note || 'No conversation note was captured.'}</p></div>
+                {!analysis ? <div className="analysis-empty"><span className="analysis-mark"><Sparkles /></span><h3>Turn this note into accountable sales data</h3><p>Extract requirements, buying signals, commitments, deadlines, and supporting evidence.</p>{analysisError ? <div className="ai-config-warning"><strong>AI analysis unavailable</strong><span>{analysisError}</span></div> : null}<Button onClick={analyzeConversation} disabled={analyzing || !reviewLead?.note}>{analyzing ? 'Analyzing evidence…' : 'Analyze conversation'} <Sparkles /></Button></div> : <div className="analysis-result">
+                  <div className="analysis-summary"><span className="analysis-score">{analysis.score.value}</span><div><small>AI qualification score · explainable</small><p>{analysis.summary}</p></div></div>
+                  <div className="intelligence-grid">{analysis.fields.filter((field) => field.value).map((field) => <article key={field.key}><span>{field.label}<i>{Math.round(field.confidence * 100)}%</i></span><strong>{field.value}</strong>{field.evidence ? <q>{field.evidence}</q> : null}</article>)}</div>
+                  {analysis.commitments.length ? <div className="commitments"><h3>Proposed commitments</h3>{analysis.commitments.map((item, index) => <article key={`${item.title}-${index}`}><Clock3 /><span><strong>{item.title}</strong><small>{item.due_date || 'Date needs confirmation'} · {item.owner_party}</small><q>{item.evidence}</q></span></article>)}</div> : null}
+                  {analysis.risks.length ? <div className="risk-note"><strong>Needs attention</strong>{analysis.risks.join(' · ')}</div> : null}
+                  <Button className="save-button" onClick={confirmAnalysis} disabled={confirmed}>{confirmed ? <><Check /> Confirmed and tasks created</> : 'Confirm facts and create tasks'}</Button>
+                </div>}
+              </DialogContent>
+            </Dialog>
           </section>
 
           <section className="signal-grid" aria-label="Event performance">
@@ -155,7 +204,7 @@ export default function Home() {
             <div className="panel-head"><div><p className="eyebrow">Live from the booth</p><h2>Recent conversations</h2></div><button>See all leads <ArrowRight /></button></div>
             <div className="lead-table" aria-label="Recent conversations">
               <div className="lead-row lead-header"><span>Person</span><span>Interest</span><span>AI score</span><span>Captured</span></div>
-              {capturedLeads.map(lead=><button className="lead-row new-lead" key={lead.id}><span className="person-cell"><span className="initial-avatar small">{lead.fullName.split(' ').map(n=>n[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span></span><span>{lead.nextAction || 'Needs review'}</span><span><b className="review-chip">Review</b></span><span>Just now</span></button>)}
+              {capturedLeads.map(lead=><button className="lead-row new-lead" key={lead.id} onClick={() => openReview(lead)}><span className="person-cell"><span className="initial-avatar small">{lead.fullName.split(' ').map(n=>n[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span></span><span>{lead.nextAction || 'Needs review'}</span><span><b className={`review-chip ${lead.reviewStatus === 'confirmed' ? 'confirmed' : ''}`}>{lead.reviewStatus === 'confirmed' ? 'Confirmed' : 'Review'}</b></span><span>Just now</span></button>)}
               {recent.map(lead=><button className="lead-row" key={lead.name}><span className="person-cell"><span className="initial-avatar small">{lead.name.split(' ').map(n=>n[0]).join('')}</span><span><strong>{lead.name}</strong><small>{lead.role} · {lead.company}</small></span></span><span>{lead.interest}</span><span><b className={`score ${lead.score>85?'hot':''}`}>{lead.score}</b></span><span>{lead.time}</span></button>)}
             </div>
           </section>

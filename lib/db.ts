@@ -1,9 +1,13 @@
 import { env } from 'cloudflare:workers';
 
-export type RevenueEnv = { DB: D1Database };
+export type RevenueEnv = { DB: D1Database; OPENAI_API_KEY?: string; OPENAI_MODEL?: string };
 
 export function database(): D1Database {
   return (env as unknown as RevenueEnv).DB;
+}
+
+export function revenueEnv(): RevenueEnv {
+  return env as unknown as RevenueEnv;
 }
 
 export function requestUser(request: Request) {
