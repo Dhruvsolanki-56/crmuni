@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type SyntheticEvent } from 'react';
 import {
   ArrowRight, BarChart3, Building2, CalendarDays, Camera, Check, ChevronDown,
   CircleUserRound, Clock3, FileText, LayoutDashboard, Menu, Mic, Plus, QrCode,
@@ -23,6 +23,11 @@ const recent = [
   { name: 'Sanjay Verma', company: 'Prime Polymers', role: 'Plant Head', score: 71, interest: 'Downtime analytics', time: '10:51 AM' },
 ];
 
+type SavedLead = {
+  id: string; fullName: string; company: string; role?: string; note?: string;
+  nextAction?: string; dueDate?: string; reviewStatus: string; createdAt: number;
+};
+
 function NavItem({ icon: Icon, label, active = false }: { icon: typeof LayoutDashboard; label: string; active?: boolean }) {
   return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
 }
@@ -30,6 +35,10 @@ function NavItem({ icon: Icon, label, active = false }: { icon: typeof LayoutDas
 export default function Home() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [savedLead, setSavedLead] = useState<SavedLead | null>(null);
+  const [capturedLeads, setCapturedLeads] = useState<SavedLead[]>([]);
   const [mobileNav, setMobileNav] = useState(false);
 
   useEffect(() => {
@@ -48,8 +57,28 @@ export default function Home() {
     return () => lifecycle.abort();
   }, []);
 
-  function saveLead(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setSaved(true); }
-  function resetCapture(open: boolean) { setCaptureOpen(open); if (!open) setTimeout(() => setSaved(false), 150); }
+  useEffect(() => {
+    fetch('/api/leads').then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json() as { leads?: SavedLead[] };
+      setCapturedLeads(data.leads || []);
+    }).catch(() => undefined);
+  }, []);
+
+  async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true); setSaveError('');
+    const form = new FormData(event.currentTarget);
+    const payload = Object.fromEntries(form.entries());
+    try {
+      const response = await fetch('/api/leads', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await response.json() as { lead?: SavedLead; error?: string };
+      if (!response.ok || !data.lead) throw new Error(data.error || 'Unable to save this lead.');
+      setSavedLead(data.lead); setCapturedLeads((current) => [data.lead!, ...current]); setSaved(true);
+    } catch (error) { setSaveError(error instanceof Error ? error.message : 'Unable to save this lead.'); }
+    finally { setSaving(false); }
+  }
+  function resetCapture(open: boolean) { setCaptureOpen(open); if (!open) setTimeout(() => { setSaved(false); setSavedLead(null); setSaveError(''); }, 150); }
 
   return (
     <main className="app-shell">
@@ -95,12 +124,15 @@ export default function Home() {
                   </div>
                   <div className="or"><span>or enter the basics</span></div>
                   <form onSubmit={saveLead} className="lead-form">
-                    <div className="field-grid"><label>Full name<Input required placeholder="e.g. Rajesh Mehta" /></label><label>Company<Input required placeholder="e.g. ABC Pharma" /></label></div>
-                    <label>Conversation note<Textarea placeholder="What did they need, what did you promise, and when?" /></label>
-                    <Button type="submit" className="save-button">Save and understand <ArrowRight /></Button>
+                    <div className="field-grid"><div className="field-block"><label htmlFor="lead-name">Full name</label><Input id="lead-name" name="fullName" required placeholder="e.g. Rajesh Mehta" /></div><div className="field-block"><label htmlFor="lead-company">Company</label><Input id="lead-company" name="company" required placeholder="e.g. ABC Pharma" /></div></div>
+                    <div className="field-block"><label htmlFor="lead-role">Role</label><Input id="lead-role" name="role" placeholder="e.g. Procurement Head" /></div>
+                    <div className="field-block"><label htmlFor="lead-note">Conversation note</label><Textarea id="lead-note" name="note" placeholder="What did they need, what did you promise, and when?" /></div>
+                    <div className="field-grid"><div className="field-block"><label htmlFor="lead-action">Next action</label><Input id="lead-action" name="nextAction" placeholder="e.g. Send preliminary pricing" /></div><div className="field-block"><label htmlFor="lead-due">Due date</label><Input id="lead-due" name="dueDate" type="date" /></div></div>
+                    {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
+                    <Button type="submit" className="save-button" disabled={saving}>{saving ? 'Saving securely…' : 'Save conversation'} {!saving && <ArrowRight />}</Button>
                     <p className="offline-note"><Wifi size={14} /> Works offline. We’ll sync when your connection returns.</p>
                   </form>
-                </> : <div className="success-state"><span className="success-icon"><Check /></span><p className="dialog-kicker">Lead saved</p><DialogTitle className="dialog-title">Conversation ready for review</DialogTitle><DialogDescription>The lead, note, and proposed next actions are safely captured.</DialogDescription><Button className="save-button" onClick={() => resetCapture(false)}>Back to today</Button></div>}
+                </> : <div className="success-state"><span className="success-icon"><Check /></span><p className="dialog-kicker">Lead saved</p><DialogTitle className="dialog-title">{savedLead?.fullName} is ready for review</DialogTitle><DialogDescription>The conversation is stored as source evidence. AI extraction will be added next; no facts have been invented.</DialogDescription><div className="saved-summary"><span><small>Account</small><strong>{savedLead?.company}</strong></span><span><small>Review</small><strong>Needs review</strong></span>{savedLead?.nextAction ? <span><small>Commitment</small><strong>{savedLead.nextAction}</strong></span> : null}{savedLead?.dueDate ? <span><small>Due</small><strong>{savedLead.dueDate}</strong></span> : null}</div><Button className="save-button" onClick={() => resetCapture(false)}>Back to today</Button></div>}
               </DialogContent>
             </Dialog>
           </section>
@@ -121,9 +153,10 @@ export default function Home() {
 
           <section className="panel leads-panel">
             <div className="panel-head"><div><p className="eyebrow">Live from the booth</p><h2>Recent conversations</h2></div><button>See all leads <ArrowRight /></button></div>
-            <div className="lead-table" role="table" aria-label="Recent conversations">
-              <div className="lead-row lead-header" role="row"><span>Person</span><span>Interest</span><span>AI score</span><span>Captured</span></div>
-              {recent.map(lead=><button className="lead-row" key={lead.name} role="row"><span className="person-cell"><span className="initial-avatar small">{lead.name.split(' ').map(n=>n[0]).join('')}</span><span><strong>{lead.name}</strong><small>{lead.role} · {lead.company}</small></span></span><span>{lead.interest}</span><span><b className={`score ${lead.score>85?'hot':''}`}>{lead.score}</b></span><span>{lead.time}</span></button>)}
+            <div className="lead-table" aria-label="Recent conversations">
+              <div className="lead-row lead-header"><span>Person</span><span>Interest</span><span>AI score</span><span>Captured</span></div>
+              {capturedLeads.map(lead=><button className="lead-row new-lead" key={lead.id}><span className="person-cell"><span className="initial-avatar small">{lead.fullName.split(' ').map(n=>n[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span></span><span>{lead.nextAction || 'Needs review'}</span><span><b className="review-chip">Review</b></span><span>Just now</span></button>)}
+              {recent.map(lead=><button className="lead-row" key={lead.name}><span className="person-cell"><span className="initial-avatar small">{lead.name.split(' ').map(n=>n[0]).join('')}</span><span><strong>{lead.name}</strong><small>{lead.role} · {lead.company}</small></span></span><span>{lead.interest}</span><span><b className={`score ${lead.score>85?'hot':''}`}>{lead.score}</b></span><span>{lead.time}</span></button>)}
             </div>
           </section>
         </div>
