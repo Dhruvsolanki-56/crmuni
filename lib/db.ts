@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 
-export type RevenueEnv = { DB: D1Database; OPENAI_API_KEY?: string; OPENAI_MODEL?: string };
+export type RevenueEnv = { DB: D1Database; FILES: R2Bucket; OPENAI_API_KEY?: string; OPENAI_MODEL?: string };
 
 export function database(): D1Database {
   return (env as unknown as RevenueEnv).DB;

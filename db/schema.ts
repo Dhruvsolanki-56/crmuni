@@ -138,3 +138,70 @@ export const companyDocuments = sqliteTable('company_documents', {
   status: text('status').notNull().default('pending_upload'),
   createdAt: integer('created_at').notNull(),
 }, (table) => [index('idx_company_documents_workspace').on(table.workspaceId, table.createdAt)]);
+
+export const companyProfiles = sqliteTable('company_profiles', {
+  workspaceId: text('workspace_id').primaryKey().references(() => workspaces.id),
+  legalName: text('legal_name').notNull(),
+  websiteUrl: text('website_url'),
+  description: text('description'),
+  targetIndustries: text('target_industries_json').notNull().default('[]'),
+  targetGeographies: text('target_geographies_json').notNull().default('[]'),
+  eventObjective: text('event_objective'),
+  onboardingStep: integer('onboarding_step').notNull().default(1),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const products = sqliteTable('products', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  name: text('name').notNull(),
+  kind: text('kind').notNull().default('product'),
+  description: text('description'),
+  buyerRoles: text('buyer_roles_json').notNull().default('[]'),
+  painPoints: text('pain_points_json').notNull().default('[]'),
+  status: text('status').notNull().default('active'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [index('idx_products_workspace_status').on(table.workspaceId, table.status)]);
+
+export const idealCustomerProfiles = sqliteTable('ideal_customer_profiles', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  name: text('name').notNull(),
+  industries: text('industries_json').notNull().default('[]'),
+  companySizes: text('company_sizes_json').notNull().default('[]'),
+  geographies: text('geographies_json').notNull().default('[]'),
+  buyerRoles: text('buyer_roles_json').notNull().default('[]'),
+  mustHaveSignals: text('must_have_signals_json').notNull().default('[]'),
+  disqualifiers: text('disqualifiers_json').notNull().default('[]'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [index('idx_icp_workspace').on(table.workspaceId, table.createdAt)]);
+
+export const qualificationRules = sqliteTable('qualification_rules', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  label: text('label').notNull(),
+  field: text('field').notNull(),
+  operator: text('operator').notNull(),
+  expectedValue: text('expected_value').notNull(),
+  weight: integer('weight').notNull().default(10),
+  ruleType: text('rule_type').notNull().default('positive'),
+  status: text('status').notNull().default('active'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_qualification_rules_workspace').on(table.workspaceId, table.status)]);
+
+export const knowledgeSources = sqliteTable('knowledge_sources', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  name: text('name').notNull(),
+  sourceType: text('source_type').notNull(),
+  sourceUrl: text('source_url'),
+  storageKey: text('storage_key'),
+  contentType: text('content_type'),
+  sizeBytes: integer('size_bytes'),
+  status: text('status').notNull().default('stored'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_knowledge_sources_workspace').on(table.workspaceId, table.createdAt)]);
