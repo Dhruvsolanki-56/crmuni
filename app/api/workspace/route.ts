@@ -1,4 +1,4 @@
-import { auditStatement, database, requireRole, requireWorkspace } from '@/lib/db';
+import { auditStatement, database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 import { accountIdentity, normalizeCompany } from '@/lib/accounts';
 
 function clean(value: unknown, max: number) {
@@ -69,6 +69,27 @@ export async function POST(request: Request) {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: 'Enter a valid email address.' }, { status: 400 });
     if (!(await database().prepare(`SELECT id FROM leads WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id).first())) return Response.json({ error: 'Lead not found.' }, { status: 404 });
     const account = await accountIdentity(context.workspace.id, company); const now = Date.now(); await database().batch([database().prepare(`INSERT INTO accounts (id,workspace_id,name,normalized_name,status,created_at,updated_at) VALUES (?,?,?,?,'active',?,?) ON CONFLICT(workspace_id,normalized_name) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at`).bind(account.id, context.workspace.id, company, account.normalized, now, now), database().prepare(`UPDATE leads SET account_id=?,full_name=?,company=?,role=NULLIF(?,''),email=NULLIF(?,''),phone=NULLIF(?,''),updated_at=? WHERE id=? AND workspace_id=?`).bind(account.id, fullName, company, role, email, phone, now, id, context.workspace.id), auditStatement(context, 'lead.updated', 'lead', id)]); return Response.json({ lead: { id, fullName, company, role, email, phone } });
+  }
+  if (action === 'erase_lead') {
+    requireRole(context, ['owner', 'admin']); const id = clean(body.id, 80); if (!id) return Response.json({ error: 'Lead id is required.' }, { status: 400 }); const db = database();
+    const lead = await db.prepare(`SELECT id FROM leads WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id).first(); if (!lead) return Response.json({ error: 'Lead not found.' }, { status: 404 });
+    const assets = await db.prepare(`SELECT storage_key AS storageKey FROM lead_capture_assets WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id).all<{ storageKey: string }>(); const now = Date.now();
+    await db.batch([
+      db.prepare(`DELETE FROM lead_facts WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`DELETE FROM qualification_scores WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`DELETE FROM communication_drafts WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`DELETE FROM ai_extractions WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`DELETE FROM tasks WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`DELETE FROM interactions WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`DELETE FROM account_stakeholders WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`DELETE FROM lead_capture_assets WHERE lead_id=? AND workspace_id=?`).bind(id, context.workspace.id),
+      db.prepare(`UPDATE rfqs SET lead_id=NULL,updated_at=? WHERE lead_id=? AND workspace_id=?`).bind(now, id, context.workspace.id),
+      db.prepare(`UPDATE opportunities SET lead_id=NULL,updated_at=? WHERE lead_id=? AND workspace_id=?`).bind(now, id, context.workspace.id),
+      db.prepare(`UPDATE leads SET full_name='Deleted contact',role=NULL,email=NULL,phone=NULL,source='privacy_erasure',review_status='erased',updated_at=? WHERE id=? AND workspace_id=?`).bind(now, id, context.workspace.id),
+      auditStatement(context, 'lead.erased', 'lead', id),
+    ]);
+    await Promise.all(assets.results.map((asset) => revenueEnv().FILES.delete(asset.storageKey)));
+    return Response.json({ ok: true });
   }
   if (action === 'create_opportunity') {
     requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
