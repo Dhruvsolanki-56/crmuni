@@ -64,6 +64,13 @@
       "when": 1788742794657,
       "tag": "0008_quiet_emma_frost",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788743066912,
+      "tag": "0009_sweet_zaran",
+      "breakpoints": true
     }
   ]
 }

@@ -19,7 +19,7 @@ const recent = [
 
 type SavedLead = {
   id: string; fullName: string; company: string; role?: string; note?: string;
-  nextAction?: string; dueDate?: string; reviewStatus: string; createdAt: number;
+  email?: string; phone?: string; nextAction?: string; dueDate?: string; reviewStatus: string; createdAt: number;
 };
 
 type Analysis = {
@@ -40,6 +40,7 @@ type Invitation = { id: string; email: string; role: string; status: string; exp
 type AuditEvent = { id: string; action: string; entityType: string; createdAt: number };
 type KnowledgeData = { profile: null | { legalName: string; websiteUrl?: string; description?: string; targetIndustries: string[]; targetGeographies: string[]; eventObjective?: string; onboardingStep: number }; products: Array<{ id: string; name: string; kind: string; description?: string; buyerRoles: string[]; painPoints: string[] }>; icps: Array<{ id: string; name: string; industries: string[]; buyerRoles: string[]; mustHaveSignals: string[]; disqualifiers: string[] }>; rules: Array<{ id: string; label: string; field: string; expectedValue: string; weight: number }>; sources: Array<{ id: string; name: string; sourceType: string; sourceUrl?: string; contentType?: string; sizeBytes?: number; status: string }> };
 type EventItem = { id: string; name: string; venue?: string; hall?: string; booth?: string; startsOn: string; endsOn: string; timezone: string; budget: number; objective?: string; products: string[]; targetAccounts: string[]; qualificationQuestions: string[]; leadRoutingRule: string; followupSlaHours: number; dailyLeadTarget: number; badgeProvider?: string; qrCampaignCode?: string; status: string };
+type FollowupDraft = { id: string; channel: string; recipient: string; subject?: string; body: string; status: string; model: string; createdAt: number };
 type OfflineCapture = { id: string; workspaceId: string; eventId: string; fields: Record<string, string>; attachment?: File; attachmentKind?: string; queuedAt: number };
 
 function openOutbox() {
@@ -102,6 +103,8 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [activeEventId, setActiveEventId] = useState(() => typeof window === 'undefined' ? '' : window.localStorage.getItem('revenue-event-id') || '');
   const [outboxCount, setOutboxCount] = useState(0);
+  const [followups, setFollowups] = useState<FollowupDraft[]>([]);
+  const [drafting, setDrafting] = useState('');
   const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio'; file: File } | null>(null);
   const [recording, setRecording] = useState(false);
   const cardInput = useRef<HTMLInputElement>(null);
@@ -224,8 +227,12 @@ export default function Home() {
   }
 
   function openReview(lead: SavedLead) {
-    setReviewLead(lead); setAnalysis(null); setExtractionId(''); setAnalysisError(''); setConfirmed(false);
+    setReviewLead(lead); setAnalysis(null); setExtractionId(''); setAnalysisError(''); setConfirmed(false); setFollowups([]); void loadFollowups(lead.id);
   }
+
+  async function loadFollowups(leadId: string) { const response = await apiFetch(`/api/followups?leadId=${encodeURIComponent(leadId)}`); if (response.ok) { const data = await response.json() as { drafts: FollowupDraft[] }; setFollowups(data.drafts); } }
+  async function generateFollowup(channel: 'email' | 'whatsapp') { if (!reviewLead) return; setDrafting(channel); setAnalysisError(''); const response = await apiFetch('/api/followups', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'generate', leadId: reviewLead.id, channel }) }); const data = await response.json() as { draft?: FollowupDraft; error?: string }; if (response.ok && data.draft) setFollowups((current) => [data.draft!, ...current]); else setAnalysisError(data.error || 'Could not create follow-up draft.'); setDrafting(''); }
+  async function approveFollowup(id: string) { const response = await apiFetch('/api/followups', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve', id }) }); if (response.ok) setFollowups((current) => current.map((item) => item.id === id ? { ...item, status: 'approved' } : item)); }
 
   async function analyzeConversation() {
     if (!reviewLead) return;
@@ -409,6 +416,7 @@ export default function Home() {
                   {analysis.risks.length ? <div className="risk-note"><strong>Needs attention</strong>{analysis.risks.join(' · ')}</div> : null}
                   {analysisError ? <p className="form-error" role="alert">{analysisError}</p> : null}<Button className="save-button" onClick={confirmAnalysis} disabled={confirmed || analysis.commitments.some((item) => !item.due_date)}>{confirmed ? <><Check /> Confirmed and tasks created</> : analysis.commitments.some((item) => !item.due_date) ? 'Confirm commitment dates first' : 'Confirm facts and create tasks'}</Button>
                 </div>}
+                {(confirmed || reviewLead?.reviewStatus === 'confirmed') ? <section className="followup-composer"><div><span><h3>Personalized follow-up</h3><p>AI drafts from confirmed facts only. Approval never sends the message.</p></span><div className="followup-buttons"><Button type="button" variant="outline" onClick={() => generateFollowup('email')} disabled={Boolean(drafting)}>{drafting === 'email' ? 'Drafting…' : 'Draft email'}</Button><Button type="button" variant="outline" onClick={() => generateFollowup('whatsapp')} disabled={Boolean(drafting)}>{drafting === 'whatsapp' ? 'Drafting…' : 'Draft WhatsApp'}</Button></div></div>{analysisError ? <p className="form-error" role="alert">{analysisError}</p> : null}{followups.map((draft) => <article key={draft.id}><span><b>{draft.channel}</b><small>To {draft.recipient} · {draft.status}</small></span>{draft.subject ? <strong>{draft.subject}</strong> : null}<p>{draft.body}</p><div><Button type="button" variant="outline" onClick={() => navigator.clipboard.writeText(draft.body)}>Copy</Button><Button type="button" onClick={() => approveFollowup(draft.id)} disabled={draft.status !== 'draft'}>{draft.status === 'approved' ? <><Check /> Approved</> : 'Approve draft'}</Button></div></article>)}</section> : null}
               </DialogContent>
             </Dialog>
           </section>

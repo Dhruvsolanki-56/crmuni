@@ -22,7 +22,7 @@ function clean(value: unknown, max: number) {
 export async function GET(request: Request) {
   const context = await requireWorkspace(request);
   const result = await database().prepare(`
-    SELECT l.id, l.full_name AS fullName, l.company, l.role, l.review_status AS reviewStatus,
+    SELECT l.id, l.full_name AS fullName, l.company, l.role, l.email, l.phone, l.review_status AS reviewStatus,
            l.created_at AS createdAt, i.note, t.title AS nextAction, t.due_date AS dueDate
     FROM leads l
     LEFT JOIN interactions i ON i.lead_id = l.id

@@ -153,6 +153,23 @@ export const qualificationScores = sqliteTable('qualification_scores', {
   createdAt: integer('created_at').notNull(),
 }, (table) => [index('idx_qualification_scores_lead').on(table.workspaceId, table.leadId, table.createdAt)]);
 
+export const communicationDrafts = sqliteTable('communication_drafts', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  extractionId: text('extraction_id').references(() => aiExtractions.id),
+  channel: text('channel').notNull(),
+  recipient: text('recipient').notNull(),
+  subject: text('subject'),
+  body: text('body').notNull(),
+  status: text('status').notNull().default('draft'),
+  model: text('model').notNull(),
+  createdBy: text('created_by').notNull(),
+  approvedBy: text('approved_by'),
+  createdAt: integer('created_at').notNull(),
+  approvedAt: integer('approved_at'),
+}, (table) => [index('idx_communication_drafts_lead').on(table.workspaceId, table.leadId, table.createdAt)]);
+
 export const opportunities = sqliteTable('opportunities', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
