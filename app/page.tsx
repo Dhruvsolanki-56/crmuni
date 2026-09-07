@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import {
   ArrowRight, BarChart3, Building2, CalendarDays, Camera, Check, ChevronDown,
   CircleUserRound, Clock3, FileText, LayoutDashboard, Menu, Mic, Plus, QrCode,
-  Search, Sparkles, Square, Target, Users, Wifi,
+  Search, Settings, ShieldCheck, Sparkles, Square, Target, UserPlus, Users, Wifi,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -33,7 +33,11 @@ type Analysis = {
 type TaskItem = { id: string; leadId: string; title: string; dueDate?: string; status: string; fullName: string; company: string };
 type Opportunity = { id: string; leadId?: string; company: string; title: string; stage: string; value: number; currency: string; probability: number; expectedCloseDate?: string };
 type Account = { company: string; contacts: number; latestAt: number };
-type View = 'today' | 'people' | 'opportunities' | 'rfqs' | 'events' | 'roi' | 'knowledge';
+type View = 'today' | 'people' | 'opportunities' | 'rfqs' | 'events' | 'roi' | 'knowledge' | 'settings';
+type AppContext = { workspace: { id: string; name: string; slug: string; timezone: string; currency: string; plan: string; status: string }; role: string; user: { id: string; email: string } };
+type Member = { id: string; userId: string; email: string; displayName?: string; role: string; status: string };
+type Invitation = { id: string; email: string; role: string; status: string; expiresAt: number };
+type AuditEvent = { id: string; action: string; entityType: string; createdAt: number };
 
 function NavItem({ icon: Icon, label, active = false, onClick }: { icon: typeof LayoutDashboard; label: string; active?: boolean; onClick: () => void }) {
   return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} onClick={onClick} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
@@ -66,6 +70,10 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [opportunityOpen, setOpportunityOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [appContext, setAppContext] = useState<AppContext | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio' } | null>(null);
   const [recording, setRecording] = useState(false);
   const cardInput = useRef<HTMLInputElement>(null);
@@ -93,8 +101,9 @@ export default function Home() {
   async function loadWorkspace() {
     fetch('/api/workspace').then(async (response) => {
       if (!response.ok) return;
-      const data = await response.json() as { leads?: SavedLead[]; tasks?: TaskItem[]; opportunities?: Opportunity[]; accounts?: Account[]; metrics?: typeof metrics };
+      const data = await response.json() as { context?: AppContext; leads?: SavedLead[]; tasks?: TaskItem[]; opportunities?: Opportunity[]; accounts?: Account[]; metrics?: typeof metrics };
       setCapturedLeads(data.leads || []); setTasks(data.tasks || []); setOpportunities(data.opportunities || []); setAccounts(data.accounts || []);
+      if (data.context) setAppContext(data.context);
       if (data.metrics) setMetrics(data.metrics);
     }).catch(() => undefined);
   }
@@ -104,7 +113,8 @@ export default function Home() {
     window.addEventListener('keydown', shortcut); return () => window.removeEventListener('keydown', shortcut);
   }, []);
 
-  function go(view: View) { setActiveView(view); setMobileNav(false); }
+  async function loadSettings() { const response = await fetch('/api/settings'); if (!response.ok) return; const data = await response.json() as { context: AppContext; members: Member[]; invitations: Invitation[]; audit: AuditEvent[] }; setAppContext(data.context); setMembers(data.members); setInvitations(data.invitations); setAuditEvents(data.audit); }
+  function go(view: View) { setActiveView(view); setMobileNav(false); if (view === 'settings') void loadSettings(); }
 
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,11 +210,27 @@ export default function Home() {
     setOpportunityOpen(false); setNotice('Opportunity created'); setTimeout(() => setNotice(''), 1800); void loadWorkspace();
   }
 
+  async function saveSettings(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const response = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_workspace', ...values }) });
+    const data = await response.json() as { workspace?: AppContext['workspace']; error?: string };
+    if (!response.ok || !data.workspace) { setNotice(data.error || 'Could not save settings'); return; }
+    setAppContext((current) => current ? { ...current, workspace: data.workspace! } : current); setNotice('Workspace settings saved'); setTimeout(() => setNotice(''), 1800); void loadSettings();
+  }
+
+  async function inviteMember(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = event.currentTarget; const values = Object.fromEntries(new FormData(form).entries());
+    const response = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'invite', ...values }) });
+    const data = await response.json() as { invitation?: Invitation; error?: string };
+    if (!response.ok || !data.invitation) { setNotice(data.error || 'Could not create invitation'); return; }
+    form.reset(); setInvitations((current) => [data.invitation!, ...current]); setNotice('Invitation recorded'); setTimeout(() => setNotice(''), 1800); void loadSettings();
+  }
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
         <div className="brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Revenue OS</span></div>
-        <div className="workspace-switcher"><span className="workspace-logo">NA</span><span><strong>Nova Automation</strong><small>Growth workspace</small></span><ChevronDown size={15} /></div>
+        <div className="workspace-switcher"><span className="workspace-logo">{appContext?.workspace.name.split(' ').map((word) => word[0]).join('').slice(0,2) || 'NA'}</span><span><strong>{appContext?.workspace.name || 'Nova Automation'}</strong><small>{appContext?.workspace.plan || 'Trial'} workspace</small></span><ChevronDown size={15} /></div>
         <nav aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
           <NavItem icon={LayoutDashboard} label="Today" active={activeView === 'today'} onClick={() => go('today')} />
@@ -215,10 +241,11 @@ export default function Home() {
           <NavItem icon={CalendarDays} label="Events" active={activeView === 'events'} onClick={() => go('events')} />
           <NavItem icon={BarChart3} label="Revenue & ROI" active={activeView === 'roi'} onClick={() => go('roi')} />
           <NavItem icon={Building2} label="Company knowledge" active={activeView === 'knowledge'} onClick={() => go('knowledge')} />
+          <NavItem icon={Settings} label="Workspace settings" active={activeView === 'settings'} onClick={() => go('settings')} />
         </nav>
         <div className="sidebar-foot">
           <div className="sync-state"><Wifi size={15} /><span>Online · All synced</span></div>
-          <div className="profile-row"><span className="profile-avatar">AS</span><span><strong>Arjun Singh</strong><small>Sales manager</small></span></div>
+          <div className="profile-row"><span className="profile-avatar">{(appContext?.user.email || 'AS').slice(0,2).toUpperCase()}</span><span><strong>{appContext?.user.email || 'Local tester'}</strong><small>{appContext?.role || 'Loading role'}</small></span></div>
         </div>
       </aside>
 
@@ -300,13 +327,14 @@ export default function Home() {
             </div>
           </section>
           </> : <section className="section-view">
-            <div className="section-title"><div><p className="eyebrow">Revenue workspace</p><h1>{activeView === 'people' ? 'People & accounts' : activeView === 'opportunities' ? 'Opportunities' : activeView === 'rfqs' ? 'RFQs & quotations' : activeView === 'events' ? 'Events' : activeView === 'roi' ? 'Revenue & ROI' : 'Company knowledge'}</h1></div>{activeView === 'opportunities' ? <Button className="capture-button" onClick={() => setOpportunityOpen(true)}><Plus /> New opportunity</Button> : null}</div>
+            <div className="section-title"><div><p className="eyebrow">Revenue workspace</p><h1>{activeView === 'people' ? 'People & accounts' : activeView === 'opportunities' ? 'Opportunities' : activeView === 'rfqs' ? 'RFQs & quotations' : activeView === 'events' ? 'Events' : activeView === 'roi' ? 'Revenue & ROI' : activeView === 'settings' ? 'Workspace settings' : 'Company knowledge'}</h1></div>{activeView === 'opportunities' ? <Button className="capture-button" onClick={() => setOpportunityOpen(true)}><Plus /> New opportunity</Button> : null}</div>
             {activeView === 'people' ? <div className="records-grid"><article className="panel records-panel"><h2>Accounts</h2>{accounts.length ? accounts.map((account) => <button key={account.company} className="record-row"><span className="initial-avatar">{account.company.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{account.company}</strong><small>{account.contacts} contact{account.contacts === 1 ? '' : 's'} captured</small></span><ArrowRight /></button>) : <div className="empty-state">Capture a lead to create the first account.</div>}</article><article className="panel records-panel"><h2>Contacts</h2>{capturedLeads.length ? capturedLeads.map((lead) => <button key={lead.id} className="record-row" onClick={() => openReview(lead)}><span className="initial-avatar">{lead.fullName.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span><b className="review-chip">Review</b></button>) : <div className="empty-state">No captured contacts yet.</div>}</article></div> : null}
             {activeView === 'opportunities' ? <article className="panel data-panel">{opportunities.length ? <><div className="data-header"><span>Opportunity</span><span>Stage</span><span>Value</span><span>Probability</span></div>{opportunities.map((item) => <div className="data-row" key={item.id}><span><strong>{item.title}</strong><small>{item.company}</small></span><span className="stage-chip">{item.stage}</span><span>₹{item.value.toLocaleString('en-IN')}</span><span>{item.probability}%</span></div>)}</> : <div className="empty-state large"><Target /><h2>No opportunities yet</h2><p>Convert a qualified conversation into your first pipeline record.</p><Button onClick={() => setOpportunityOpen(true)}>Create opportunity</Button></div>}</article> : null}
             {activeView === 'rfqs' ? <FeatureState icon={FileText} title="RFQ inbox is ready for integration" text="Patch 1 reserves the workflow and database boundary. Document upload, specification extraction, versioning, and quotation approval require secure file storage and arrive in Patch 2." /> : null}
             {activeView === 'events' ? <article className="panel event-card"><div><span className="live-dot" /><strong>IndustrialTech Expo 2026</strong><small>Day 1 · Active</small></div><dl><div><dt>Captured</dt><dd>{metrics.totalLeads}</dd></div><div><dt>Qualified</dt><dd>{metrics.qualifiedLeads}</dd></div><div><dt>Open tasks</dt><dd>{metrics.openTasks}</dd></div></dl></article> : null}
             {activeView === 'roi' ? <div className="roi-grid"><article className="panel roi-card"><small>Event investment</small><strong>₹3,00,000</strong><span>Manual baseline</span></article><article className="panel roi-card"><small>Pipeline created</small><strong>₹{metrics.pipelineValue.toLocaleString('en-IN')}</strong><span>{opportunities.length} opportunities</span></article><article className="panel roi-card"><small>Closed revenue</small><strong>₹0</strong><span>No closed opportunities yet</span></article></div> : null}
             {activeView === 'knowledge' ? <FeatureState icon={Building2} title="Company knowledge needs secure file storage" text="Website URLs and document metadata will live here. Actual brochures, catalogues, case studies, and RFQs must use object storage—not the relational database." /> : null}
+            {activeView === 'settings' ? <div className="settings-layout"><article className="panel settings-card"><div className="settings-heading"><ShieldCheck /><div><h2>Workspace identity</h2><p>Tenant-specific defaults used by dates, reports and revenue.</p></div></div><form className="lead-form" onSubmit={saveSettings}><div className="field-block"><label htmlFor="workspace-name">Workspace name</label><Input id="workspace-name" name="name" defaultValue={appContext?.workspace.name} required /></div><div className="field-grid"><div className="field-block"><label htmlFor="workspace-timezone">Timezone</label><Input id="workspace-timezone" name="timezone" defaultValue={appContext?.workspace.timezone} required /></div><div className="field-block"><label htmlFor="workspace-currency">Currency</label><Input id="workspace-currency" name="currency" defaultValue={appContext?.workspace.currency} maxLength={3} required /></div></div><Button className="save-button" type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Save workspace</Button></form></article><article className="panel settings-card"><div className="settings-heading"><UserPlus /><div><h2>Invite a teammate</h2><p>Invitations expire after seven days.</p></div></div><form className="invite-form" onSubmit={inviteMember}><Input name="email" type="email" placeholder="teammate@company.com" required /><select name="role" defaultValue="salesperson"><option value="admin">Administrator</option><option value="manager">Manager</option><option value="salesperson">Salesperson</option><option value="marketing">Marketing</option><option value="viewer">Viewer</option></select><Button type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Invite</Button></form><div className="member-list"><h3>Members</h3>{members.map((member) => <div key={member.id}><span className="profile-avatar">{member.email.slice(0,2).toUpperCase()}</span><span><strong>{member.displayName || member.email}</strong><small>{member.email}</small></span><b>{member.role}</b></div>)}{invitations.map((invite) => <div key={invite.id} className="pending-member"><span className="profile-avatar">?</span><span><strong>{invite.email}</strong><small>Invitation pending</small></span><b>{invite.role}</b></div>)}</div></article><article className="panel settings-card audit-card"><div className="settings-heading"><FileText /><div><h2>Recent security activity</h2><p>Important workspace actions are permanently attributed.</p></div></div>{auditEvents.length ? auditEvents.map((item) => <div className="audit-row" key={item.id}><span>{item.action.replaceAll('.', ' ')}</span><small>{item.entityType} · {new Date(item.createdAt).toLocaleString()}</small></div>) : <div className="empty-state">No recorded workspace changes yet.</div>}</article></div> : null}
           </section>}
         </div>
         {notice ? <output className="toast">{notice}</output> : null}

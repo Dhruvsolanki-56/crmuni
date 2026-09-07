@@ -1,4 +1,55 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+
+export const workspaces = sqliteTable('workspaces', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  timezone: text('timezone').notNull().default('Asia/Kolkata'),
+  currency: text('currency').notNull().default('INR'),
+  plan: text('plan').notNull().default('trial'),
+  status: text('status').notNull().default('active'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [uniqueIndex('uidx_workspaces_slug').on(table.slug)]);
+
+export const memberships = sqliteTable('memberships', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  userId: text('user_id').notNull(),
+  email: text('email').notNull(),
+  displayName: text('display_name'),
+  role: text('role').notNull().default('salesperson'),
+  status: text('status').notNull().default('active'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  index('idx_memberships_user_status').on(table.userId, table.status),
+  index('idx_memberships_workspace_status').on(table.workspaceId, table.status),
+  uniqueIndex('uidx_memberships_workspace_user').on(table.workspaceId, table.userId),
+]);
+
+export const invitations = sqliteTable('invitations', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  email: text('email').notNull(),
+  role: text('role').notNull(),
+  status: text('status').notNull().default('pending'),
+  invitedBy: text('invited_by').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_invitations_workspace_status').on(table.workspaceId, table.status)]);
+
+export const auditEvents = sqliteTable('audit_events', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  actorId: text('actor_id').notNull(),
+  action: text('action').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id'),
+  detailJson: text('detail_json'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_audit_events_workspace_created').on(table.workspaceId, table.createdAt)]);
 
 export const leads = sqliteTable('leads', {
   id: text('id').primaryKey(),
