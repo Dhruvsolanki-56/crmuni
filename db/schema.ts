@@ -210,6 +210,7 @@ export const rfqDocuments = sqliteTable('rfq_documents', {
 export const opportunities = sqliteTable('opportunities', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
+  eventId: text('event_id'),
   leadId: text('lead_id').references(() => leads.id),
   accountId: text('account_id').references(() => accounts.id),
   company: text('company').notNull(),

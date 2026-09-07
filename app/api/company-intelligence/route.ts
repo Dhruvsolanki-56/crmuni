@@ -1,4 +1,5 @@
 import { auditStatement, database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
+import { validateUpload } from '@/lib/file-validation';
 
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const list = (value: unknown) => clean(value, 2000).split(',').map((item) => item.trim()).filter(Boolean).slice(0, 30);
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   if (contentType.includes('multipart/form-data')) {
     const form = await request.formData(); const file = form.get('file');
     if (!(file instanceof File)) return Response.json({ error: 'Choose a file to upload.' }, { status: 400 });
-    if (!allowedFiles.has(file.type) || file.size > 10 * 1024 * 1024) return Response.json({ error: 'Use PDF, DOCX, XLSX, CSV, TXT, PNG or JPG files up to 10 MB.' }, { status: 400 });
+    if (await validateUpload(file, allowedFiles, 10 * 1024 * 1024)) return Response.json({ error: 'The file content must match a PDF, DOCX, XLSX, CSV, TXT, PNG or JPG file up to 10 MB.' }, { status: 400 });
     const id = crypto.randomUUID(); const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 120); const key = `${context.workspace.id}/${id}/${safeName}`;
     await revenueEnv().FILES.put(key, file.stream(), { httpMetadata: { contentType: file.type }, customMetadata: { workspaceId: context.workspace.id, uploadedBy: context.user.id } });
     await db.batch([

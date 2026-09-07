@@ -1,4 +1,5 @@
 import { auditStatement, database, DEFAULT_EVENT, requireWorkspace, revenueEnv } from '@/lib/db';
+import { validateUpload } from '@/lib/file-validation';
 
 type NewLead = {
   fullName?: unknown;
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
   if (!fullName || !company) return Response.json({ error: 'Full name and company are required.' }, { status: 400 });
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: 'Enter a valid email address.' }, { status: 400 });
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return Response.json({ error: 'Due date must use YYYY-MM-DD.' }, { status: 400 });
-  if (file && (!allowedFiles.has(file.type) || file.size > 15 * 1024 * 1024)) return Response.json({ error: 'Attachments must be an image, PDF, or audio file up to 15 MB.' }, { status: 400 });
+  if (file && await validateUpload(file, allowedFiles, 15 * 1024 * 1024)) return Response.json({ error: 'The attachment content does not match a supported image, PDF, or audio file up to 15 MB.' }, { status: 400 });
 
   if (clientCaptureId) {
     const existing = await database().prepare(`SELECT id, full_name AS fullName, company, role, review_status AS reviewStatus, created_at AS createdAt FROM leads WHERE workspace_id = ? AND client_capture_id = ?`).bind(context.workspace.id, clientCaptureId).first();
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
   const account = await accountIdentity(context.workspace.id, company);
   const interactionId = note ? crypto.randomUUID() : null;
   const taskId = nextAction ? crypto.randomUUID() : null;
-  const attachmentKind = ['card', 'badge', 'audio'].includes(clean(body.attachmentKind, 20)) ? clean(body.attachmentKind, 20) : 'document';
+  const attachmentKind = ['card', 'badge', 'qr', 'audio'].includes(clean(body.attachmentKind, 20)) ? clean(body.attachmentKind, 20) : 'document';
   const source = file ? attachmentKind : 'manual'; const assetId = file ? crypto.randomUUID() : null; let storageKey: string | null = null;
   if (file && assetId) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 120) || 'capture'; storageKey = `${context.workspace.id}/lead-captures/${leadId}/${assetId}-${safeName}`;
