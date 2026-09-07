@@ -108,4 +108,16 @@ h1 { margin: 0; color: #162a24; font-size: clamp(1.85rem,3vw,2.65rem); line-heig
 
 @media (max-width: 980px) { .app-shell { grid-template-columns: 1fr; }.sidebar { position: fixed; left: -280px; transition: left .2s ease; box-shadow: 20px 0 50px #0c221b30; }.sidebar-open { left: 0; }.mobile-menu { display: grid; }.topbar { padding: 0 22px; }.main-grid { grid-template-columns: 1fr; }.signal-grid { grid-template-columns: repeat(3,1fr); } }
 @media (max-width: 720px) { .content { width: min(100% - 28px,580px); padding-top: 28px; }.event-context { font-size: .72rem; }.search-button { min-width: 36px; width: 36px; padding: 0; justify-content: center; }.search-button span,.search-button kbd,.icon-button { display: none; }.welcome-row { align-items: stretch; flex-direction: column; }.capture-button { width: 100%; height: 54px; font-size: 1rem; }.signal-grid { grid-template-columns: 1fr 1fr; }.primary-signal { grid-column: 1/-1; }.lead-row { grid-template-columns: minmax(200px,1fr) 64px; }.lead-row > span:nth-child(2),.lead-row > span:nth-child(4) { display: none; }.capture-methods { grid-template-columns: 1fr; }.capture-methods button { min-height: auto; flex-direction: row; align-items: center; }.field-grid { grid-template-columns: 1fr; } }
+
+.capture-file-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.capture-methods button.recording { border-color: #d4564d; background: #fff4f2; }
+.capture-methods button.recording svg { color: #c44038; }
+.attachment-preview { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid #dce4e1; border-radius: 11px; background: #f6faf8; }
+.attachment-preview img { width: 62px; height: 50px; object-fit: cover; border-radius: 7px; }
+.attachment-preview audio { width: 190px; height: 36px; }
+.attachment-preview span { min-width: 0; }
+.attachment-preview strong,.attachment-preview small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-preview strong { color: #30433d; font-size: .76rem; }
+.attachment-preview small { margin-top: 3px; color: #788681; font-size: .68rem; }
+.sample-button { justify-self: start; padding: 0; border: 0; color: #28715d; background: transparent; font-size: .73rem; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 460px) { .signal-grid { grid-template-columns: 1fr; }.primary-signal { grid-column: auto; }.signal-card { min-height: 150px; }.panel { padding: 18px; }.panel-head > button { display: none; }.action-row { grid-template-columns: 34px minmax(0,1fr) auto; }.action-row .row-arrow { display: none; }.due { font-size: .6rem; }.topbar { padding: 0 14px; }.capture-dialog { padding: 21px; } }

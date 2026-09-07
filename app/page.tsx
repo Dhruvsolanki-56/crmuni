@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import {
   ArrowRight, BarChart3, Building2, CalendarDays, Camera, Check, ChevronDown,
   CircleUserRound, Clock3, FileText, LayoutDashboard, Menu, Mic, Plus, QrCode,
-  Search, Sparkles, Target, Users, Wifi,
+  Search, Sparkles, Square, Target, Users, Wifi,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -54,6 +54,13 @@ export default function Home() {
   const [analysisError, setAnalysisError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio' } | null>(null);
+  const [recording, setRecording] = useState(false);
+  const cardInput = useRef<HTMLInputElement>(null);
+  const badgeInput = useRef<HTMLInputElement>(null);
+  const leadForm = useRef<HTMLFormElement>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const audioChunks = useRef<Blob[]>([]);
 
   useEffect(() => {
     const context = (document as Document & { modelContext?: { registerTool: (tool: unknown, options?: { signal?: AbortSignal }) => void | Promise<void> } }).modelContext;
@@ -92,7 +99,51 @@ export default function Home() {
     } catch (error) { setSaveError(error instanceof Error ? error.message : 'Unable to save this lead.'); }
     finally { setSaving(false); }
   }
-  function resetCapture(open: boolean) { setCaptureOpen(open); if (!open) setTimeout(() => { setSaved(false); setSavedLead(null); setSaveError(''); }, 150); }
+  function resetCapture(open: boolean) {
+    setCaptureOpen(open);
+    if (!open) {
+      if (recording) recorder.current?.stop();
+      setTimeout(() => {
+        if (attachment?.url) URL.revokeObjectURL(attachment.url);
+        setAttachment(null); setSaved(false); setSavedLead(null); setSaveError('');
+      }, 150);
+    }
+  }
+
+  function selectAttachment(event: SyntheticEvent<HTMLInputElement>, kind: 'card' | 'badge') {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (attachment?.url) URL.revokeObjectURL(attachment.url);
+    setAttachment({ name: file.name, url: URL.createObjectURL(file), kind });
+  }
+
+  async function toggleRecording() {
+    if (recording) { recorder.current?.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const nextRecorder = new MediaRecorder(stream);
+      audioChunks.current = [];
+      nextRecorder.ondataavailable = (event) => { if (event.data.size) audioChunks.current.push(event.data); };
+      nextRecorder.onstop = () => {
+        const blob = new Blob(audioChunks.current, { type: nextRecorder.mimeType || 'audio/webm' });
+        if (attachment?.url) URL.revokeObjectURL(attachment.url);
+        setAttachment({ name: `conversation-${Date.now()}.webm`, url: URL.createObjectURL(blob), kind: 'audio' });
+        stream.getTracks().forEach((track) => track.stop());
+        setRecording(false);
+      };
+      recorder.current = nextRecorder;
+      nextRecorder.start(); setRecording(true); setSaveError('');
+    } catch { setSaveError('Microphone access was not available. You can still type the conversation note.'); }
+  }
+
+  function useSampleLead() {
+    const form = leadForm.current;
+    if (!form) return;
+    const set = (name: string, value: string) => { const input = form.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null; if (input) input.value = value; };
+    set('fullName', 'Rajesh Mehta'); set('company', 'ABC Pharma'); set('role', 'Procurement Head');
+    set('note', 'Rajesh manages procurement at ABC Pharma. They have 40 machines in Ahmedabad and use SAP. He wants machine monitoring. Budget opens in September. I promised architecture and preliminary pricing next Tuesday.');
+    set('nextAction', 'Send architecture and preliminary pricing');
+  }
 
   function openReview(lead: SavedLead) {
     setReviewLead(lead); setAnalysis(null); setExtractionId(''); setAnalysisError(''); setConfirmed(false);
@@ -154,17 +205,23 @@ export default function Home() {
                 {!saved ? <>
                   <DialogHeader><p className="dialog-kicker">IndustrialTech Expo · Day 1</p><DialogTitle className="dialog-title">Capture a new conversation</DialogTitle><DialogDescription>Start with whatever the visitor gives you. Add the conversation immediately after.</DialogDescription></DialogHeader>
                   <div className="capture-methods">
-                    <button type="button"><Camera /><span><strong>Scan card</strong><small>Photograph a visiting card</small></span></button>
-                    <button type="button"><QrCode /><span><strong>Scan badge or QR</strong><small>Read event or contact details</small></span></button>
-                    <button type="button"><Mic /><span><strong>Record conversation</strong><small>Capture the context that matters</small></span></button>
+                    <button type="button" onClick={() => cardInput.current?.click()}><Camera /><span><strong>Upload card</strong><small>Choose or photograph a visiting card</small></span></button>
+                    <button type="button" onClick={() => badgeInput.current?.click()}><QrCode /><span><strong>Upload badge or QR</strong><small>Choose an image to attach</small></span></button>
+                    <button type="button" className={recording ? 'recording' : ''} onClick={toggleRecording}>{recording ? <Square /> : <Mic />}<span><strong>{recording ? 'Stop recording' : 'Record conversation'}</strong><small>{recording ? 'Recording from your microphone…' : 'Capture the context that matters'}</small></span></button>
+                    <input ref={cardInput} className="capture-file-input" type="file" accept="image/*" capture="environment" onInput={(event) => selectAttachment(event, 'card')} />
+                    <input ref={badgeInput} className="capture-file-input" type="file" accept="image/*" capture="environment" onInput={(event) => selectAttachment(event, 'badge')} />
                   </div>
+                  {attachment ? <div className="attachment-preview">{attachment.kind === 'audio' ? <audio aria-label="Recorded conversation preview" controls src={attachment.url}><track kind="captions" label="Transcript unavailable" /></audio> :
+                    // oxlint-disable-next-line next/no-img-element -- Blob URLs are local previews and cannot use the image optimizer.
+                    <img src={attachment.url} alt={`${attachment.kind} preview`} />}<span><strong>{attachment.name}</strong><small>Attached for this local test · automatic reading comes with OCR</small></span></div> : null}
                   <div className="or"><span>or enter the basics</span></div>
-                  <form onSubmit={saveLead} className="lead-form">
+                  <form ref={leadForm} onSubmit={saveLead} className="lead-form">
                     <div className="field-grid"><div className="field-block"><label htmlFor="lead-name">Full name</label><Input id="lead-name" name="fullName" required placeholder="e.g. Rajesh Mehta" /></div><div className="field-block"><label htmlFor="lead-company">Company</label><Input id="lead-company" name="company" required placeholder="e.g. ABC Pharma" /></div></div>
                     <div className="field-block"><label htmlFor="lead-role">Role</label><Input id="lead-role" name="role" placeholder="e.g. Procurement Head" /></div>
                     <div className="field-block"><label htmlFor="lead-note">Conversation note</label><Textarea id="lead-note" name="note" placeholder="What did they need, what did you promise, and when?" /></div>
                     <div className="field-grid"><div className="field-block"><label htmlFor="lead-action">Next action</label><Input id="lead-action" name="nextAction" placeholder="e.g. Send preliminary pricing" /></div><div className="field-block"><label htmlFor="lead-due">Due date</label><Input id="lead-due" name="dueDate" type="date" /></div></div>
                     {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
+                    <button className="sample-button" type="button" onClick={useSampleLead}>Fill test conversation</button>
                     <Button type="submit" className="save-button" disabled={saving}>{saving ? 'Saving securely…' : 'Save conversation'} {!saving && <ArrowRight />}</Button>
                     <p className="offline-note"><Wifi size={14} /> Works offline. We’ll sync when your connection returns.</p>
                   </form>
