@@ -43,13 +43,20 @@ export async function POST(request: Request) {
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return Response.json({ error: 'Due date must use YYYY-MM-DD.' }, { status: 400 });
 
   const now = Date.now();
+  const requestedEventId = clean(request.headers.get('x-revenue-event-id'), 80);
+  let eventId = DEFAULT_EVENT;
+  if (requestedEventId) {
+    const selectedEvent = await database().prepare(`SELECT id FROM events WHERE id = ? AND workspace_id = ? AND status != 'archived'`).bind(requestedEventId, context.workspace.id).first<{ id: string }>();
+    if (!selectedEvent) return Response.json({ error: 'The selected event is unavailable. Choose another event before capturing.' }, { status: 409 });
+    eventId = selectedEvent.id;
+  }
   const leadId = crypto.randomUUID();
   const interactionId = note ? crypto.randomUUID() : null;
   const taskId = nextAction ? crypto.randomUUID() : null;
   const statements = [database().prepare(`
     INSERT INTO leads (id, workspace_id, event_id, owner_id, full_name, company, role, source, review_status, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', 'needs_review', ?, ?)
-  `).bind(leadId, context.workspace.id, DEFAULT_EVENT, context.user.id, fullName, company, role || null, now, now)];
+  `).bind(leadId, context.workspace.id, eventId, context.user.id, fullName, company, role || null, now, now)];
 
   if (interactionId) statements.push(database().prepare(`
     INSERT INTO interactions (id, workspace_id, lead_id, note, source, occurred_at, created_at)

@@ -39,6 +39,7 @@ type Member = { id: string; userId: string; email: string; displayName?: string;
 type Invitation = { id: string; email: string; role: string; status: string; expiresAt: number };
 type AuditEvent = { id: string; action: string; entityType: string; createdAt: number };
 type KnowledgeData = { profile: null | { legalName: string; websiteUrl?: string; description?: string; targetIndustries: string[]; targetGeographies: string[]; eventObjective?: string; onboardingStep: number }; products: Array<{ id: string; name: string; kind: string; description?: string; buyerRoles: string[]; painPoints: string[] }>; icps: Array<{ id: string; name: string; industries: string[]; buyerRoles: string[]; mustHaveSignals: string[]; disqualifiers: string[] }>; rules: Array<{ id: string; label: string; field: string; expectedValue: string; weight: number }>; sources: Array<{ id: string; name: string; sourceType: string; sourceUrl?: string; contentType?: string; sizeBytes?: number; status: string }> };
+type EventItem = { id: string; name: string; venue?: string; hall?: string; booth?: string; startsOn: string; endsOn: string; timezone: string; budget: number; objective?: string; products: string[]; targetAccounts: string[]; qualificationQuestions: string[]; leadRoutingRule: string; followupSlaHours: number; dailyLeadTarget: number; badgeProvider?: string; qrCampaignCode?: string; status: string };
 
 function NavItem({ icon: Icon, label, active = false, onClick }: { icon: typeof LayoutDashboard; label: string; active?: boolean; onClick: () => void }) {
   return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} onClick={onClick} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
@@ -51,6 +52,8 @@ function FeatureState({ icon: Icon, title, text }: { icon: typeof FileText; titl
 function apiFetch(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers); const workspaceId = window.localStorage.getItem('revenue-workspace-id');
   if (workspaceId) headers.set('x-revenue-workspace-id', workspaceId);
+  const eventId = window.localStorage.getItem('revenue-event-id');
+  if (eventId) headers.set('x-revenue-event-id', eventId);
   return fetch(path, { ...init, headers });
 }
 
@@ -83,6 +86,8 @@ export default function Home() {
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [availableWorkspaces, setAvailableWorkspaces] = useState<Array<AppContext['workspace'] & { role: string }>>([]);
   const [knowledge, setKnowledge] = useState<KnowledgeData>({ profile: null, products: [], icps: [], rules: [], sources: [] });
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [activeEventId, setActiveEventId] = useState(() => typeof window === 'undefined' ? '' : window.localStorage.getItem('revenue-event-id') || '');
   const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio' } | null>(null);
   const [recording, setRecording] = useState(false);
   const cardInput = useRef<HTMLInputElement>(null);
@@ -116,7 +121,8 @@ export default function Home() {
       if (data.metrics) setMetrics(data.metrics);
     }).catch(() => undefined);
   }
-  useEffect(() => { void loadWorkspace(); }, []);
+  async function loadEvents() { const response = await apiFetch('/api/events'); if (response.ok) { const data = await response.json() as { events: EventItem[] }; setEvents(data.events); } }
+  useEffect(() => { const timer = window.setTimeout(() => { void loadWorkspace(); void loadEvents(); }, 0); return () => window.clearTimeout(timer); }, []);
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true); } };
     window.addEventListener('keydown', shortcut); return () => window.removeEventListener('keydown', shortcut);
@@ -124,7 +130,7 @@ export default function Home() {
 
   async function loadSettings() { const response = await apiFetch('/api/settings'); if (!response.ok) return; const data = await response.json() as { context: AppContext; members: Member[]; invitations: Invitation[]; audit: AuditEvent[]; workspaces?: Array<AppContext['workspace'] & { role: string }> }; setAppContext(data.context); setMembers(data.members); setInvitations(data.invitations); setAuditEvents(data.audit); setAvailableWorkspaces(data.workspaces || []); }
   async function loadKnowledge() { const response = await apiFetch('/api/company-intelligence'); if (response.ok) setKnowledge(await response.json() as KnowledgeData); }
-  function go(view: View) { setActiveView(view); setMobileNav(false); if (view === 'settings') void loadSettings(); if (view === 'knowledge') void loadKnowledge(); }
+  function go(view: View) { setActiveView(view); setMobileNav(false); if (view === 'settings') void loadSettings(); if (view === 'knowledge') void loadKnowledge(); if (view === 'events') { void loadEvents(); void loadSettings(); } }
 
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -245,7 +251,7 @@ export default function Home() {
   }
 
   async function switchWorkspace(id: string) {
-    window.localStorage.setItem('revenue-workspace-id', id); setNotice('Workspace switched'); await loadWorkspace(); await loadSettings();
+    window.localStorage.setItem('revenue-workspace-id', id); window.localStorage.removeItem('revenue-event-id'); setActiveEventId(''); setNotice('Workspace switched'); await loadWorkspace(); await loadSettings(); await loadEvents();
   }
 
   async function updateMember(id: string, role: string, status: string) {
@@ -276,6 +282,26 @@ export default function Home() {
     setNotice(response.ok ? 'Knowledge file stored securely' : data.error || 'Upload failed'); if (response.ok) await loadKnowledge(); event.currentTarget.value = '';
   }
 
+  async function submitEvent(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = event.currentTarget; const formData = new FormData(form); const values = Object.fromEntries(formData.entries()); values.teamMemberIds = formData.getAll('teamMemberIds').map(String).join(',');
+    const response = await apiFetch('/api/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', ...values }) }); const data = await response.json() as { error?: string };
+    if (!response.ok) { setNotice(data.error || 'Could not create event'); return; } form.reset(); setNotice('Event created'); await loadEvents();
+  }
+
+  async function eventAction(action: 'duplicate' | 'archive', id: string) {
+    const response = await apiFetch('/api/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, id }) });
+    const data = await response.json() as { error?: string };
+    if (response.ok) { if (action === 'archive' && activeEventId === id) selectEvent(''); setNotice(action === 'duplicate' ? 'Event duplicated' : 'Event archived'); await loadEvents(); }
+    else setNotice(data.error || `Could not ${action} event`);
+  }
+
+  function selectEvent(id: string) {
+    if (id) window.localStorage.setItem('revenue-event-id', id); else window.localStorage.removeItem('revenue-event-id');
+    setActiveEventId(id); setNotice(id ? 'Active event changed' : 'Active event cleared'); void loadWorkspace();
+  }
+
+  const activeEvent = events.find((item) => item.id === activeEventId && item.status !== 'archived');
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
@@ -302,7 +328,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label="Toggle navigation"><Menu /></button>
-          <div className="event-context"><span className="live-dot" /> IndustrialTech Expo 2026 <span>· Day 1</span></div>
+          <div className="event-context"><span className="live-dot" /> {activeEvent?.name || 'No active event'} <span>· {activeEvent ? `${activeEvent.venue || 'Venue pending'} · ${activeEvent.status}` : 'Select one in Events'}</span></div>
           <div className="topbar-actions"><button className="search-button" aria-label="Search" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Search</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="Profile" onClick={() => { setNotice('Signed in as Arjun Singh'); setTimeout(() => setNotice(''), 1800); }}><CircleUserRound size={21} /></button></div>
         </header>
 
@@ -314,7 +340,7 @@ export default function Home() {
               <DialogTrigger render={<Button className="capture-button" />}><Plus size={19} strokeWidth={2.4} /> Capture lead</DialogTrigger>
               <DialogContent className="capture-dialog" showCloseButton={!saved}>
                 {!saved ? <>
-                  <DialogHeader><p className="dialog-kicker">IndustrialTech Expo · Day 1</p><DialogTitle className="dialog-title">Capture a new conversation</DialogTitle><DialogDescription>Start with whatever the visitor gives you. Add the conversation immediately after.</DialogDescription></DialogHeader>
+                  <DialogHeader><p className="dialog-kicker">{activeEvent?.name || 'Unassigned event'}</p><DialogTitle className="dialog-title">Capture a new conversation</DialogTitle><DialogDescription>Start with whatever the visitor gives you. Add the conversation immediately after.</DialogDescription></DialogHeader>
                   <div className="capture-methods">
                     <button type="button" onClick={() => cardInput.current?.click()}><Camera /><span><strong>Upload card</strong><small>Choose or photograph a visiting card</small></span></button>
                     <button type="button" onClick={() => badgeInput.current?.click()}><QrCode /><span><strong>Upload badge or QR</strong><small>Choose an image to attach</small></span></button>
@@ -381,7 +407,23 @@ export default function Home() {
             {activeView === 'people' ? <div className="records-grid"><article className="panel records-panel"><h2>Accounts</h2>{accounts.length ? accounts.map((account) => <button key={account.company} className="record-row"><span className="initial-avatar">{account.company.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{account.company}</strong><small>{account.contacts} contact{account.contacts === 1 ? '' : 's'} captured</small></span><ArrowRight /></button>) : <div className="empty-state">Capture a lead to create the first account.</div>}</article><article className="panel records-panel"><h2>Contacts</h2>{capturedLeads.length ? capturedLeads.map((lead) => <button key={lead.id} className="record-row" onClick={() => openReview(lead)}><span className="initial-avatar">{lead.fullName.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span><b className="review-chip">Review</b></button>) : <div className="empty-state">No captured contacts yet.</div>}</article></div> : null}
             {activeView === 'opportunities' ? <article className="panel data-panel">{opportunities.length ? <><div className="data-header"><span>Opportunity</span><span>Stage</span><span>Value</span><span>Probability</span></div>{opportunities.map((item) => <div className="data-row" key={item.id}><span><strong>{item.title}</strong><small>{item.company}</small></span><span className="stage-chip">{item.stage}</span><span>₹{item.value.toLocaleString('en-IN')}</span><span>{item.probability}%</span></div>)}</> : <div className="empty-state large"><Target /><h2>No opportunities yet</h2><p>Convert a qualified conversation into your first pipeline record.</p><Button onClick={() => setOpportunityOpen(true)}>Create opportunity</Button></div>}</article> : null}
             {activeView === 'rfqs' ? <FeatureState icon={FileText} title="RFQ inbox is ready for integration" text="Patch 1 reserves the workflow and database boundary. Document upload, specification extraction, versioning, and quotation approval require secure file storage and arrive in Patch 2." /> : null}
-            {activeView === 'events' ? <article className="panel event-card"><div><span className="live-dot" /><strong>IndustrialTech Expo 2026</strong><small>Day 1 · Active</small></div><dl><div><dt>Captured</dt><dd>{metrics.totalLeads}</dd></div><div><dt>Qualified</dt><dd>{metrics.qualifiedLeads}</dd></div><div><dt>Open tasks</dt><dd>{metrics.openTasks}</dd></div></dl></article> : null}
+            {activeView === 'events' ? <div className="events-layout">
+              <article className="panel event-builder"><div className="settings-heading"><CalendarDays /><div><h2>Prepare an event</h2><p>Configure the booth goal, qualification playbook, routing and follow-up standard before the team arrives.</p></div></div><form className="lead-form" onSubmit={submitEvent}>
+                <div className="field-grid"><div className="field-block"><label htmlFor="event-name">Event name</label><Input id="event-name" name="name" required placeholder="IndustrialTech Expo 2027" /></div><div className="field-block"><label htmlFor="event-venue">Venue</label><Input id="event-venue" name="venue" placeholder="Bombay Exhibition Centre" /></div></div>
+                <div className="event-three"><div className="field-block"><label htmlFor="event-hall">Hall</label><Input id="event-hall" name="hall" placeholder="2" /></div><div className="field-block"><label htmlFor="event-booth">Booth</label><Input id="event-booth" name="booth" placeholder="B-18" /></div><div className="field-block"><label htmlFor="event-zone">Timezone</label><Input id="event-zone" name="timezone" defaultValue={appContext?.workspace.timezone || 'Asia/Kolkata'} required /></div></div>
+                <div className="field-grid"><div className="field-block"><label htmlFor="event-start">Starts</label><Input id="event-start" name="startsOn" type="date" required /></div><div className="field-block"><label htmlFor="event-end">Ends</label><Input id="event-end" name="endsOn" type="date" required /></div></div>
+                <div className="field-block"><label htmlFor="event-objective-detail">Business objective</label><Textarea id="event-objective-detail" name="objective" placeholder="Book 30 qualified plant demos and create ₹40L in influenced pipeline." /></div>
+                <div className="field-grid"><div className="field-block"><label htmlFor="event-products">Products or services</label><Input id="event-products" name="products" placeholder="MachineSight, Integration assessment" /></div><div className="field-block"><label htmlFor="event-targets">Target accounts</label><Input id="event-targets" name="targetAccounts" placeholder="ABC Pharma, Prime Polymers" /></div></div>
+                <div className="field-block"><label htmlFor="event-questions">Qualification questions</label><Textarea id="event-questions" name="qualificationQuestions" placeholder="How many machines?, Which ERP?, When does budget open? (comma separated)" /></div>
+                <div className="field-grid"><div className="field-block"><label htmlFor="event-budget">Event budget ({appContext?.workspace.currency || 'INR'})</label><Input id="event-budget" name="budget" type="number" min="0" defaultValue="0" /></div><div className="field-block"><label htmlFor="event-badge">Badge or QR provider</label><Input id="event-badge" name="badgeProvider" placeholder="Manual / provider name" /></div></div>
+                <div className="event-three"><div className="field-block"><label htmlFor="event-route">Lead owner</label><select id="event-route" name="leadRoutingRule" defaultValue="capturer"><option value="capturer">Person who captures</option><option value="round_robin">Round robin</option><option value="manager_review">Manager assigns</option></select></div><div className="field-block"><label htmlFor="event-sla">Follow-up SLA (hours)</label><Input id="event-sla" name="followupSlaHours" type="number" min="1" max="720" defaultValue="24" /></div><div className="field-block"><label htmlFor="event-target">Daily lead target</label><Input id="event-target" name="dailyLeadTarget" type="number" min="1" defaultValue="25" /></div></div>
+                <div className="field-block"><label htmlFor="event-team">Assigned team members</label><select id="event-team" name="teamMemberIds" multiple size={Math.min(4, Math.max(2, members.length))}>{members.filter((member) => member.status === 'active').map((member) => <option key={member.id} value={member.userId}>{member.displayName || member.email} · {member.role}</option>)}</select><small className="field-help">Hold Ctrl or Command to select more than one person. Empty means the whole workspace can use the event.</small></div>
+                <Button className="save-button" type="submit" disabled={!['owner','admin','manager'].includes(appContext?.role || '')}>Create event workspace</Button>
+              </form></article>
+              <section className="event-list" aria-label="Configured events"><div className="event-list-heading"><div><h2>Configured events</h2><p>Select the event used for new lead captures.</p></div><b>{events.filter((item) => item.status !== 'archived').length} active</b></div>
+                {events.length ? events.map((item) => <article className={`panel event-record ${item.id === activeEventId ? 'selected' : ''} ${item.status === 'archived' ? 'archived' : ''}`} key={item.id}><div className="event-record-head"><span className="calendar-tile"><b>{new Date(`${item.startsOn}T00:00:00`).toLocaleDateString('en', { day: '2-digit' })}</b><small>{new Date(`${item.startsOn}T00:00:00`).toLocaleDateString('en', { month: 'short' })}</small></span><span><strong>{item.name}</strong><small>{item.venue || 'Venue pending'}{item.hall ? ` · Hall ${item.hall}` : ''}{item.booth ? ` · Booth ${item.booth}` : ''}</small></span><b className={`event-status ${item.status}`}>{item.status}</b></div><p>{item.objective || 'Business objective not added yet.'}</p><div className="event-meta"><span><small>Dates</small><strong>{item.startsOn} → {item.endsOn}</strong></span><span><small>Budget</small><strong>{appContext?.workspace.currency || 'INR'} {item.budget.toLocaleString()}</strong></span><span><small>Follow-up</small><strong>{item.followupSlaHours}h SLA</strong></span><span><small>QR campaign</small><strong>{item.qrCampaignCode || 'Pending'}</strong></span></div>{item.products.length ? <div className="event-tags">{item.products.map((product) => <span key={product}>{product}</span>)}</div> : null}<div className="event-actions">{item.status !== 'archived' ? <Button type="button" variant={item.id === activeEventId ? 'default' : 'outline'} onClick={() => selectEvent(item.id)}>{item.id === activeEventId ? <><Check /> Active event</> : 'Use for capture'}</Button> : null}<button type="button" onClick={() => eventAction('duplicate', item.id)}>Duplicate</button>{item.status !== 'archived' ? <button className="danger-link" type="button" onClick={() => eventAction('archive', item.id)}>Archive</button> : null}</div></article>) : <article className="panel empty-state large"><CalendarDays /><h2>No event configured</h2><p>Create the first event playbook. It stays in draft until selected for capture.</p></article>}
+              </section>
+            </div> : null}
             {activeView === 'roi' ? <div className="roi-grid"><article className="panel roi-card"><small>Event investment</small><strong>₹3,00,000</strong><span>Manual baseline</span></article><article className="panel roi-card"><small>Pipeline created</small><strong>₹{metrics.pipelineValue.toLocaleString('en-IN')}</strong><span>{opportunities.length} opportunities</span></article><article className="panel roi-card"><small>Closed revenue</small><strong>₹0</strong><span>No closed opportunities yet</span></article></div> : null}
             {activeView === 'knowledge' ? <div className="knowledge-layout">
               <article className="panel onboarding-progress"><div><span>{knowledge.profile ? '2' : '1'}<small>/4</small></span><div><h2>Company intelligence setup</h2><p>{knowledge.profile ? 'Profile saved. Add products, target customers and evidence.' : 'Start by explaining what the company sells and whom it serves.'}</p></div></div><div className="progress-track"><i style={{ width: `${[knowledge.profile, knowledge.products.length, knowledge.icps.length, knowledge.sources.length].filter(Boolean).length * 25}%` }} /></div></article>
