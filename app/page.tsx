@@ -47,6 +47,12 @@ function FeatureState({ icon: Icon, title, text }: { icon: typeof FileText; titl
   return <article className="panel feature-state"><span><Icon /></span><h2>{title}</h2><p>{text}</p><b>Planned · not simulated</b></article>;
 }
 
+function apiFetch(path: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers); const workspaceId = window.localStorage.getItem('revenue-workspace-id');
+  if (workspaceId) headers.set('x-revenue-workspace-id', workspaceId);
+  return fetch(path, { ...init, headers });
+}
+
 export default function Home() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -74,6 +80,7 @@ export default function Home() {
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<Array<AppContext['workspace'] & { role: string }>>([]);
   const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio' } | null>(null);
   const [recording, setRecording] = useState(false);
   const cardInput = useRef<HTMLInputElement>(null);
@@ -99,7 +106,7 @@ export default function Home() {
   }, []);
 
   async function loadWorkspace() {
-    fetch('/api/workspace').then(async (response) => {
+    apiFetch('/api/workspace').then(async (response) => {
       if (!response.ok) return;
       const data = await response.json() as { context?: AppContext; leads?: SavedLead[]; tasks?: TaskItem[]; opportunities?: Opportunity[]; accounts?: Account[]; metrics?: typeof metrics };
       setCapturedLeads(data.leads || []); setTasks(data.tasks || []); setOpportunities(data.opportunities || []); setAccounts(data.accounts || []);
@@ -113,7 +120,7 @@ export default function Home() {
     window.addEventListener('keydown', shortcut); return () => window.removeEventListener('keydown', shortcut);
   }, []);
 
-  async function loadSettings() { const response = await fetch('/api/settings'); if (!response.ok) return; const data = await response.json() as { context: AppContext; members: Member[]; invitations: Invitation[]; audit: AuditEvent[] }; setAppContext(data.context); setMembers(data.members); setInvitations(data.invitations); setAuditEvents(data.audit); }
+  async function loadSettings() { const response = await apiFetch('/api/settings'); if (!response.ok) return; const data = await response.json() as { context: AppContext; members: Member[]; invitations: Invitation[]; audit: AuditEvent[]; workspaces?: Array<AppContext['workspace'] & { role: string }> }; setAppContext(data.context); setMembers(data.members); setInvitations(data.invitations); setAuditEvents(data.audit); setAvailableWorkspaces(data.workspaces || []); }
   function go(view: View) { setActiveView(view); setMobileNav(false); if (view === 'settings') void loadSettings(); }
 
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
@@ -122,7 +129,7 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
     try {
-      const response = await fetch('/api/leads', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await apiFetch('/api/leads', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await response.json() as { lead?: SavedLead; error?: string };
       if (!response.ok || !data.lead) throw new Error(data.error || 'Unable to save this lead.');
       setSavedLead(data.lead); setCapturedLeads((current) => [data.lead!, ...current]); setSaved(true); void loadWorkspace();
@@ -183,7 +190,7 @@ export default function Home() {
     if (!reviewLead) return;
     setAnalyzing(true); setAnalysisError('');
     try {
-      const response = await fetch('/api/analysis', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ leadId: reviewLead.id }) });
+      const response = await apiFetch('/api/analysis', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ leadId: reviewLead.id }) });
       const data = await response.json() as { analysis?: Analysis; extractionId?: string; error?: string };
       if (!response.ok || !data.analysis || !data.extractionId) throw new Error(data.error || 'Unable to analyze this conversation.');
       setAnalysis(data.analysis); setExtractionId(data.extractionId);
@@ -192,19 +199,19 @@ export default function Home() {
   }
 
   async function confirmAnalysis() {
-    const response = await fetch('/api/analysis/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ extractionId }) });
+    const response = await apiFetch('/api/analysis/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ extractionId }) });
     if (response.ok) { setConfirmed(true); setCapturedLeads((current) => current.map((lead) => lead.id === reviewLead?.id ? { ...lead, reviewStatus: 'confirmed' } : lead)); }
     else setAnalysisError('Could not confirm this analysis. Please try again.');
   }
 
   async function completeTask(id: string) {
-    const response = await fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'complete_task', id }) });
+    const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'complete_task', id }) });
     if (response.ok) { setTasks((current) => current.map((task) => task.id === id ? { ...task, status: 'complete' } : task)); setNotice('Task completed'); setTimeout(() => setNotice(''), 1800); void loadWorkspace(); }
   }
 
   async function createOpportunity(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault(); const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
-    const response = await fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create_opportunity', ...payload }) });
+    const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create_opportunity', ...payload }) });
     const data = await response.json() as { opportunity?: Opportunity; error?: string };
     if (!response.ok || !data.opportunity) { setNotice(data.error || 'Could not create opportunity'); return; }
     setOpportunityOpen(false); setNotice('Opportunity created'); setTimeout(() => setNotice(''), 1800); void loadWorkspace();
@@ -212,7 +219,7 @@ export default function Home() {
 
   async function saveSettings(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget).entries());
-    const response = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_workspace', ...values }) });
+    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_workspace', ...values }) });
     const data = await response.json() as { workspace?: AppContext['workspace']; error?: string };
     if (!response.ok || !data.workspace) { setNotice(data.error || 'Could not save settings'); return; }
     setAppContext((current) => current ? { ...current, workspace: data.workspace! } : current); setNotice('Workspace settings saved'); setTimeout(() => setNotice(''), 1800); void loadSettings();
@@ -220,10 +227,38 @@ export default function Home() {
 
   async function inviteMember(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const values = Object.fromEntries(new FormData(form).entries());
-    const response = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'invite', ...values }) });
+    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'invite', ...values }) });
     const data = await response.json() as { invitation?: Invitation; error?: string };
     if (!response.ok || !data.invitation) { setNotice(data.error || 'Could not create invitation'); return; }
     form.reset(); setInvitations((current) => [data.invitation!, ...current]); setNotice('Invitation recorded'); setTimeout(() => setNotice(''), 1800); void loadSettings();
+  }
+
+  async function createWorkspace(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = event.currentTarget; const values = Object.fromEntries(new FormData(form).entries());
+    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create_workspace', ...values }) });
+    const data = await response.json() as { workspace?: AppContext['workspace']; error?: string };
+    if (!response.ok || !data.workspace) { setNotice(data.error || 'Could not create workspace'); return; }
+    window.localStorage.setItem('revenue-workspace-id', data.workspace.id); form.reset(); setNotice('Workspace created'); await loadWorkspace(); await loadSettings();
+  }
+
+  async function switchWorkspace(id: string) {
+    window.localStorage.setItem('revenue-workspace-id', id); setNotice('Workspace switched'); await loadWorkspace(); await loadSettings();
+  }
+
+  async function updateMember(id: string, role: string, status: string) {
+    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_member', id, role, status }) });
+    const data = await response.json() as { error?: string }; if (!response.ok) { setNotice(data.error || 'Could not update member'); return; }
+    setNotice('Member updated'); void loadSettings();
+  }
+
+  async function revokeInvitation(id: string) {
+    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'revoke_invitation', id }) });
+    if (response.ok) { setNotice('Invitation revoked'); void loadSettings(); }
+  }
+
+  async function exportWorkspace() {
+    const response = await apiFetch('/api/settings?export=1'); if (!response.ok) { setNotice('Export could not be prepared'); return; }
+    const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `${appContext?.workspace.slug || 'workspace'}-export.json`; link.click(); URL.revokeObjectURL(url); setNotice('Workspace export downloaded');
   }
 
   return (
@@ -334,7 +369,12 @@ export default function Home() {
             {activeView === 'events' ? <article className="panel event-card"><div><span className="live-dot" /><strong>IndustrialTech Expo 2026</strong><small>Day 1 · Active</small></div><dl><div><dt>Captured</dt><dd>{metrics.totalLeads}</dd></div><div><dt>Qualified</dt><dd>{metrics.qualifiedLeads}</dd></div><div><dt>Open tasks</dt><dd>{metrics.openTasks}</dd></div></dl></article> : null}
             {activeView === 'roi' ? <div className="roi-grid"><article className="panel roi-card"><small>Event investment</small><strong>₹3,00,000</strong><span>Manual baseline</span></article><article className="panel roi-card"><small>Pipeline created</small><strong>₹{metrics.pipelineValue.toLocaleString('en-IN')}</strong><span>{opportunities.length} opportunities</span></article><article className="panel roi-card"><small>Closed revenue</small><strong>₹0</strong><span>No closed opportunities yet</span></article></div> : null}
             {activeView === 'knowledge' ? <FeatureState icon={Building2} title="Company knowledge needs secure file storage" text="Website URLs and document metadata will live here. Actual brochures, catalogues, case studies, and RFQs must use object storage—not the relational database." /> : null}
-            {activeView === 'settings' ? <div className="settings-layout"><article className="panel settings-card"><div className="settings-heading"><ShieldCheck /><div><h2>Workspace identity</h2><p>Tenant-specific defaults used by dates, reports and revenue.</p></div></div><form className="lead-form" onSubmit={saveSettings}><div className="field-block"><label htmlFor="workspace-name">Workspace name</label><Input id="workspace-name" name="name" defaultValue={appContext?.workspace.name} required /></div><div className="field-grid"><div className="field-block"><label htmlFor="workspace-timezone">Timezone</label><Input id="workspace-timezone" name="timezone" defaultValue={appContext?.workspace.timezone} required /></div><div className="field-block"><label htmlFor="workspace-currency">Currency</label><Input id="workspace-currency" name="currency" defaultValue={appContext?.workspace.currency} maxLength={3} required /></div></div><Button className="save-button" type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Save workspace</Button></form></article><article className="panel settings-card"><div className="settings-heading"><UserPlus /><div><h2>Invite a teammate</h2><p>Invitations expire after seven days.</p></div></div><form className="invite-form" onSubmit={inviteMember}><Input name="email" type="email" placeholder="teammate@company.com" required /><select name="role" defaultValue="salesperson"><option value="admin">Administrator</option><option value="manager">Manager</option><option value="salesperson">Salesperson</option><option value="marketing">Marketing</option><option value="viewer">Viewer</option></select><Button type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Invite</Button></form><div className="member-list"><h3>Members</h3>{members.map((member) => <div key={member.id}><span className="profile-avatar">{member.email.slice(0,2).toUpperCase()}</span><span><strong>{member.displayName || member.email}</strong><small>{member.email}</small></span><b>{member.role}</b></div>)}{invitations.map((invite) => <div key={invite.id} className="pending-member"><span className="profile-avatar">?</span><span><strong>{invite.email}</strong><small>Invitation pending</small></span><b>{invite.role}</b></div>)}</div></article><article className="panel settings-card audit-card"><div className="settings-heading"><FileText /><div><h2>Recent security activity</h2><p>Important workspace actions are permanently attributed.</p></div></div>{auditEvents.length ? auditEvents.map((item) => <div className="audit-row" key={item.id}><span>{item.action.replaceAll('.', ' ')}</span><small>{item.entityType} · {new Date(item.createdAt).toLocaleString()}</small></div>) : <div className="empty-state">No recorded workspace changes yet.</div>}</article></div> : null}
+            {activeView === 'settings' ? <div className="settings-layout">
+              <article className="panel settings-card workspace-manager"><div className="settings-heading"><Building2 /><div><h2>Your workspaces</h2><p>Switch tenant context or create another trial workspace.</p></div></div><div className="workspace-list">{availableWorkspaces.map((workspace) => <button key={workspace.id} className={workspace.id === appContext?.workspace.id ? 'selected' : ''} onClick={() => switchWorkspace(workspace.id)}><span><strong>{workspace.name}</strong><small>{workspace.role} · {workspace.plan}</small></span>{workspace.id === appContext?.workspace.id ? <Check /> : <ArrowRight />}</button>)}</div><form className="invite-form" onSubmit={createWorkspace}><Input name="name" placeholder="New company workspace" required /><Input name="timezone" value={appContext?.workspace.timezone || 'Asia/Kolkata'} readOnly /><Button type="submit">Create</Button></form></article>
+              <article className="panel settings-card"><div className="settings-heading"><ShieldCheck /><div><h2>Workspace identity</h2><p>Tenant-specific defaults used by dates, reports and revenue.</p></div></div><form className="lead-form" onSubmit={saveSettings}><div className="field-block"><label htmlFor="workspace-name">Workspace name</label><Input id="workspace-name" name="name" key={appContext?.workspace.id} defaultValue={appContext?.workspace.name} required /></div><div className="field-grid"><div className="field-block"><label htmlFor="workspace-timezone">Timezone</label><Input id="workspace-timezone" name="timezone" defaultValue={appContext?.workspace.timezone} required /></div><div className="field-block"><label htmlFor="workspace-currency">Currency</label><Input id="workspace-currency" name="currency" defaultValue={appContext?.workspace.currency} maxLength={3} required /></div></div><div className="settings-actions"><Button className="save-button" type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Save workspace</Button><Button type="button" variant="outline" onClick={exportWorkspace}>Export data</Button></div></form></article>
+              <article className="panel settings-card"><div className="settings-heading"><UserPlus /><div><h2>Invite a teammate</h2><p>Invitations expire after seven days. Trial limit: three active members.</p></div></div><form className="invite-form" onSubmit={inviteMember}><Input name="email" type="email" placeholder="teammate@company.com" required /><select name="role" defaultValue="salesperson"><option value="admin">Administrator</option><option value="manager">Manager</option><option value="salesperson">Salesperson</option><option value="marketing">Marketing</option><option value="viewer">Viewer</option></select><Button type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Invite</Button></form><div className="member-list"><h3>Members</h3>{members.map((member) => <div key={member.id}><span className="profile-avatar">{member.email.slice(0,2).toUpperCase()}</span><span><strong>{member.displayName || member.email}</strong><small>{member.email}</small></span>{member.role === 'owner' ? <b>owner</b> : <span className="member-controls"><select aria-label={`Role for ${member.email}`} value={member.role} onChange={(event) => updateMember(member.id, event.target.value, member.status)}><option value="admin">Admin</option><option value="manager">Manager</option><option value="salesperson">Sales</option><option value="marketing">Marketing</option><option value="viewer">Viewer</option></select><button onClick={() => updateMember(member.id, member.role, member.status === 'active' ? 'inactive' : 'active')} type="button">{member.status === 'active' ? 'Deactivate' : 'Activate'}</button></span>}</div>)}{invitations.map((invite) => <div key={invite.id} className="pending-member"><span className="profile-avatar">?</span><span><strong>{invite.email}</strong><small>Invitation pending · {invite.role}</small></span><button type="button" onClick={() => revokeInvitation(invite.id)}>Revoke</button></div>)}</div></article>
+              <article className="panel settings-card audit-card"><div className="settings-heading"><FileText /><div><h2>Recent security activity</h2><p>Important workspace actions are permanently attributed.</p></div></div>{auditEvents.length ? auditEvents.map((item) => <div className="audit-row" key={item.id}><span>{item.action.replaceAll('.', ' ')}</span><small>{item.entityType} · {new Date(item.createdAt).toLocaleString()}</small></div>) : <div className="empty-state">No recorded workspace changes yet.</div>}</article>
+            </div> : null}
           </section>}
         </div>
         {notice ? <output className="toast">{notice}</output> : null}

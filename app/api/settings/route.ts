@@ -5,12 +5,24 @@ const clean = (value: unknown, max: number) => typeof value === 'string' ? value
 
 export async function GET(request: Request) {
   const context = await requireWorkspace(request); const db = database();
-  const [members, invitations, audit] = await Promise.all([
+  const url = new URL(request.url);
+  if (url.searchParams.get('export') === '1') {
+    requireRole(context, ['owner', 'admin']);
+    const [leads, interactions, tasks, opportunities] = await Promise.all([
+      db.prepare(`SELECT * FROM leads WHERE workspace_id = ?`).bind(context.workspace.id).all(),
+      db.prepare(`SELECT * FROM interactions WHERE workspace_id = ?`).bind(context.workspace.id).all(),
+      db.prepare(`SELECT * FROM tasks WHERE workspace_id = ?`).bind(context.workspace.id).all(),
+      db.prepare(`SELECT * FROM opportunities WHERE workspace_id = ?`).bind(context.workspace.id).all(),
+    ]);
+    return new Response(JSON.stringify({ exportedAt: new Date().toISOString(), workspace: context.workspace, leads: leads.results, interactions: interactions.results, tasks: tasks.results, opportunities: opportunities.results }, null, 2), { headers: { 'content-type': 'application/json', 'content-disposition': `attachment; filename="${context.workspace.slug}-export.json"` } });
+  }
+  const [members, invitations, audit, workspaces] = await Promise.all([
     db.prepare(`SELECT id, user_id AS userId, email, display_name AS displayName, role, status, created_at AS createdAt FROM memberships WHERE workspace_id = ? ORDER BY created_at ASC`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, email, role, status, expires_at AS expiresAt, created_at AS createdAt FROM invitations WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 30`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, actor_id AS actorId, action, entity_type AS entityType, entity_id AS entityId, created_at AS createdAt FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 30`).bind(context.workspace.id).all(),
+    db.prepare(`SELECT w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, m.role FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ORDER BY m.created_at ASC`).bind(context.user.id).all(),
   ]);
-  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, members: members.results, invitations: invitations.results, audit: audit.results });
+  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: members.results, invitations: invitations.results, audit: audit.results });
 }
 
 export async function POST(request: Request) {
@@ -21,6 +33,8 @@ export async function POST(request: Request) {
   if (action === 'invite') {
     const email = clean(body.email, 254).toLowerCase(); const role = clean(body.role, 30);
     if (!/^\S+@\S+\.\S+$/.test(email) || !ROLES.includes(role) || role === 'owner') return Response.json({ error: 'Enter a valid email and assignable role.' }, { status: 400 });
+    const count = await db.prepare(`SELECT COUNT(*) AS count FROM memberships WHERE workspace_id = ? AND status = 'active'`).bind(context.workspace.id).first<{ count: number }>();
+    if (context.workspace.plan === 'trial' && Number(count?.count || 0) >= 3) return Response.json({ error: 'Trial workspaces support up to three active members.' }, { status: 402 });
     const duplicate = await db.prepare(`SELECT id FROM invitations WHERE workspace_id = ? AND email = ? AND status = 'pending'`).bind(context.workspace.id, email).first();
     if (duplicate) return Response.json({ error: 'A pending invitation already exists.' }, { status: 409 });
     const id = crypto.randomUUID();
@@ -38,6 +52,32 @@ export async function POST(request: Request) {
       auditStatement(context, 'workspace.updated', 'workspace', context.workspace.id, { name, timezone, currency }),
     ]);
     return Response.json({ workspace: { ...context.workspace, name, timezone, currency } });
+  }
+  if (action === 'create_workspace') {
+    const name = clean(body.name, 120); if (!name) return Response.json({ error: 'Workspace name is required.' }, { status: 400 });
+    const existing = await db.prepare(`SELECT COUNT(*) AS count FROM memberships WHERE user_id = ? AND status = 'active'`).bind(context.user.id).first<{ count: number }>();
+    if (Number(existing?.count || 0) >= 3) return Response.json({ error: 'A user can create up to three trial workspaces.' }, { status: 402 });
+    const id = crypto.randomUUID(); const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 42) || 'workspace'}-${id.slice(0, 6)}`;
+    await db.batch([
+      db.prepare(`INSERT INTO workspaces (id, name, slug, timezone, currency, plan, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'trial', 'active', ?, ?, ?)`).bind(id, name, slug, clean(body.timezone, 80) || context.workspace.timezone, clean(body.currency, 3).toUpperCase() || context.workspace.currency, context.user.id, now, now),
+      db.prepare(`INSERT INTO memberships (id, workspace_id, user_id, email, display_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'owner', 'active', ?, ?)`).bind(crypto.randomUUID(), id, context.user.id, context.user.email, context.user.email.split('@')[0], now, now),
+      db.prepare(`INSERT INTO audit_events (id, workspace_id, actor_id, action, entity_type, entity_id, created_at) VALUES (?, ?, ?, 'workspace.created', 'workspace', ?, ?)`).bind(crypto.randomUUID(), id, context.user.id, id, now),
+    ]);
+    return Response.json({ workspace: { id, name, slug, timezone: clean(body.timezone, 80) || context.workspace.timezone, currency: clean(body.currency, 3).toUpperCase() || context.workspace.currency, plan: 'trial', status: 'active', role: 'owner' } }, { status: 201 });
+  }
+  if (action === 'update_member') {
+    const membershipId = clean(body.id, 80); const role = clean(body.role, 30); const status = clean(body.status, 20);
+    if (!membershipId || !ROLES.includes(role) || !['active', 'inactive'].includes(status)) return Response.json({ error: 'Valid member, role and status are required.' }, { status: 400 });
+    const target = await db.prepare(`SELECT user_id AS userId, role FROM memberships WHERE id = ? AND workspace_id = ?`).bind(membershipId, context.workspace.id).first<{ userId: string; role: string }>();
+    if (!target) return Response.json({ error: 'Member not found.' }, { status: 404 });
+    if (target.role === 'owner') return Response.json({ error: 'Transfer ownership before changing the owner.' }, { status: 409 });
+    await db.batch([db.prepare(`UPDATE memberships SET role = ?, status = ?, updated_at = ? WHERE id = ? AND workspace_id = ?`).bind(role, status, now, membershipId, context.workspace.id), auditStatement(context, 'membership.updated', 'membership', membershipId, { role, status })]);
+    return Response.json({ ok: true });
+  }
+  if (action === 'revoke_invitation') {
+    const id = clean(body.id, 80); const result = await db.prepare(`UPDATE invitations SET status = 'revoked' WHERE id = ? AND workspace_id = ? AND status = 'pending'`).bind(id, context.workspace.id).run();
+    if (!result.meta.changes) return Response.json({ error: 'Pending invitation not found.' }, { status: 404 });
+    await auditStatement(context, 'invitation.revoked', 'invitation', id).run(); return Response.json({ ok: true });
   }
   return Response.json({ error: 'Unknown action.' }, { status: 400 });
 }
