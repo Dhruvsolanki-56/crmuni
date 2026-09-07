@@ -195,6 +195,18 @@ export const communicationDrafts = sqliteTable('communication_drafts', {
   approvedAt: integer('approved_at'),
 }, (table) => [index('idx_communication_drafts_lead').on(table.workspaceId, table.leadId, table.createdAt)]);
 
+export const rfqs = sqliteTable('rfqs', {
+  id: text('id').primaryKey(), workspaceId: text('workspace_id').notNull().references(() => workspaces.id), accountId: text('account_id').references(() => accounts.id), leadId: text('lead_id').references(() => leads.id), eventId: text('event_id'), title: text('title').notNull(), reference: text('reference'), requesterCompany: text('requester_company').notNull(), contactName: text('contact_name'), deliveryLocation: text('delivery_location'), submissionDeadline: text('submission_deadline'), status: text('status').notNull().default('received'), processingStatus: text('processing_status').notNull().default('manual_review'), ownerId: text('owner_id').notNull(), createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(),
+}, (table) => [index('idx_rfqs_workspace_status_deadline').on(table.workspaceId, table.status, table.submissionDeadline)]);
+
+export const rfqItems = sqliteTable('rfq_items', {
+  id: text('id').primaryKey(), workspaceId: text('workspace_id').notNull().references(() => workspaces.id), rfqId: text('rfq_id').notNull().references(() => rfqs.id), product: text('product').notNull(), quantity: text('quantity'), specifications: text('specifications'), sourceEvidence: text('source_evidence'), createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_rfq_items_rfq').on(table.workspaceId, table.rfqId)]);
+
+export const rfqDocuments = sqliteTable('rfq_documents', {
+  id: text('id').primaryKey(), workspaceId: text('workspace_id').notNull().references(() => workspaces.id), rfqId: text('rfq_id').notNull().references(() => rfqs.id), originalName: text('original_name').notNull(), storageKey: text('storage_key').notNull(), contentType: text('content_type').notNull(), sizeBytes: integer('size_bytes').notNull(), processingStatus: text('processing_status').notNull().default('stored_pending_extraction'), createdBy: text('created_by').notNull(), createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_rfq_documents_rfq').on(table.workspaceId, table.rfqId)]);
+
 export const opportunities = sqliteTable('opportunities', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
