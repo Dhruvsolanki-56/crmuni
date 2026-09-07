@@ -57,6 +57,13 @@
       "when": 1788742496808,
       "tag": "0007_wandering_lady_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788742794657,
+      "tag": "0008_quiet_emma_frost",
+      "breakpoints": true
     }
   ]
 }

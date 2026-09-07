@@ -3,7 +3,7 @@ import { auditStatement, database, requireWorkspace } from '@/lib/db';
 
 export async function POST(request: Request) {
   const context = await requireWorkspace(request);
-  const body = await request.json().catch(() => null) as { extractionId?: unknown } | null;
+  const body = await request.json().catch(() => null) as { extractionId?: unknown; commitments?: unknown } | null;
   const extractionId = typeof body?.extractionId === 'string' ? body.extractionId : '';
   if (!extractionId) return Response.json({ error: 'Extraction ID is required.' }, { status: 400 });
 
@@ -15,12 +15,22 @@ export async function POST(request: Request) {
   if (!extraction || !extraction.resultJson) return Response.json({ error: 'Completed analysis not found.' }, { status: 404 });
   if (extraction.status === 'confirmed') return Response.json({ status: 'confirmed', tasksCreated: 0 });
 
-  const analysis = JSON.parse(extraction.resultJson) as ConversationAnalysis;
+  const analysis = JSON.parse(extraction.resultJson) as ConversationAnalysis & { ruleResults?: unknown[] };
+  if (Array.isArray(body?.commitments)) {
+    const edits = body.commitments as Array<{ title?: unknown; due_date?: unknown; evidence?: unknown }>;
+    analysis.commitments = analysis.commitments.map((stored, index) => { const edit = edits[index]; if (!edit || edit.title !== stored.title || edit.evidence !== stored.evidence) return stored; const due = typeof edit.due_date === 'string' ? edit.due_date : null; return { ...stored, due_date: due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null }; });
+  }
+  if (analysis.commitments.some((item) => !item.due_date)) return Response.json({ error: 'Confirm a date for every commitment before creating tasks.' }, { status: 409 });
   const now = Date.now();
   const statements = [
     database().prepare(`UPDATE ai_extractions SET status = 'confirmed', confirmed_at = ?, confirmed_by = ? WHERE id = ? AND workspace_id = ?`).bind(now, context.user.id, extractionId, context.workspace.id),
     database().prepare(`UPDATE leads SET review_status = 'confirmed', updated_at = ? WHERE id = ? AND workspace_id = ?`).bind(now, extraction.leadId, context.workspace.id),
   ];
+  for (const field of analysis.fields) {
+    if (!field.value || !field.evidence) continue;
+    statements.push(database().prepare(`INSERT INTO lead_facts (id, workspace_id, lead_id, extraction_id, field_key, label, value, confidence_basis_points, evidence, confirmed_by, confirmed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), context.workspace.id, extraction.leadId, extractionId, field.key.slice(0, 80), field.label.slice(0, 120), field.value.slice(0, 2000), Math.round(field.confidence * 10000), field.evidence.slice(0, 1000), context.user.id, now));
+  }
+  statements.push(database().prepare(`INSERT INTO qualification_scores (id, workspace_id, lead_id, extraction_id, score, rationale, rule_results_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), context.workspace.id, extraction.leadId, extractionId, analysis.score.value, analysis.score.rationale.slice(0, 2000), JSON.stringify(analysis.ruleResults || []).slice(0, 8000), now));
   for (const commitment of analysis.commitments) {
     statements.push(database().prepare(`
       INSERT INTO tasks (id, workspace_id, lead_id, owner_id, title, due_date, status, source_interaction_id, created_at, updated_at)

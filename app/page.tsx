@@ -240,9 +240,9 @@ export default function Home() {
   }
 
   async function confirmAnalysis() {
-    const response = await apiFetch('/api/analysis/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ extractionId }) });
+    const response = await apiFetch('/api/analysis/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ extractionId, commitments: analysis?.commitments }) });
     if (response.ok) { setConfirmed(true); setCapturedLeads((current) => current.map((lead) => lead.id === reviewLead?.id ? { ...lead, reviewStatus: 'confirmed' } : lead)); }
-    else setAnalysisError('Could not confirm this analysis. Please try again.');
+    else { const data = await response.json() as { error?: string }; setAnalysisError(data.error || 'Could not confirm this analysis. Please try again.'); }
   }
 
   async function completeTask(id: string) {
@@ -405,9 +405,9 @@ export default function Home() {
                 {!analysis ? <div className="analysis-empty"><span className="analysis-mark"><Sparkles /></span><h3>Turn this note into accountable sales data</h3><p>Extract requirements, buying signals, commitments, deadlines, and supporting evidence.</p>{analysisError ? <div className="ai-config-warning"><strong>AI analysis unavailable</strong><span>{analysisError}</span></div> : null}<Button onClick={analyzeConversation} disabled={analyzing || !reviewLead?.note}>{analyzing ? 'Analyzing evidence…' : 'Analyze conversation'} <Sparkles /></Button></div> : <div className="analysis-result">
                   <div className="analysis-summary"><span className="analysis-score">{analysis.score.value}</span><div><small>AI qualification score · explainable</small><p>{analysis.summary}</p></div></div>
                   <div className="intelligence-grid">{analysis.fields.filter((field) => field.value).map((field) => <article key={field.key}><span>{field.label}<i>{Math.round(field.confidence * 100)}%</i></span><strong>{field.value}</strong>{field.evidence ? <q>{field.evidence}</q> : null}</article>)}</div>
-                  {analysis.commitments.length ? <div className="commitments"><h3>Proposed commitments</h3>{analysis.commitments.map((item, index) => <article key={`${item.title}-${index}`}><Clock3 /><span><strong>{item.title}</strong><small>{item.due_date || 'Date needs confirmation'} · {item.owner_party}</small><q>{item.evidence}</q></span></article>)}</div> : null}
+                  {analysis.commitments.length ? <div className="commitments"><h3>Proposed commitments</h3>{analysis.commitments.map((item, index) => <article key={`${item.title}-${index}`}><Clock3 /><span><strong>{item.title}</strong><label><small>Confirmed deadline · {item.owner_party}</small><Input aria-label={`Deadline for ${item.title}`} type="date" value={item.due_date || ''} onChange={(event) => setAnalysis((current) => current ? { ...current, commitments: current.commitments.map((commitment, position) => position === index ? { ...commitment, due_date: event.target.value || null } : commitment) } : current)} required /></label><q>{item.evidence}</q></span></article>)}</div> : null}
                   {analysis.risks.length ? <div className="risk-note"><strong>Needs attention</strong>{analysis.risks.join(' · ')}</div> : null}
-                  <Button className="save-button" onClick={confirmAnalysis} disabled={confirmed}>{confirmed ? <><Check /> Confirmed and tasks created</> : 'Confirm facts and create tasks'}</Button>
+                  {analysisError ? <p className="form-error" role="alert">{analysisError}</p> : null}<Button className="save-button" onClick={confirmAnalysis} disabled={confirmed || analysis.commitments.some((item) => !item.due_date)}>{confirmed ? <><Check /> Confirmed and tasks created</> : analysis.commitments.some((item) => !item.due_date) ? 'Confirm commitment dates first' : 'Confirm facts and create tasks'}</Button>
                 </div>}
               </DialogContent>
             </Dialog>

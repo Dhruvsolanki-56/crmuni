@@ -128,6 +128,31 @@ export const aiExtractions = sqliteTable('ai_extractions', {
   index('idx_ai_extractions_lead_created').on(table.workspaceId, table.leadId, table.createdAt),
 ]);
 
+export const leadFacts = sqliteTable('lead_facts', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  extractionId: text('extraction_id').notNull().references(() => aiExtractions.id),
+  fieldKey: text('field_key').notNull(),
+  label: text('label').notNull(),
+  value: text('value').notNull(),
+  confidenceBasisPoints: integer('confidence_basis_points').notNull(),
+  evidence: text('evidence').notNull(),
+  confirmedBy: text('confirmed_by').notNull(),
+  confirmedAt: integer('confirmed_at').notNull(),
+}, (table) => [uniqueIndex('uidx_lead_facts_extraction_field').on(table.extractionId, table.fieldKey)]);
+
+export const qualificationScores = sqliteTable('qualification_scores', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  extractionId: text('extraction_id').notNull().references(() => aiExtractions.id),
+  score: integer('score').notNull(),
+  rationale: text('rationale').notNull(),
+  ruleResultsJson: text('rule_results_json').notNull().default('[]'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_qualification_scores_lead').on(table.workspaceId, table.leadId, table.createdAt)]);
+
 export const opportunities = sqliteTable('opportunities', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
