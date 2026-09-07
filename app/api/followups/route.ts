@@ -1,4 +1,4 @@
-import { auditStatement, database, requireWorkspace, revenueEnv } from '@/lib/db';
+import { auditStatement, database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 function outputText(payload: { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }) { return payload.output?.flatMap((item) => item.content || []).find((part) => part.type === 'output_text')?.text; }
@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const context = await requireWorkspace(request); const body = await request.json().catch(() => null) as Record<string, unknown> | null; if (!body) return Response.json({ error: 'Invalid request body.' }, { status: 400 });
+  const context = await requireWorkspace(request); requireRole(context, ['owner', 'admin', 'manager', 'salesperson']); const body = await request.json().catch(() => null) as Record<string, unknown> | null; if (!body) return Response.json({ error: 'Invalid request body.' }, { status: 400 });
   const action = clean(body.action, 30); const db = database(); const now = Date.now();
   if (action === 'approve') {
     const id = clean(body.id, 80); const result = await db.prepare(`UPDATE communication_drafts SET status='approved', approved_by=?, approved_at=? WHERE id=? AND workspace_id=? AND status='draft'`).bind(context.user.id, now, id, context.workspace.id).run(); if (!result.meta.changes) return Response.json({ error: 'Draft is unavailable or already approved.' }, { status: 409 }); await auditStatement(context, 'followup.approved', 'communication_draft', id).run(); return Response.json({ ok: true });

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 
-export type RevenueEnv = { DB: D1Database; FILES: R2Bucket; OPENAI_API_KEY?: string; OPENAI_MODEL?: string };
+export type RevenueEnv = { DB: D1Database; FILES: R2Bucket; OPENAI_API_KEY?: string; OPENAI_MODEL?: string; OPENAI_VISION_MODEL?: string; OPENAI_TRANSCRIBE_MODEL?: string };
 
 export function database(): D1Database {
   return (env as unknown as RevenueEnv).DB;
@@ -24,6 +24,10 @@ export function requestUser(request: Request) {
 export type WorkspaceContext = { user: { id: string; email: string }; workspace: { id: string; name: string; slug: string; timezone: string; currency: string; plan: string; status: string }; role: string };
 
 export async function requireWorkspace(request: Request): Promise<WorkspaceContext> {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+    const origin = request.headers.get('origin');
+    if (origin) { try { if (new URL(origin).origin !== new URL(request.url).origin) throw new Error('cross_origin'); } catch { throw new Response('Cross-origin mutation rejected.', { status: 403 }); } }
+  }
   const user = requestUser(request); const db = database(); const requested = request.headers.get('x-revenue-workspace-id');
   let membership = await db.prepare(`SELECT m.role, w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status
     FROM memberships m JOIN workspaces w ON w.id = m.workspace_id

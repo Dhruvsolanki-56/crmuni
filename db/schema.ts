@@ -207,6 +207,21 @@ export const rfqDocuments = sqliteTable('rfq_documents', {
   id: text('id').primaryKey(), workspaceId: text('workspace_id').notNull().references(() => workspaces.id), rfqId: text('rfq_id').notNull().references(() => rfqs.id), originalName: text('original_name').notNull(), storageKey: text('storage_key').notNull(), contentType: text('content_type').notNull(), sizeBytes: integer('size_bytes').notNull(), processingStatus: text('processing_status').notNull().default('stored_pending_extraction'), createdBy: text('created_by').notNull(), createdAt: integer('created_at').notNull(),
 }, (table) => [index('idx_rfq_documents_rfq').on(table.workspaceId, table.rfqId)]);
 
+export const rfqAiExtractions = sqliteTable('rfq_ai_extractions', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  rfqId: text('rfq_id').notNull().references(() => rfqs.id),
+  status: text('status').notNull().default('processing'),
+  model: text('model').notNull(),
+  resultJson: text('result_json'),
+  errorCode: text('error_code'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+  completedAt: integer('completed_at'),
+  confirmedBy: text('confirmed_by'),
+  confirmedAt: integer('confirmed_at'),
+}, (table) => [index('idx_rfq_ai_extractions_rfq').on(table.workspaceId, table.rfqId, table.createdAt)]);
+
 export const opportunities = sqliteTable('opportunities', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
@@ -225,6 +240,29 @@ export const opportunities = sqliteTable('opportunities', {
 }, (table) => [
   index('idx_opportunities_workspace_stage').on(table.workspaceId, table.stage),
   index('idx_opportunities_workspace_company').on(table.workspaceId, table.company),
+]);
+
+export const quotations = sqliteTable('quotations', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  rfqId: text('rfq_id').references(() => rfqs.id),
+  opportunityId: text('opportunity_id').references(() => opportunities.id),
+  quoteNumber: text('quote_number').notNull(),
+  customer: text('customer').notNull(),
+  amount: integer('amount').notNull().default(0),
+  currency: text('currency').notNull(),
+  validUntil: text('valid_until'),
+  status: text('status').notNull().default('draft'),
+  originalName: text('original_name'),
+  storageKey: text('storage_key'),
+  contentType: text('content_type'),
+  sizeBytes: integer('size_bytes'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_quotations_workspace_number').on(table.workspaceId, table.quoteNumber),
+  index('idx_quotations_workspace_status_valid').on(table.workspaceId, table.status, table.validUntil),
 ]);
 
 export const companyDocuments = sqliteTable('company_documents', {

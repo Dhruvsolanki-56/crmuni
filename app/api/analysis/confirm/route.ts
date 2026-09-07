@@ -1,8 +1,9 @@
 import type { ConversationAnalysis } from '@/lib/analysis-schema';
-import { auditStatement, database, requireWorkspace } from '@/lib/db';
+import { auditStatement, database, requireRole, requireWorkspace } from '@/lib/db';
 
 export async function POST(request: Request) {
   const context = await requireWorkspace(request);
+  requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
   const body = await request.json().catch(() => null) as { extractionId?: unknown; commitments?: unknown } | null;
   const extractionId = typeof body?.extractionId === 'string' ? body.extractionId : '';
   if (!extractionId) return Response.json({ error: 'Extraction ID is required.' }, { status: 400 });

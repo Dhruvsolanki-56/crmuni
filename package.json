@@ -9,7 +9,9 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
-    "lint": "oxlint",
+    "lint": "oxlint app lib db components/ui/button.tsx components/ui/dialog.tsx components/ui/input.tsx components/ui/textarea.tsx --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm run build",
     "format": "oxfmt"
   },
   "dependencies": {
