@@ -59,3 +59,31 @@ export const aiExtractions = sqliteTable('ai_extractions', {
 }, (table) => [
   index('idx_ai_extractions_lead_created').on(table.workspaceId, table.leadId, table.createdAt),
 ]);
+
+export const opportunities = sqliteTable('opportunities', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  leadId: text('lead_id').references(() => leads.id),
+  company: text('company').notNull(),
+  title: text('title').notNull(),
+  stage: text('stage').notNull().default('qualified'),
+  value: integer('value').notNull().default(0),
+  currency: text('currency').notNull().default('INR'),
+  probability: integer('probability').notNull().default(20),
+  expectedCloseDate: text('expected_close_date'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  index('idx_opportunities_workspace_stage').on(table.workspaceId, table.stage),
+  index('idx_opportunities_workspace_company').on(table.workspaceId, table.company),
+]);
+
+export const companyDocuments = sqliteTable('company_documents', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name: text('name').notNull(),
+  kind: text('kind').notNull(),
+  storageKey: text('storage_key'),
+  status: text('status').notNull().default('pending_upload'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_company_documents_workspace').on(table.workspaceId, table.createdAt)]);

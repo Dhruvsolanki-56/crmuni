@@ -11,12 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
-const actions = [
-  { name: 'Rajesh Mehta', company: 'ABC Pharma', action: 'Send architecture + preliminary pricing', due: 'Due today', tone: 'urgent', avatar: 'RM' },
-  { name: 'Neha Shah', company: 'ABC Pharma', action: 'Schedule SAP integration demo', due: 'Tomorrow', tone: 'warning', avatar: 'NS' },
-  { name: 'Vikram Jain', company: 'Helix Engineering', action: 'Follow up on Sample X feedback', due: 'Sep 9', tone: 'neutral', avatar: 'VJ' },
-];
-
 const recent = [
   { name: 'Rajesh Mehta', company: 'ABC Pharma', role: 'Procurement Head', score: 92, interest: 'Machine monitoring', time: '11:42 AM' },
   { name: 'Neha Shah', company: 'ABC Pharma', role: 'IT Manager', score: 84, interest: 'SAP integration', time: '11:18 AM' },
@@ -36,8 +30,17 @@ type Analysis = {
   risks: string[];
 };
 
-function NavItem({ icon: Icon, label, active = false }: { icon: typeof LayoutDashboard; label: string; active?: boolean }) {
-  return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
+type TaskItem = { id: string; leadId: string; title: string; dueDate?: string; status: string; fullName: string; company: string };
+type Opportunity = { id: string; leadId?: string; company: string; title: string; stage: string; value: number; currency: string; probability: number; expectedCloseDate?: string };
+type Account = { company: string; contacts: number; latestAt: number };
+type View = 'today' | 'people' | 'opportunities' | 'rfqs' | 'events' | 'roi' | 'knowledge';
+
+function NavItem({ icon: Icon, label, active = false, onClick }: { icon: typeof LayoutDashboard; label: string; active?: boolean; onClick: () => void }) {
+  return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} onClick={onClick} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
+}
+
+function FeatureState({ icon: Icon, title, text }: { icon: typeof FileText; title: string; text: string }) {
+  return <article className="panel feature-state"><span><Icon /></span><h2>{title}</h2><p>{text}</p><b>Planned · not simulated</b></article>;
 }
 
 export default function Home() {
@@ -54,6 +57,15 @@ export default function Home() {
   const [analysisError, setAnalysisError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [activeView, setActiveView] = useState<View>('today');
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [metrics, setMetrics] = useState({ totalLeads: 0, qualifiedLeads: 0, openTasks: 0, pipelineValue: 0 });
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [opportunityOpen, setOpportunityOpen] = useState(false);
+  const [notice, setNotice] = useState('');
   const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio' } | null>(null);
   const [recording, setRecording] = useState(false);
   const cardInput = useRef<HTMLInputElement>(null);
@@ -78,13 +90,21 @@ export default function Home() {
     return () => lifecycle.abort();
   }, []);
 
-  useEffect(() => {
-    fetch('/api/leads').then(async (response) => {
+  async function loadWorkspace() {
+    fetch('/api/workspace').then(async (response) => {
       if (!response.ok) return;
-      const data = await response.json() as { leads?: SavedLead[] };
-      setCapturedLeads(data.leads || []);
+      const data = await response.json() as { leads?: SavedLead[]; tasks?: TaskItem[]; opportunities?: Opportunity[]; accounts?: Account[]; metrics?: typeof metrics };
+      setCapturedLeads(data.leads || []); setTasks(data.tasks || []); setOpportunities(data.opportunities || []); setAccounts(data.accounts || []);
+      if (data.metrics) setMetrics(data.metrics);
     }).catch(() => undefined);
+  }
+  useEffect(() => { void loadWorkspace(); }, []);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true); } };
+    window.addEventListener('keydown', shortcut); return () => window.removeEventListener('keydown', shortcut);
   }, []);
+
+  function go(view: View) { setActiveView(view); setMobileNav(false); }
 
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,7 +115,7 @@ export default function Home() {
       const response = await fetch('/api/leads', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await response.json() as { lead?: SavedLead; error?: string };
       if (!response.ok || !data.lead) throw new Error(data.error || 'Unable to save this lead.');
-      setSavedLead(data.lead); setCapturedLeads((current) => [data.lead!, ...current]); setSaved(true);
+      setSavedLead(data.lead); setCapturedLeads((current) => [data.lead!, ...current]); setSaved(true); void loadWorkspace();
     } catch (error) { setSaveError(error instanceof Error ? error.message : 'Unable to save this lead.'); }
     finally { setSaving(false); }
   }
@@ -167,6 +187,19 @@ export default function Home() {
     else setAnalysisError('Could not confirm this analysis. Please try again.');
   }
 
+  async function completeTask(id: string) {
+    const response = await fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'complete_task', id }) });
+    if (response.ok) { setTasks((current) => current.map((task) => task.id === id ? { ...task, status: 'complete' } : task)); setNotice('Task completed'); setTimeout(() => setNotice(''), 1800); void loadWorkspace(); }
+  }
+
+  async function createOpportunity(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault(); const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const response = await fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create_opportunity', ...payload }) });
+    const data = await response.json() as { opportunity?: Opportunity; error?: string };
+    if (!response.ok || !data.opportunity) { setNotice(data.error || 'Could not create opportunity'); return; }
+    setOpportunityOpen(false); setNotice('Opportunity created'); setTimeout(() => setNotice(''), 1800); void loadWorkspace();
+  }
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
@@ -174,14 +207,14 @@ export default function Home() {
         <div className="workspace-switcher"><span className="workspace-logo">NA</span><span><strong>Nova Automation</strong><small>Growth workspace</small></span><ChevronDown size={15} /></div>
         <nav aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          <NavItem icon={LayoutDashboard} label="Today" active />
-          <NavItem icon={Users} label="People & accounts" />
-          <NavItem icon={Target} label="Opportunities" />
-          <NavItem icon={FileText} label="RFQs & quotations" />
+          <NavItem icon={LayoutDashboard} label="Today" active={activeView === 'today'} onClick={() => go('today')} />
+          <NavItem icon={Users} label="People & accounts" active={activeView === 'people'} onClick={() => go('people')} />
+          <NavItem icon={Target} label="Opportunities" active={activeView === 'opportunities'} onClick={() => go('opportunities')} />
+          <NavItem icon={FileText} label="RFQs & quotations" active={activeView === 'rfqs'} onClick={() => go('rfqs')} />
           <p className="nav-label nav-label-spaced">Manage</p>
-          <NavItem icon={CalendarDays} label="Events" />
-          <NavItem icon={BarChart3} label="Revenue & ROI" />
-          <NavItem icon={Building2} label="Company knowledge" />
+          <NavItem icon={CalendarDays} label="Events" active={activeView === 'events'} onClick={() => go('events')} />
+          <NavItem icon={BarChart3} label="Revenue & ROI" active={activeView === 'roi'} onClick={() => go('roi')} />
+          <NavItem icon={Building2} label="Company knowledge" active={activeView === 'knowledge'} onClick={() => go('knowledge')} />
         </nav>
         <div className="sidebar-foot">
           <div className="sync-state"><Wifi size={15} /><span>Online · All synced</span></div>
@@ -193,10 +226,11 @@ export default function Home() {
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label="Toggle navigation"><Menu /></button>
           <div className="event-context"><span className="live-dot" /> IndustrialTech Expo 2026 <span>· Day 1</span></div>
-          <div className="topbar-actions"><button className="search-button" aria-label="Search"><Search size={17} /><span>Search</span><kbd>⌘ K</kbd></button><button className="icon-button" aria-label="Profile"><CircleUserRound size={21} /></button></div>
+          <div className="topbar-actions"><button className="search-button" aria-label="Search" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Search</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="Profile" onClick={() => { setNotice('Signed in as Arjun Singh'); setTimeout(() => setNotice(''), 1800); }}><CircleUserRound size={21} /></button></div>
         </header>
 
         <div className="content">
+          {activeView === 'today' ? <>
           <section className="welcome-row">
             <div><p className="eyebrow">Sunday, 6 September</p><h1>Good afternoon, Arjun.</h1><p className="subtle">Three commitments need your attention today.</p></div>
             <Dialog open={captureOpen} onOpenChange={resetCapture}>
@@ -244,15 +278,15 @@ export default function Home() {
           </section>
 
           <section className="signal-grid" aria-label="Event performance">
-            <article className="signal-card primary-signal"><div className="signal-head"><span>Captured today</span><span className="trend">+18%</span></div><strong>246</strong><small>31 high-intent conversations</small><div className="spark-bars" aria-hidden="true">{[32,44,37,58,49,70,63,82,76,91].map((h,i)=><i key={i} style={{height:`${h}%`}} />)}</div></article>
-            <article className="signal-card"><div className="signal-head"><span>Open promises</span><span className="mini-icon amber"><Clock3 /></span></div><strong>9</strong><small>3 due before end of day</small><div className="progress-track"><i style={{width:'64%'}} /></div></article>
-            <article className="signal-card"><div className="signal-head"><span>Event pipeline</span><span className="mini-icon blue"><Target /></span></div><strong>₹42L</strong><small>Across 8 opportunities</small><div className="pipeline-note"><span>₹12L</span> newly qualified today</div></article>
+            <article className="signal-card primary-signal"><div className="signal-head"><span>Captured leads</span><span className="trend">Live</span></div><strong>{metrics.totalLeads}</strong><small>{metrics.qualifiedLeads} confirmed conversations</small><div className="spark-bars" aria-hidden="true">{[32,44,37,58,49,70,63,82,76,91].map((h,i)=><i key={i} style={{height:`${h}%`}} />)}</div></article>
+            <article className="signal-card"><div className="signal-head"><span>Open promises</span><span className="mini-icon amber"><Clock3 /></span></div><strong>{metrics.openTasks}</strong><small>Click a task to mark it complete</small><div className="progress-track"><i style={{width: `${Math.min(100, metrics.openTasks * 12)}%`}} /></div></article>
+            <article className="signal-card"><div className="signal-head"><span>Event pipeline</span><span className="mini-icon blue"><Target /></span></div><strong>₹{metrics.pipelineValue.toLocaleString('en-IN')}</strong><small>Across {opportunities.length} opportunities</small><div className="pipeline-note"><span>{metrics.qualifiedLeads}</span> qualified leads</div></article>
           </section>
 
           <section className="main-grid">
             <article className="panel action-panel">
               <div className="panel-head"><div><p className="eyebrow">Next best action</p><h2>What needs attention</h2></div><button>View all <ArrowRight /></button></div>
-              <div className="action-list">{actions.map(item=><button className="action-row" key={item.name}><span className="initial-avatar">{item.avatar}</span><span className="action-copy"><strong>{item.action}</strong><small>{item.name} · {item.company}</small></span><span className={`due ${item.tone}`}>{item.due}</span><ArrowRight className="row-arrow" size={17}/></button>)}</div>
+              <div className="action-list">{tasks.filter((task) => task.status === 'open').length ? tasks.filter((task) => task.status === 'open').slice(0,5).map((task) => <button className="action-row" key={task.id} onClick={() => completeTask(task.id)}><span className="initial-avatar">{task.fullName.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span className="action-copy"><strong>{task.title}</strong><small>{task.fullName} · {task.company}</small></span><span className={`due ${task.dueDate ? 'warning' : 'neutral'}`}>{task.dueDate || 'No date'}</span><Check className="row-arrow" size={17}/></button>) : <div className="empty-state">No open commitments. Capture a lead and add a next action.</div>}</div>
             </article>
             <article className="panel briefing-panel"><div className="ai-label"><Sparkles size={14}/> Morning booth briefing</div><h2>Your team is seeing strong demand for monitoring.</h2><p>SAP integration is the most common concern. Nine promises are still open, and three target accounts have not visited yet.</p><button>Open full briefing <ArrowRight /></button><div className="briefing-orb" aria-hidden="true"><span/><span/><span/></div></article>
           </section>
@@ -265,8 +299,20 @@ export default function Home() {
               {recent.map(lead=><button className="lead-row" key={lead.name}><span className="person-cell"><span className="initial-avatar small">{lead.name.split(' ').map(n=>n[0]).join('')}</span><span><strong>{lead.name}</strong><small>{lead.role} · {lead.company}</small></span></span><span>{lead.interest}</span><span><b className={`score ${lead.score>85?'hot':''}`}>{lead.score}</b></span><span>{lead.time}</span></button>)}
             </div>
           </section>
+          </> : <section className="section-view">
+            <div className="section-title"><div><p className="eyebrow">Revenue workspace</p><h1>{activeView === 'people' ? 'People & accounts' : activeView === 'opportunities' ? 'Opportunities' : activeView === 'rfqs' ? 'RFQs & quotations' : activeView === 'events' ? 'Events' : activeView === 'roi' ? 'Revenue & ROI' : 'Company knowledge'}</h1></div>{activeView === 'opportunities' ? <Button className="capture-button" onClick={() => setOpportunityOpen(true)}><Plus /> New opportunity</Button> : null}</div>
+            {activeView === 'people' ? <div className="records-grid"><article className="panel records-panel"><h2>Accounts</h2>{accounts.length ? accounts.map((account) => <button key={account.company} className="record-row"><span className="initial-avatar">{account.company.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{account.company}</strong><small>{account.contacts} contact{account.contacts === 1 ? '' : 's'} captured</small></span><ArrowRight /></button>) : <div className="empty-state">Capture a lead to create the first account.</div>}</article><article className="panel records-panel"><h2>Contacts</h2>{capturedLeads.length ? capturedLeads.map((lead) => <button key={lead.id} className="record-row" onClick={() => openReview(lead)}><span className="initial-avatar">{lead.fullName.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span><b className="review-chip">Review</b></button>) : <div className="empty-state">No captured contacts yet.</div>}</article></div> : null}
+            {activeView === 'opportunities' ? <article className="panel data-panel">{opportunities.length ? <><div className="data-header"><span>Opportunity</span><span>Stage</span><span>Value</span><span>Probability</span></div>{opportunities.map((item) => <div className="data-row" key={item.id}><span><strong>{item.title}</strong><small>{item.company}</small></span><span className="stage-chip">{item.stage}</span><span>₹{item.value.toLocaleString('en-IN')}</span><span>{item.probability}%</span></div>)}</> : <div className="empty-state large"><Target /><h2>No opportunities yet</h2><p>Convert a qualified conversation into your first pipeline record.</p><Button onClick={() => setOpportunityOpen(true)}>Create opportunity</Button></div>}</article> : null}
+            {activeView === 'rfqs' ? <FeatureState icon={FileText} title="RFQ inbox is ready for integration" text="Patch 1 reserves the workflow and database boundary. Document upload, specification extraction, versioning, and quotation approval require secure file storage and arrive in Patch 2." /> : null}
+            {activeView === 'events' ? <article className="panel event-card"><div><span className="live-dot" /><strong>IndustrialTech Expo 2026</strong><small>Day 1 · Active</small></div><dl><div><dt>Captured</dt><dd>{metrics.totalLeads}</dd></div><div><dt>Qualified</dt><dd>{metrics.qualifiedLeads}</dd></div><div><dt>Open tasks</dt><dd>{metrics.openTasks}</dd></div></dl></article> : null}
+            {activeView === 'roi' ? <div className="roi-grid"><article className="panel roi-card"><small>Event investment</small><strong>₹3,00,000</strong><span>Manual baseline</span></article><article className="panel roi-card"><small>Pipeline created</small><strong>₹{metrics.pipelineValue.toLocaleString('en-IN')}</strong><span>{opportunities.length} opportunities</span></article><article className="panel roi-card"><small>Closed revenue</small><strong>₹0</strong><span>No closed opportunities yet</span></article></div> : null}
+            {activeView === 'knowledge' ? <FeatureState icon={Building2} title="Company knowledge needs secure file storage" text="Website URLs and document metadata will live here. Actual brochures, catalogues, case studies, and RFQs must use object storage—not the relational database." /> : null}
+          </section>}
         </div>
+        {notice ? <output className="toast">{notice}</output> : null}
       </section>
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>Search workspace</DialogTitle><DialogDescription>Find a contact, account, task, or opportunity.</DialogDescription></DialogHeader><Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Type a name, company, or action…" /><div className="search-results">{searchTerm.trim() ? [...capturedLeads.map((lead) => ({ label: lead.fullName, meta: lead.company, action: () => { setSearchOpen(false); openReview(lead); } })), ...tasks.map((task) => ({ label: task.title, meta: `${task.fullName} · ${task.company}`, action: () => { setSearchOpen(false); go('today'); } })), ...opportunities.map((item) => ({ label: item.title, meta: item.company, action: () => { setSearchOpen(false); go('opportunities'); } }))].filter((item) => `${item.label} ${item.meta}`.toLowerCase().includes(searchTerm.toLowerCase())).slice(0,8).map((item) => <button key={`${item.label}-${item.meta}`} onClick={item.action}><Search /><span><strong>{item.label}</strong><small>{item.meta}</small></span></button>) : <div className="empty-state">Start typing to search the current workspace.</div>}</div></DialogContent></Dialog>
+      <Dialog open={opportunityOpen} onOpenChange={setOpportunityOpen}><DialogContent className="capture-dialog"><DialogHeader><DialogTitle>Create opportunity</DialogTitle><DialogDescription>Add a qualified deal to the event pipeline.</DialogDescription></DialogHeader><form className="lead-form" onSubmit={createOpportunity}><div className="field-block"><label htmlFor="opp-company">Company</label><Input id="opp-company" name="company" required placeholder="ABC Pharma" /></div><div className="field-block"><label htmlFor="opp-title">Opportunity</label><Input id="opp-title" name="title" required placeholder="Machine monitoring rollout" /></div><div className="field-grid"><div className="field-block"><label htmlFor="opp-value">Estimated value (₹)</label><Input id="opp-value" name="value" type="number" min="0" placeholder="1200000" /></div><div className="field-block"><label htmlFor="opp-close">Expected close</label><Input id="opp-close" name="expectedCloseDate" type="date" /></div></div><Button className="save-button" type="submit">Create opportunity</Button></form></DialogContent></Dialog>
     </main>
   );
 }
