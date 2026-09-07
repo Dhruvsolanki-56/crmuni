@@ -1,5 +1,5 @@
 import { auditStatement, database, requireRole, requireWorkspace } from '@/lib/db';
-import { accountIdentity } from '@/lib/accounts';
+import { accountIdentity, normalizeCompany } from '@/lib/accounts';
 
 function clean(value: unknown, max: number) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -26,13 +26,13 @@ export async function GET(request: Request) {
     db.prepare(`SELECT id, event_id AS eventId, lead_id AS leadId, company, title, stage, value, currency, probability,
       expected_close_date AS expectedCloseDate, created_at AS createdAt
       FROM opportunities WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 100`).bind(context.workspace.id).all(),
-    db.prepare(`SELECT a.id, a.name AS company, COUNT(l.id) AS contacts, MAX(l.created_at) AS latestAt, COUNT(s.id) AS stakeholders FROM accounts a LEFT JOIN leads l ON l.account_id=a.id LEFT JOIN account_stakeholders s ON s.lead_id=l.id WHERE a.workspace_id=? GROUP BY a.id, a.name ORDER BY latestAt DESC`).bind(context.workspace.id).all(),
+    db.prepare(`SELECT a.id, a.name AS company, a.normalized_name AS normalizedName, COUNT(l.id) AS contacts, MAX(l.created_at) AS latestAt, COUNT(s.id) AS stakeholders FROM accounts a LEFT JOIN leads l ON l.account_id=a.id LEFT JOIN account_stakeholders s ON s.lead_id=l.id WHERE a.workspace_id=? GROUP BY a.id, a.name, a.normalized_name ORDER BY latestAt DESC`).bind(context.workspace.id).all(),
   ]);
   const leads = leadRows.results;
-  const linkedNames = new Set(accountRows.results.map((item) => String(item.company).toLowerCase())); const legacyAccounts = Object.values(leads.reduce<Record<string, { id: string; company: string; contacts: number; latestAt: number; stakeholders: number }>>((all, item) => {
-    const company = String(item.company); const createdAt = Number(item.createdAt);
-    if (linkedNames.has(company.toLowerCase())) return all; const current = all[company] || { id: `legacy:${company}`, company, contacts: 0, latestAt: 0, stakeholders: 0 };
-    current.contacts += 1; current.latestAt = Math.max(current.latestAt, createdAt); all[company] = current; return all;
+  const linkedNames = new Set(accountRows.results.map((item) => String(item.normalizedName))); const legacyAccounts = Object.values(leads.reduce<Record<string, { id: string; company: string; contacts: number; latestAt: number; stakeholders: number }>>((all, item) => {
+    const company = String(item.company); const normalized = normalizeCompany(company); const createdAt = Number(item.createdAt);
+    if (linkedNames.has(normalized)) return all; const current = all[normalized] || { id: `legacy:${normalized}`, company, contacts: 0, latestAt: 0, stakeholders: 0 };
+    current.contacts += 1; current.latestAt = Math.max(current.latestAt, createdAt); all[normalized] = current; return all;
   }, {}));
   const accounts = [...accountRows.results, ...legacyAccounts];
   const opportunities = opportunityRows.results; const metricLeads = selectedEventId ? leads.filter((item) => item.eventId === selectedEventId) : leads; const metricTasks = selectedEventId ? taskRows.results.filter((item) => item.eventId === selectedEventId) : taskRows.results; const metricOpportunities = selectedEventId ? opportunities.filter((item) => item.eventId === selectedEventId) : opportunities;

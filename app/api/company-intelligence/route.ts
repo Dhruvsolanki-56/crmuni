@@ -39,6 +39,28 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return Response.json({ error: 'Invalid request body.' }, { status: 400 });
   const action = clean(body.action, 40);
+  if (action === 'remove_source') {
+    const id = clean(body.id, 80); const source = await db.prepare(`SELECT storage_key AS storageKey FROM knowledge_sources WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id).first<{ storageKey: string | null }>();
+    if (!source) return Response.json({ error: 'Knowledge source not found.' }, { status: 404 });
+    await db.batch([db.prepare(`DELETE FROM knowledge_sources WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id), auditStatement(context, 'knowledge.removed', 'knowledge_source', id)]);
+    if (source.storageKey) await revenueEnv().FILES.delete(source.storageKey);
+    return Response.json({ ok: true });
+  }
+  if (action === 'archive_product') {
+    const id = clean(body.id, 80); const result = await db.prepare(`UPDATE products SET status='archived',updated_at=? WHERE id=? AND workspace_id=? AND status='active'`).bind(now, id, context.workspace.id).run();
+    if (!result.meta.changes) return Response.json({ error: 'Active product or service not found.' }, { status: 404 });
+    await auditStatement(context, 'product.archived', 'product', id).run(); return Response.json({ ok: true });
+  }
+  if (action === 'remove_icp') {
+    const id = clean(body.id, 80); const result = await db.prepare(`DELETE FROM ideal_customer_profiles WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id).run();
+    if (!result.meta.changes) return Response.json({ error: 'Ideal customer profile not found.' }, { status: 404 });
+    await auditStatement(context, 'icp.removed', 'ideal_customer_profile', id).run(); return Response.json({ ok: true });
+  }
+  if (action === 'archive_rule') {
+    const id = clean(body.id, 80); const result = await db.prepare(`UPDATE qualification_rules SET status='archived' WHERE id=? AND workspace_id=? AND status='active'`).bind(id, context.workspace.id).run();
+    if (!result.meta.changes) return Response.json({ error: 'Active qualification rule not found.' }, { status: 404 });
+    await auditStatement(context, 'qualification_rule.archived', 'qualification_rule', id).run(); return Response.json({ ok: true });
+  }
   if (action === 'save_profile') {
     const legalName = clean(body.legalName, 160); if (!legalName) return Response.json({ error: 'Company name is required.' }, { status: 400 });
     const websiteUrl = clean(body.websiteUrl, 500); if (websiteUrl) { try { const url = new URL(websiteUrl); if (!['http:', 'https:'].includes(url.protocol)) throw new Error(); } catch { return Response.json({ error: 'Enter a valid HTTP or HTTPS website URL.' }, { status: 400 }); } }

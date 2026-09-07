@@ -8,21 +8,26 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get('export') === '1') {
     requireRole(context, ['owner', 'admin']);
-    const [leads, interactions, tasks, opportunities] = await Promise.all([
-      db.prepare(`SELECT * FROM leads WHERE workspace_id = ?`).bind(context.workspace.id).all(),
-      db.prepare(`SELECT * FROM interactions WHERE workspace_id = ?`).bind(context.workspace.id).all(),
-      db.prepare(`SELECT * FROM tasks WHERE workspace_id = ?`).bind(context.workspace.id).all(),
-      db.prepare(`SELECT * FROM opportunities WHERE workspace_id = ?`).bind(context.workspace.id).all(),
-    ]);
-    return new Response(JSON.stringify({ exportedAt: new Date().toISOString(), workspace: context.workspace, leads: leads.results, interactions: interactions.results, tasks: tasks.results, opportunities: opportunities.results }, null, 2), { headers: { 'content-type': 'application/json', 'content-disposition': `attachment; filename="${context.workspace.slug}-export.json"` } });
+    const tables = ['memberships','invitations','accounts','leads','account_stakeholders','lead_capture_assets','interactions','tasks','ai_extractions','lead_facts','qualification_scores','communication_drafts','rfqs','rfq_items','rfq_documents','rfq_ai_extractions','opportunities','quotations','company_profiles','products','ideal_customer_profiles','qualification_rules','knowledge_sources','events'] as const;
+    const results = await Promise.all(tables.map((table) => db.prepare(`SELECT * FROM ${table} WHERE workspace_id=?`).bind(context.workspace.id).all()));
+    const data = Object.fromEntries(tables.map((table, index) => [table, results[index].results]));
+    await auditStatement(context, 'workspace.exported', 'workspace', context.workspace.id).run();
+    return new Response(JSON.stringify({ exportedAt: new Date().toISOString(), workspace: context.workspace, note: 'Stored file metadata is included; binary file contents remain in protected storage.', data }, null, 2), { headers: { 'content-type': 'application/json', 'content-disposition': `attachment; filename="${context.workspace.slug}-export.json"`, 'cache-control': 'private, no-store' } });
   }
-  const [members, invitations, audit, workspaces] = await Promise.all([
+  const [members, invitations, audit, workspaces, leadUsage, eventUsage, sourceUsage, captureUsage, rfqUsage, quotationUsage] = await Promise.all([
     db.prepare(`SELECT id, user_id AS userId, email, display_name AS displayName, role, status, created_at AS createdAt FROM memberships WHERE workspace_id = ? ORDER BY created_at ASC`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, email, role, status, expires_at AS expiresAt, created_at AS createdAt FROM invitations WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 30`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, actor_id AS actorId, action, entity_type AS entityType, entity_id AS entityId, created_at AS createdAt FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 30`).bind(context.workspace.id).all(),
     db.prepare(`SELECT w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, m.role FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ORDER BY m.created_at ASC`).bind(context.user.id).all(),
+    db.prepare(`SELECT COUNT(*) AS count FROM leads WHERE workspace_id=?`).bind(context.workspace.id).first<{ count: number }>(),
+    db.prepare(`SELECT COUNT(*) AS count FROM events WHERE workspace_id=? AND status!='archived'`).bind(context.workspace.id).first<{ count: number }>(),
+    db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(size_bytes),0) AS bytes FROM knowledge_sources WHERE workspace_id=?`).bind(context.workspace.id).first<{ count: number; bytes: number }>(),
+    db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM lead_capture_assets WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
+    db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM rfq_documents WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
+    db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM quotations WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
   ]);
-  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: members.results, invitations: invitations.results, audit: audit.results });
+  const usage = { leads: Number(leadUsage?.count || 0), activeEvents: Number(eventUsage?.count || 0), knowledgeSources: Number(sourceUsage?.count || 0), storageBytes: Number(sourceUsage?.bytes || 0) + Number(captureUsage?.bytes || 0) + Number(rfqUsage?.bytes || 0) + Number(quotationUsage?.bytes || 0), activeMembers: members.results.filter((item) => item.status === 'active').length };
+  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: members.results, invitations: invitations.results, audit: audit.results, usage });
 }
 
 export async function POST(request: Request) {
@@ -68,9 +73,13 @@ export async function POST(request: Request) {
   if (action === 'update_member') {
     const membershipId = clean(body.id, 80); const role = clean(body.role, 30); const status = clean(body.status, 20);
     if (!membershipId || !ROLES.includes(role) || !['active', 'inactive'].includes(status)) return Response.json({ error: 'Valid member, role and status are required.' }, { status: 400 });
-    const target = await db.prepare(`SELECT user_id AS userId, role FROM memberships WHERE id = ? AND workspace_id = ?`).bind(membershipId, context.workspace.id).first<{ userId: string; role: string }>();
+    const target = await db.prepare(`SELECT user_id AS userId, role, status FROM memberships WHERE id = ? AND workspace_id = ?`).bind(membershipId, context.workspace.id).first<{ userId: string; role: string; status: string }>();
     if (!target) return Response.json({ error: 'Member not found.' }, { status: 404 });
     if (target.role === 'owner') return Response.json({ error: 'Transfer ownership before changing the owner.' }, { status: 409 });
+    if (status === 'active' && target.status !== 'active' && context.workspace.plan === 'trial') {
+      const count = await db.prepare(`SELECT COUNT(*) AS count FROM memberships WHERE workspace_id=? AND status='active'`).bind(context.workspace.id).first<{ count: number }>();
+      if (Number(count?.count || 0) >= 3) return Response.json({ error: 'Trial workspaces support up to three active members.' }, { status: 402 });
+    }
     await db.batch([db.prepare(`UPDATE memberships SET role = ?, status = ?, updated_at = ? WHERE id = ? AND workspace_id = ?`).bind(role, status, now, membershipId, context.workspace.id), auditStatement(context, 'membership.updated', 'membership', membershipId, { role, status })]);
     return Response.json({ ok: true });
   }
