@@ -1,4 +1,4 @@
-import { auditStatement, database, requireRole, requireWorkspace } from '@/lib/db';
+import { auditStatement, database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 
 const ROLES = ['owner', 'admin', 'manager', 'salesperson', 'marketing', 'viewer'];
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM quotations WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
   ]);
   const usage = { leads: Number(leadUsage?.count || 0), activeEvents: Number(eventUsage?.count || 0), knowledgeSources: Number(sourceUsage?.count || 0), storageBytes: Number(sourceUsage?.bytes || 0) + Number(captureUsage?.bytes || 0) + Number(rfqUsage?.bytes || 0) + Number(quotationUsage?.bytes || 0), activeMembers: members.results.filter((item) => item.status === 'active').length };
-  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: members.results, invitations: invitations.results, audit: audit.results, usage });
+  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: members.results, invitations: invitations.results, audit: audit.results, usage, capabilities: { aiConfigured: Boolean(revenueEnv().OPENAI_API_KEY) } });
 }
 
 export async function POST(request: Request) {
