@@ -40,6 +40,19 @@ type Invitation = { id: string; email: string; role: string; status: string; exp
 type AuditEvent = { id: string; action: string; entityType: string; createdAt: number };
 type KnowledgeData = { profile: null | { legalName: string; websiteUrl?: string; description?: string; targetIndustries: string[]; targetGeographies: string[]; eventObjective?: string; onboardingStep: number }; products: Array<{ id: string; name: string; kind: string; description?: string; buyerRoles: string[]; painPoints: string[] }>; icps: Array<{ id: string; name: string; industries: string[]; buyerRoles: string[]; mustHaveSignals: string[]; disqualifiers: string[] }>; rules: Array<{ id: string; label: string; field: string; expectedValue: string; weight: number }>; sources: Array<{ id: string; name: string; sourceType: string; sourceUrl?: string; contentType?: string; sizeBytes?: number; status: string }> };
 type EventItem = { id: string; name: string; venue?: string; hall?: string; booth?: string; startsOn: string; endsOn: string; timezone: string; budget: number; objective?: string; products: string[]; targetAccounts: string[]; qualificationQuestions: string[]; leadRoutingRule: string; followupSlaHours: number; dailyLeadTarget: number; badgeProvider?: string; qrCampaignCode?: string; status: string };
+type OfflineCapture = { id: string; workspaceId: string; eventId: string; fields: Record<string, string>; attachment?: File; attachmentKind?: string; queuedAt: number };
+
+function openOutbox() {
+  return new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('revenue-os-offline', 1); request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('captures')) request.result.createObjectStore('captures', { keyPath: 'id' }); }; request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+}
+
+async function outboxWrite(value: OfflineCapture | string, mode: 'put' | 'delete') {
+  const db = await openOutbox(); await new Promise<void>((resolve, reject) => { const transaction = db.transaction('captures', 'readwrite'); const store = transaction.objectStore('captures'); if (mode === 'put') store.put(value as OfflineCapture); else store.delete(value as string); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); }); db.close();
+}
+
+async function outboxItems() {
+  const db = await openOutbox(); const items = await new Promise<OfflineCapture[]>((resolve, reject) => { const request = db.transaction('captures').objectStore('captures').getAll(); request.onsuccess = () => resolve(request.result as OfflineCapture[]); request.onerror = () => reject(request.error); }); db.close(); return items;
+}
 
 function NavItem({ icon: Icon, label, active = false, onClick }: { icon: typeof LayoutDashboard; label: string; active?: boolean; onClick: () => void }) {
   return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} onClick={onClick} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
@@ -88,7 +101,8 @@ export default function Home() {
   const [knowledge, setKnowledge] = useState<KnowledgeData>({ profile: null, products: [], icps: [], rules: [], sources: [] });
   const [events, setEvents] = useState<EventItem[]>([]);
   const [activeEventId, setActiveEventId] = useState(() => typeof window === 'undefined' ? '' : window.localStorage.getItem('revenue-event-id') || '');
-  const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio' } | null>(null);
+  const [outboxCount, setOutboxCount] = useState(0);
+  const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'audio'; file: File } | null>(null);
   const [recording, setRecording] = useState(false);
   const cardInput = useRef<HTMLInputElement>(null);
   const badgeInput = useRef<HTMLInputElement>(null);
@@ -122,27 +136,44 @@ export default function Home() {
     }).catch(() => undefined);
   }
   async function loadEvents() { const response = await apiFetch('/api/events'); if (response.ok) { const data = await response.json() as { events: EventItem[] }; setEvents(data.events); } }
-  useEffect(() => { const timer = window.setTimeout(() => { void loadWorkspace(); void loadEvents(); }, 0); return () => window.clearTimeout(timer); }, []);
+  async function loadSettings() { const response = await apiFetch('/api/settings'); if (!response.ok) return; const data = await response.json() as { context: AppContext; members: Member[]; invitations: Invitation[]; audit: AuditEvent[]; workspaces?: Array<AppContext['workspace'] & { role: string }> }; setAppContext(data.context); setMembers(data.members); setInvitations(data.invitations); setAuditEvents(data.audit); setAvailableWorkspaces(data.workspaces || []); }
+  async function loadKnowledge() { const response = await apiFetch('/api/company-intelligence'); if (response.ok) setKnowledge(await response.json() as KnowledgeData); }
+  async function refreshOutbox() { try { setOutboxCount((await outboxItems()).length); } catch { setOutboxCount(0); } }
+  async function flushOutbox() {
+    if (!navigator.onLine) return; const queued = await outboxItems().catch(() => []); let synced = 0;
+    for (const item of queued) {
+      const form = new FormData(); Object.entries(item.fields).forEach(([key, value]) => form.set(key, value)); if (item.attachment) { form.set('attachment', item.attachment); form.set('attachmentKind', item.attachmentKind || 'document'); }
+      try { const headers = new Headers(); if (item.workspaceId) headers.set('x-revenue-workspace-id', item.workspaceId); if (item.eventId) headers.set('x-revenue-event-id', item.eventId); const response = await fetch('/api/leads', { method: 'POST', headers, body: form }); if (!response.ok) continue; await outboxWrite(item.id, 'delete'); synced += 1; } catch { break; }
+    }
+    await refreshOutbox(); if (synced) { setNotice(`${synced} offline capture${synced === 1 ? '' : 's'} synchronized`); void loadWorkspace(); }
+  }
+  useEffect(() => { const timer = window.setTimeout(() => { void loadWorkspace(); void loadEvents(); void refreshOutbox(); }, 0); return () => window.clearTimeout(timer); }, []);
+  useEffect(() => { const sync = () => { void flushOutbox(); }; window.addEventListener('online', sync); return () => window.removeEventListener('online', sync); }, []);
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true); } };
     window.addEventListener('keydown', shortcut); return () => window.removeEventListener('keydown', shortcut);
   }, []);
-
-  async function loadSettings() { const response = await apiFetch('/api/settings'); if (!response.ok) return; const data = await response.json() as { context: AppContext; members: Member[]; invitations: Invitation[]; audit: AuditEvent[]; workspaces?: Array<AppContext['workspace'] & { role: string }> }; setAppContext(data.context); setMembers(data.members); setInvitations(data.invitations); setAuditEvents(data.audit); setAvailableWorkspaces(data.workspaces || []); }
-  async function loadKnowledge() { const response = await apiFetch('/api/company-intelligence'); if (response.ok) setKnowledge(await response.json() as KnowledgeData); }
   function go(view: View) { setActiveView(view); setMobileNav(false); if (view === 'settings') void loadSettings(); if (view === 'knowledge') void loadKnowledge(); if (view === 'events') { void loadEvents(); void loadSettings(); } }
 
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true); setSaveError('');
     const form = new FormData(event.currentTarget);
-    const payload = Object.fromEntries(form.entries());
+    form.set('clientCaptureId', crypto.randomUUID());
+    if (attachment) { form.set('attachment', attachment.file); form.set('attachmentKind', attachment.kind); }
     try {
-      const response = await apiFetch('/api/leads', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await apiFetch('/api/leads', { method: 'POST', body: form });
       const data = await response.json() as { lead?: SavedLead; error?: string };
       if (!response.ok || !data.lead) throw new Error(data.error || 'Unable to save this lead.');
       setSavedLead(data.lead); setCapturedLeads((current) => [data.lead!, ...current]); setSaved(true); void loadWorkspace();
-    } catch (error) { setSaveError(error instanceof Error ? error.message : 'Unable to save this lead.'); }
+    } catch (error) {
+      try {
+        const fields: Record<string, string> = {}; form.forEach((value, key) => { if (typeof value === 'string') fields[key] = value; }); const id = fields.clientCaptureId;
+        await outboxWrite({ id, workspaceId: window.localStorage.getItem('revenue-workspace-id') || appContext?.workspace.id || '', eventId: activeEventId, fields, attachment: attachment?.file, attachmentKind: attachment?.kind, queuedAt: Date.now() }, 'put');
+        const queuedLead: SavedLead = { id: `offline-${id}`, fullName: fields.fullName, company: fields.company, role: fields.role, note: fields.note, nextAction: fields.nextAction, dueDate: fields.dueDate, reviewStatus: 'queued_offline', createdAt: Date.now() };
+        setSavedLead(queuedLead); setCapturedLeads((current) => [queuedLead, ...current]); setSaved(true); await refreshOutbox();
+      } catch { setSaveError(error instanceof Error ? error.message : 'Unable to save this lead.'); }
+    }
     finally { setSaving(false); }
   }
   function resetCapture(open: boolean) {
@@ -160,7 +191,7 @@ export default function Home() {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     if (attachment?.url) URL.revokeObjectURL(attachment.url);
-    setAttachment({ name: file.name, url: URL.createObjectURL(file), kind });
+    setAttachment({ name: file.name, url: URL.createObjectURL(file), kind, file });
   }
 
   async function toggleRecording() {
@@ -173,7 +204,8 @@ export default function Home() {
       nextRecorder.onstop = () => {
         const blob = new Blob(audioChunks.current, { type: nextRecorder.mimeType || 'audio/webm' });
         if (attachment?.url) URL.revokeObjectURL(attachment.url);
-        setAttachment({ name: `conversation-${Date.now()}.webm`, url: URL.createObjectURL(blob), kind: 'audio' });
+        const file = new File([blob], `conversation-${Date.now()}.webm`, { type: blob.type });
+        setAttachment({ name: file.name, url: URL.createObjectURL(file), kind: 'audio', file });
         stream.getTracks().forEach((track) => track.stop());
         setRecording(false);
       };
@@ -320,7 +352,7 @@ export default function Home() {
           <NavItem icon={Settings} label="Workspace settings" active={activeView === 'settings'} onClick={() => go('settings')} />
         </nav>
         <div className="sidebar-foot">
-          <div className="sync-state"><Wifi size={15} /><span>Online · All synced</span></div>
+          <div className={`sync-state ${outboxCount ? 'sync-pending' : ''}`}><Wifi size={15} /><span>{outboxCount ? `${outboxCount} capture${outboxCount === 1 ? '' : 's'} waiting to sync` : 'Online · All synced'}</span></div>
           <div className="profile-row"><span className="profile-avatar">{(appContext?.user.email || 'AS').slice(0,2).toUpperCase()}</span><span><strong>{appContext?.user.email || 'Local tester'}</strong><small>{appContext?.role || 'Loading role'}</small></span></div>
         </div>
       </aside>
@@ -355,14 +387,15 @@ export default function Home() {
                   <form ref={leadForm} onSubmit={saveLead} className="lead-form">
                     <div className="field-grid"><div className="field-block"><label htmlFor="lead-name">Full name</label><Input id="lead-name" name="fullName" required placeholder="e.g. Rajesh Mehta" /></div><div className="field-block"><label htmlFor="lead-company">Company</label><Input id="lead-company" name="company" required placeholder="e.g. ABC Pharma" /></div></div>
                     <div className="field-block"><label htmlFor="lead-role">Role</label><Input id="lead-role" name="role" placeholder="e.g. Procurement Head" /></div>
+                    <div className="field-grid"><div className="field-block"><label htmlFor="lead-email">Work email</label><Input id="lead-email" name="email" type="email" autoComplete="email" placeholder="rajesh@company.com" /></div><div className="field-block"><label htmlFor="lead-phone">Phone / WhatsApp</label><Input id="lead-phone" name="phone" type="tel" autoComplete="tel" placeholder="+91 98765 43210" /></div></div>
                     <div className="field-block"><label htmlFor="lead-note">Conversation note</label><Textarea id="lead-note" name="note" placeholder="What did they need, what did you promise, and when?" /></div>
                     <div className="field-grid"><div className="field-block"><label htmlFor="lead-action">Next action</label><Input id="lead-action" name="nextAction" placeholder="e.g. Send preliminary pricing" /></div><div className="field-block"><label htmlFor="lead-due">Due date</label><Input id="lead-due" name="dueDate" type="date" /></div></div>
                     {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
                     <button className="sample-button" type="button" onClick={useSampleLead}>Fill test conversation</button>
-                    <Button type="submit" className="save-button" disabled={saving}>{saving ? 'Saving securely…' : 'Save conversation'} {!saving && <ArrowRight />}</Button>
-                    <p className="offline-note"><Wifi size={14} /> Works offline. We’ll sync when your connection returns.</p>
+                    <Button type="submit" className="save-button" disabled={saving || Boolean(events.length && !activeEvent)}>{saving ? 'Saving securely…' : events.length && !activeEvent ? 'Select an event before capture' : 'Save conversation'} {!saving && (!events.length || activeEvent) && <ArrowRight />}</Button>
+                    <p className="offline-note"><Wifi size={14} /> Offline-safe. Failed submissions stay on this device and retry when connection returns.</p>
                   </form>
-                </> : <div className="success-state"><span className="success-icon"><Check /></span><p className="dialog-kicker">Lead saved</p><DialogTitle className="dialog-title">{savedLead?.fullName} is ready for review</DialogTitle><DialogDescription>The conversation is stored as source evidence. AI extraction will be added next; no facts have been invented.</DialogDescription><div className="saved-summary"><span><small>Account</small><strong>{savedLead?.company}</strong></span><span><small>Review</small><strong>Needs review</strong></span>{savedLead?.nextAction ? <span><small>Commitment</small><strong>{savedLead.nextAction}</strong></span> : null}{savedLead?.dueDate ? <span><small>Due</small><strong>{savedLead.dueDate}</strong></span> : null}</div><Button className="save-button" onClick={() => resetCapture(false)}>Back to today</Button></div>}
+                </> : <div className="success-state"><span className="success-icon"><Check /></span><p className="dialog-kicker">{savedLead?.reviewStatus === 'queued_offline' ? 'Saved on this device' : 'Lead saved'}</p><DialogTitle className="dialog-title">{savedLead?.fullName} is {savedLead?.reviewStatus === 'queued_offline' ? 'waiting to sync' : 'ready for review'}</DialogTitle><DialogDescription>{savedLead?.reviewStatus === 'queued_offline' ? 'Keep working. Revenue OS will retry this exact capture without creating duplicates when the connection returns.' : attachment ? 'The original file is stored securely and queued for extraction. No facts have been invented.' : 'The conversation is stored as source evidence. No facts have been invented.'}</DialogDescription><div className="saved-summary"><span><small>Account</small><strong>{savedLead?.company}</strong></span><span><small>Review</small><strong>{savedLead?.reviewStatus === 'queued_offline' ? 'Offline queue' : 'Needs review'}</strong></span>{savedLead?.nextAction ? <span><small>Commitment</small><strong>{savedLead.nextAction}</strong></span> : null}{savedLead?.dueDate ? <span><small>Due</small><strong>{savedLead.dueDate}</strong></span> : null}</div><Button className="save-button" onClick={() => resetCapture(false)}>Back to today</Button></div>}
               </DialogContent>
             </Dialog>
             <Dialog open={Boolean(reviewLead)} onOpenChange={(open) => { if (!open) setReviewLead(null); }}>

@@ -55,6 +55,7 @@ export const leads = sqliteTable('leads', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
   eventId: text('event_id').notNull(),
+  clientCaptureId: text('client_capture_id'),
   ownerId: text('owner_id').notNull(),
   fullName: text('full_name').notNull(),
   company: text('company').notNull(),
@@ -68,7 +69,23 @@ export const leads = sqliteTable('leads', {
 }, (table) => [
   index('idx_leads_workspace_created').on(table.workspaceId, table.createdAt),
   index('idx_leads_workspace_company').on(table.workspaceId, table.company),
+  uniqueIndex('uidx_leads_workspace_client_capture').on(table.workspaceId, table.clientCaptureId),
 ]);
+
+export const leadCaptureAssets = sqliteTable('lead_capture_assets', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  kind: text('kind').notNull(),
+  originalName: text('original_name').notNull(),
+  storageKey: text('storage_key').notNull(),
+  contentType: text('content_type').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  processingStatus: text('processing_status').notNull().default('stored'),
+  extractedJson: text('extracted_json'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_lead_capture_assets_lead').on(table.workspaceId, table.leadId)]);
 
 export const interactions = sqliteTable('interactions', {
   id: text('id').primaryKey(),
