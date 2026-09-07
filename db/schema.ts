@@ -51,10 +51,23 @@ export const auditEvents = sqliteTable('audit_events', {
   createdAt: integer('created_at').notNull(),
 }, (table) => [index('idx_audit_events_workspace_created').on(table.workspaceId, table.createdAt)]);
 
+export const accounts = sqliteTable('accounts', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  name: text('name').notNull(),
+  normalizedName: text('normalized_name').notNull(),
+  domain: text('domain'),
+  industry: text('industry'),
+  status: text('status').notNull().default('active'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [uniqueIndex('uidx_accounts_workspace_normalized').on(table.workspaceId, table.normalizedName)]);
+
 export const leads = sqliteTable('leads', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
   eventId: text('event_id').notNull(),
+  accountId: text('account_id').references(() => accounts.id),
   clientCaptureId: text('client_capture_id'),
   ownerId: text('owner_id').notNull(),
   fullName: text('full_name').notNull(),
@@ -71,6 +84,18 @@ export const leads = sqliteTable('leads', {
   index('idx_leads_workspace_company').on(table.workspaceId, table.company),
   uniqueIndex('uidx_leads_workspace_client_capture').on(table.workspaceId, table.clientCaptureId),
 ]);
+
+export const accountStakeholders = sqliteTable('account_stakeholders', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  accountId: text('account_id').notNull().references(() => accounts.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  buyingRole: text('buying_role').notNull(),
+  influenceLevel: text('influence_level').notNull().default('unknown'),
+  notes: text('notes'),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [uniqueIndex('uidx_account_stakeholder_lead').on(table.accountId, table.leadId)]);
 
 export const leadCaptureAssets = sqliteTable('lead_capture_assets', {
   id: text('id').primaryKey(),
@@ -174,6 +199,7 @@ export const opportunities = sqliteTable('opportunities', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),
   leadId: text('lead_id').references(() => leads.id),
+  accountId: text('account_id').references(() => accounts.id),
   company: text('company').notNull(),
   title: text('title').notNull(),
   stage: text('stage').notNull().default('qualified'),

@@ -19,6 +19,8 @@ function clean(value: unknown, max: number) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+async function accountIdentity(workspaceId: string, company: string) { const normalized = company.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${workspaceId}:${normalized}`)); const hash = Array.from(new Uint8Array(bytes)).slice(0, 12).map((value) => value.toString(16).padStart(2, '0')).join(''); return { id: `acct_${hash}`, normalized }; }
+
 export async function GET(request: Request) {
   const context = await requireWorkspace(request);
   const result = await database().prepare(`
@@ -71,6 +73,7 @@ export async function POST(request: Request) {
     eventId = selectedEvent.id;
   }
   const leadId = crypto.randomUUID();
+  const account = await accountIdentity(context.workspace.id, company);
   const interactionId = note ? crypto.randomUUID() : null;
   const taskId = nextAction ? crypto.randomUUID() : null;
   const attachmentKind = ['card', 'badge', 'audio'].includes(clean(body.attachmentKind, 20)) ? clean(body.attachmentKind, 20) : 'document';
@@ -79,10 +82,10 @@ export async function POST(request: Request) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 120) || 'capture'; storageKey = `${context.workspace.id}/lead-captures/${leadId}/${assetId}-${safeName}`;
     await revenueEnv().FILES.put(storageKey, file.stream(), { httpMetadata: { contentType: file.type }, customMetadata: { workspaceId: context.workspace.id, leadId, uploadedBy: context.user.id, kind: attachmentKind } });
   }
-  const statements = [database().prepare(`
-    INSERT INTO leads (id, workspace_id, event_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'needs_review', ?, ?)
-  `).bind(leadId, context.workspace.id, eventId, clientCaptureId || null, context.user.id, fullName, company, role || null, email || null, phone || null, source, now, now)];
+  const statements = [database().prepare(`INSERT INTO accounts (id, workspace_id, name, normalized_name, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?) ON CONFLICT(workspace_id, normalized_name) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`).bind(account.id, context.workspace.id, company, account.normalized, now, now), database().prepare(`
+    INSERT INTO leads (id, workspace_id, event_id, account_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'needs_review', ?, ?)
+  `).bind(leadId, context.workspace.id, eventId, account.id, clientCaptureId || null, context.user.id, fullName, company, role || null, email || null, phone || null, source, now, now)];
 
   if (interactionId) statements.push(database().prepare(`
     INSERT INTO interactions (id, workspace_id, lead_id, note, source, occurred_at, created_at)

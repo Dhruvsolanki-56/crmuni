@@ -7,10 +7,11 @@ function clean(value: unknown, max: number) {
 export async function GET(request: Request) {
   const context = await requireWorkspace(request);
   const db = database();
-  const [leadRows, taskRows, opportunityRows] = await Promise.all([
-    db.prepare(`SELECT l.id, l.full_name AS fullName, l.company, l.role, l.review_status AS reviewStatus,
+  const [leadRows, taskRows, opportunityRows, accountRows] = await Promise.all([
+    db.prepare(`SELECT l.id, l.account_id AS accountId, l.full_name AS fullName, l.company, l.role, l.email, l.phone, s.buying_role AS buyingRole, l.review_status AS reviewStatus,
       l.created_at AS createdAt, i.note, t.title AS nextAction, t.due_date AS dueDate
       FROM leads l
+      LEFT JOIN account_stakeholders s ON s.lead_id=l.id AND s.workspace_id=l.workspace_id
       LEFT JOIN interactions i ON i.id = (SELECT id FROM interactions WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1)
       LEFT JOIN tasks t ON t.id = (SELECT id FROM tasks WHERE lead_id = l.id AND status = 'open' ORDER BY created_at DESC LIMIT 1)
       WHERE l.workspace_id = ? ORDER BY l.created_at DESC LIMIT 100`).bind(context.workspace.id).all(),
@@ -20,13 +21,15 @@ export async function GET(request: Request) {
     db.prepare(`SELECT id, lead_id AS leadId, company, title, stage, value, currency, probability,
       expected_close_date AS expectedCloseDate, created_at AS createdAt
       FROM opportunities WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 100`).bind(context.workspace.id).all(),
+    db.prepare(`SELECT a.id, a.name AS company, COUNT(l.id) AS contacts, MAX(l.created_at) AS latestAt, COUNT(s.id) AS stakeholders FROM accounts a LEFT JOIN leads l ON l.account_id=a.id LEFT JOIN account_stakeholders s ON s.lead_id=l.id WHERE a.workspace_id=? GROUP BY a.id, a.name ORDER BY latestAt DESC`).bind(context.workspace.id).all(),
   ]);
   const leads = leadRows.results;
-  const accounts = Object.values(leads.reduce<Record<string, { company: string; contacts: number; latestAt: number }>>((all, item) => {
+  const linkedNames = new Set(accountRows.results.map((item) => String(item.company).toLowerCase())); const legacyAccounts = Object.values(leads.reduce<Record<string, { id: string; company: string; contacts: number; latestAt: number; stakeholders: number }>>((all, item) => {
     const company = String(item.company); const createdAt = Number(item.createdAt);
-    const current = all[company] || { company, contacts: 0, latestAt: 0 };
+    if (linkedNames.has(company.toLowerCase())) return all; const current = all[company] || { id: `legacy:${company}`, company, contacts: 0, latestAt: 0, stakeholders: 0 };
     current.contacts += 1; current.latestAt = Math.max(current.latestAt, createdAt); all[company] = current; return all;
   }, {}));
+  const accounts = [...accountRows.results, ...legacyAccounts];
   const opportunities = opportunityRows.results;
   const pipelineValue = opportunities.reduce((sum, item) => sum + Number(item.value || 0), 0);
   return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, leads, accounts, tasks: taskRows.results, opportunities, metrics: {
@@ -52,11 +55,14 @@ export async function POST(request: Request) {
     const company = clean(body.company, 160); const title = clean(body.title, 200);
     const leadId = clean(body.leadId, 80); const value = Math.max(0, Math.min(1_000_000_000, Number(body.value) || 0));
     if (!company || !title) return Response.json({ error: 'Company and opportunity title are required.' }, { status: 400 });
-    const id = crypto.randomUUID(); const now = Date.now();
-    await database().prepare(`INSERT INTO opportunities (id, workspace_id, lead_id, company, title, stage, value, currency, probability, expected_close_date, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'qualified', ?, 'INR', 20, ?, ?, ?)`).bind(id, context.workspace.id, leadId || null, company, title, value, clean(body.expectedCloseDate, 10) || null, now, now).run();
+    const id = crypto.randomUUID(); const now = Date.now(); const accountId = leadId ? (await database().prepare(`SELECT account_id AS accountId FROM leads WHERE id=? AND workspace_id=?`).bind(leadId, context.workspace.id).first<{accountId:string}>())?.accountId || null : null;
+    await database().prepare(`INSERT INTO opportunities (id, workspace_id, lead_id, account_id, company, title, stage, value, currency, probability, expected_close_date, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'qualified', ?, 'INR', 20, ?, ?, ?)`).bind(id, context.workspace.id, leadId || null, accountId, company, title, value, clean(body.expectedCloseDate, 10) || null, now, now).run();
     await auditStatement(context, 'opportunity.created', 'opportunity', id, { value }).run();
     return Response.json({ opportunity: { id, leadId, company, title, stage: 'qualified', value, currency: 'INR', probability: 20, expectedCloseDate: clean(body.expectedCloseDate, 10), createdAt: now } }, { status: 201 });
+  }
+  if (action === 'set_stakeholder') {
+    requireRole(context, ['owner', 'admin', 'manager', 'salesperson']); const leadId = clean(body.leadId, 80); const buyingRole = clean(body.buyingRole, 40); const allowed = ['buyer','technical_evaluator','internal_champion','decision_maker','influencer','user','unknown']; if (!allowed.includes(buyingRole)) return Response.json({ error: 'Choose a valid buying role.' }, { status: 400 }); const lead = await database().prepare(`SELECT account_id AS accountId FROM leads WHERE id=? AND workspace_id=?`).bind(leadId, context.workspace.id).first<{accountId:string|null}>(); if (!lead?.accountId) return Response.json({ error: 'This contact is not linked to an account yet.' }, { status: 409 }); const now=Date.now(); await database().prepare(`INSERT INTO account_stakeholders (id,workspace_id,account_id,lead_id,buying_role,influence_level,updated_by,updated_at) VALUES (?,?,?,?,?,'unknown',?,?) ON CONFLICT(account_id,lead_id) DO UPDATE SET buying_role=excluded.buying_role,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(crypto.randomUUID(),context.workspace.id,lead.accountId,leadId,buyingRole,context.user.id,now).run(); await auditStatement(context,'stakeholder.updated','lead',leadId,{buyingRole}).run(); return Response.json({ok:true,buyingRole});
   }
   return Response.json({ error: 'Unknown action.' }, { status: 400 });
 }
