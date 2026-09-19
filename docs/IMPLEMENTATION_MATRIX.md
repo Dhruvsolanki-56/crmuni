@@ -61,10 +61,10 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 
 | Requirement | Status | Evidence / gap |
 | --- | --- | --- |
-| Confirmed commitments to tasks | PARTIAL | Confirmation creates dated tasks; cancel/reopen/reminders and concurrency handling are missing. |
+| Confirmed commitments to tasks | PARTIAL | AI confirmation creates idempotent dated tasks; complete/cancel/reopen transitions, optimistic concurrency, immutable history and scheduled in-app reminders are implemented. Automated reminder delivery/escalation still depends on the Phase 8 job worker. |
 | Editable communication drafts | COMPLETE | Subject/body editing, version checks, approval invalidation, reapproval and audit are enforced server-side; approval never sends. |
 | Consent/suppression check | PARTIAL | Draft generation and external-client opening both recheck active permission and hashed suppression; provider-side send enforcement awaits a real connector. |
-| Meetings and calendar export | MISSING | No meeting model, states or `.ics` export. |
+| Meetings and calendar export | COMPLETE | Event-scoped meetings, participants, scheduled/completed/cancelled/reopened states, optimistic version checks, history and escaped `.ics` export are implemented and covered by database/calendar regression tests. Export never claims delivery. |
 
 ## Phase 6 — Revenue workflow
 

@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint app lib db components/ui/button.tsx components/ui/dialog.tsx components/ui/input.tsx components/ui/textarea.tsx --deny-warnings",
-    "test": "node --experimental-strip-types --test tests/authorization.test.ts tests/consent.test.ts tests/event-migration.test.ts tests/followups.test.ts tests/qualification.test.ts",
+    "test": "node --experimental-strip-types --test tests/authorization.test.ts tests/consent.test.ts tests/event-migration.test.ts tests/followups.test.ts tests/meetings.test.ts tests/qualification.test.ts tests/task-lifecycle.test.ts",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test && npm run lint && npm run build",
     "format": "oxfmt"

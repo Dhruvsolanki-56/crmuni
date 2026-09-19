@@ -136,9 +136,89 @@ export const tasks = sqliteTable('tasks', {
   dueDate: text('due_date'),
   status: text('status').notNull().default('open'),
   sourceInteractionId: text('source_interaction_id').references(() => interactions.id),
+  sourceExtractionId: text('source_extraction_id'),
+  sourceCommitmentKey: text('source_commitment_key'),
+  reminderAt: integer('reminder_at'),
+  completedBy: text('completed_by'),
+  completedAt: integer('completed_at'),
+  cancelledBy: text('cancelled_by'),
+  cancelledAt: integer('cancelled_at'),
+  cancellationReason: text('cancellation_reason'),
+  version: integer('version').notNull().default(1),
+  mutationToken: text('mutation_token'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
-}, (table) => [index('idx_tasks_workspace_status_due').on(table.workspaceId, table.status, table.dueDate)]);
+}, (table) => [
+  index('idx_tasks_workspace_status_due').on(table.workspaceId, table.status, table.dueDate),
+  index('idx_tasks_workspace_reminder').on(table.workspaceId, table.status, table.reminderAt),
+  uniqueIndex('uidx_tasks_source_commitment').on(table.workspaceId, table.sourceExtractionId, table.sourceCommitmentKey),
+]);
+
+export const taskHistory = sqliteTable('task_history', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  taskId: text('task_id').notNull().references(() => tasks.id),
+  action: text('action').notNull(),
+  fromStatus: text('from_status').notNull(),
+  toStatus: text('to_status').notNull(),
+  reason: text('reason'),
+  reminderAt: integer('reminder_at'),
+  version: integer('version').notNull(),
+  actorId: text('actor_id').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_task_history_task_created').on(table.workspaceId, table.taskId, table.createdAt)]);
+
+export const meetings = sqliteTable('meetings', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  eventId: text('event_id').notNull(),
+  leadId: text('lead_id').references(() => leads.id),
+  opportunityId: text('opportunity_id'),
+  organizerId: text('organizer_id').notNull(),
+  title: text('title').notNull(),
+  startsAt: integer('starts_at').notNull(),
+  endsAt: integer('ends_at').notNull(),
+  timezone: text('timezone').notNull(),
+  location: text('location'),
+  agenda: text('agenda'),
+  status: text('status').notNull().default('scheduled'),
+  cancellationReason: text('cancellation_reason'),
+  version: integer('version').notNull().default(1),
+  mutationToken: text('mutation_token'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  index('idx_meetings_workspace_event_start').on(table.workspaceId, table.eventId, table.startsAt),
+  index('idx_meetings_workspace_status_start').on(table.workspaceId, table.status, table.startsAt),
+]);
+
+export const meetingParticipants = sqliteTable('meeting_participants', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  meetingId: text('meeting_id').notNull().references(() => meetings.id),
+  leadId: text('lead_id').references(() => leads.id),
+  name: text('name'),
+  email: text('email').notNull(),
+  participantType: text('participant_type').notNull().default('external'),
+  responseStatus: text('response_status').notNull().default('needs_action'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_meeting_participants_email').on(table.meetingId, table.email),
+  index('idx_meeting_participants_meeting').on(table.workspaceId, table.meetingId),
+]);
+
+export const meetingHistory = sqliteTable('meeting_history', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  meetingId: text('meeting_id').notNull().references(() => meetings.id),
+  action: text('action').notNull(),
+  fromStatus: text('from_status').notNull(),
+  toStatus: text('to_status').notNull(),
+  reason: text('reason'),
+  version: integer('version').notNull(),
+  actorId: text('actor_id').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_meeting_history_meeting').on(table.workspaceId, table.meetingId, table.createdAt)]);
 
 export const aiExtractions = sqliteTable('ai_extractions', {
   id: text('id').primaryKey(),
@@ -181,7 +261,10 @@ export const qualificationScores = sqliteTable('qualification_scores', {
   rationale: text('rationale').notNull(),
   ruleResultsJson: text('rule_results_json').notNull().default('[]'),
   createdAt: integer('created_at').notNull(),
-}, (table) => [index('idx_qualification_scores_lead').on(table.workspaceId, table.leadId, table.createdAt)]);
+}, (table) => [
+  index('idx_qualification_scores_lead').on(table.workspaceId, table.leadId, table.createdAt),
+  uniqueIndex('uidx_qualification_scores_extraction').on(table.extractionId),
+]);
 
 export const communicationDrafts = sqliteTable('communication_drafts', {
   id: text('id').primaryKey(),

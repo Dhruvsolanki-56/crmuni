@@ -28,19 +28,21 @@ export async function POST(request: Request) {
   const qualificationState=qualificationStateForScore(analysis.score.value);
   const statements = [
     database().prepare(`UPDATE ai_extractions SET status = 'confirmed', confirmed_at = ?, confirmed_by = ? WHERE id = ? AND workspace_id = ?`).bind(now, context.user.id, extractionId, context.workspace.id),
-    database().prepare(`INSERT INTO lead_qualification_history (id,workspace_id,lead_id,state,score,reason,source,previous_state,changed_by,created_at) SELECT ?,?,?,?,?,?,'ai_confirmed',qualification_state,?,? FROM leads WHERE id=? AND workspace_id=?`).bind(crypto.randomUUID(),context.workspace.id,extraction.leadId,qualificationState,analysis.score.value,analysis.score.rationale.slice(0,2000),context.user.id,now,extraction.leadId,context.workspace.id),
+    database().prepare(`INSERT OR IGNORE INTO lead_qualification_history (id,workspace_id,lead_id,state,score,reason,source,previous_state,changed_by,created_at) SELECT ?,?,?,?,?,?,'ai_confirmed',qualification_state,?,? FROM leads WHERE id=? AND workspace_id=?`).bind(`${extractionId}:qualification`,context.workspace.id,extraction.leadId,qualificationState,analysis.score.value,analysis.score.rationale.slice(0,2000),context.user.id,now,extraction.leadId,context.workspace.id),
     database().prepare(`UPDATE leads SET review_status='confirmed',qualification_state=?,qualification_reason=?,qualification_updated_by=?,qualification_updated_at=?,updated_at=? WHERE id=? AND workspace_id=?`).bind(qualificationState,analysis.score.rationale.slice(0,2000),context.user.id,now,now,extraction.leadId,context.workspace.id),
   ];
   for (const field of analysis.fields) {
     if (!field.value || !field.evidence) continue;
-    statements.push(database().prepare(`INSERT INTO lead_facts (id, workspace_id, lead_id, extraction_id, field_key, label, value, confidence_basis_points, evidence, confirmed_by, confirmed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), context.workspace.id, extraction.leadId, extractionId, field.key.slice(0, 80), field.label.slice(0, 120), field.value.slice(0, 2000), Math.round(field.confidence * 10000), field.evidence.slice(0, 1000), context.user.id, now));
+    statements.push(database().prepare(`INSERT OR IGNORE INTO lead_facts (id, workspace_id, lead_id, extraction_id, field_key, label, value, confidence_basis_points, evidence, confirmed_by, confirmed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(`${extractionId}:fact:${field.key.slice(0,80)}`, context.workspace.id, extraction.leadId, extractionId, field.key.slice(0, 80), field.label.slice(0, 120), field.value.slice(0, 2000), Math.round(field.confidence * 10000), field.evidence.slice(0, 1000), context.user.id, now));
   }
-  statements.push(database().prepare(`INSERT INTO qualification_scores (id, workspace_id, lead_id, extraction_id, score, rationale, rule_results_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), context.workspace.id, extraction.leadId, extractionId, analysis.score.value, analysis.score.rationale.slice(0, 2000), JSON.stringify(analysis.ruleResults || []).slice(0, 8000), now));
-  for (const commitment of analysis.commitments) {
+  statements.push(database().prepare(`INSERT OR IGNORE INTO qualification_scores (id, workspace_id, lead_id, extraction_id, score, rationale, rule_results_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(`${extractionId}:score`, context.workspace.id, extraction.leadId, extractionId, analysis.score.value, analysis.score.rationale.slice(0, 2000), JSON.stringify(analysis.ruleResults || []).slice(0, 8000), now));
+  for (const [index,commitment] of analysis.commitments.entries()) {
+    const taskId=`${extractionId}:task:${index}`;const commitmentKey=String(index);
     statements.push(database().prepare(`
-      INSERT INTO tasks (id, workspace_id, lead_id, owner_id, title, due_date, status, source_interaction_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
-    `).bind(crypto.randomUUID(), context.workspace.id, extraction.leadId, context.user.id, commitment.title.slice(0, 240), commitment.due_date, extraction.interactionId, now, now));
+      INSERT OR IGNORE INTO tasks (id,workspace_id,lead_id,owner_id,title,due_date,status,source_interaction_id,source_extraction_id,source_commitment_key,created_at,updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
+    `).bind(taskId,context.workspace.id,extraction.leadId,context.user.id,commitment.title.slice(0,240),commitment.due_date,extraction.interactionId,extractionId,commitmentKey,now,now));
+    statements.push(database().prepare(`INSERT OR IGNORE INTO task_history (id,workspace_id,task_id,action,from_status,to_status,version,actor_id,created_at) VALUES (?,?,?,'created','open','open',1,?,?)`).bind(`${taskId}:created`,context.workspace.id,taskId,context.user.id,now));
   }
   statements.push(auditStatement(context, 'analysis.confirmed', 'ai_extraction', extractionId));
   await database().batch(statements);
