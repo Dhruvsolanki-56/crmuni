@@ -2,86 +2,473 @@
 
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import {
-  ArrowRight, BarChart3, Building2, CalendarDays, Camera, Check, ChevronDown,
-  CircleUserRound, Clock3, FileText, LayoutDashboard, Menu, Mic, Plus, QrCode,
-  Search, Settings, ShieldCheck, Sparkles, Square, Target, Trash2, UserPlus, Users, Wifi,
+  ArrowRight,
+  BarChart3,
+  Building2,
+  CalendarDays,
+  Camera,
+  Check,
+  ChevronDown,
+  CircleUserRound,
+  Clock3,
+  FileText,
+  LayoutDashboard,
+  Menu,
+  Mic,
+  Plus,
+  QrCode,
+  Search,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Square,
+  Target,
+  Trash2,
+  UserPlus,
+  Users,
+  Wifi,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
 type SavedLead = {
-  id: string; eventId?:string;fullName: string; company: string; role?: string; note?: string;
-  email?: string; phone?: string; buyingRole?: string; nextAction?: string; dueDate?: string; reviewStatus: string; createdAt: number;
-  assetId?: string; captureKind?: string; captureStatus?: string; extractedJson?: string;
-  score?: number; scoreRationale?: string;
-  emailConsentStatus?: string; whatsappConsentStatus?: string;
-  duplicateLeadId?: string; duplicateLeadName?: string; duplicateLeadCompany?: string;
-  qualificationState?:string;qualificationReason?:string;ownerId?:string;ownerName?:string;
+  id: string;
+  eventId?: string;
+  fullName: string;
+  company: string;
+  role?: string;
+  note?: string;
+  email?: string;
+  phone?: string;
+  buyingRole?: string;
+  nextAction?: string;
+  dueDate?: string;
+  reviewStatus: string;
+  createdAt: number;
+  assetId?: string;
+  captureKind?: string;
+  captureStatus?: string;
+  extractedJson?: string;
+  score?: number;
+  scoreRationale?: string;
+  emailConsentStatus?: string;
+  whatsappConsentStatus?: string;
+  duplicateLeadId?: string;
+  duplicateLeadName?: string;
+  duplicateLeadCompany?: string;
+  qualificationState?: string;
+  qualificationReason?: string;
+  ownerId?: string;
+  ownerName?: string;
 };
 
-type CaptureExtraction = { fullName: string | null; company: string | null; role: string | null; email: string | null; phone: string | null; transcript: string | null; confidence: number; warnings: string[] };
+type CaptureExtraction = {
+  fullName: string | null;
+  company: string | null;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  transcript: string | null;
+  confidence: number;
+  warnings: string[];
+};
 
 type Analysis = {
   summary: string;
-  fields: Array<{ key: string; label: string; value: string | null; confidence: number; evidence: string | null }>;
-  commitments: Array<{ title: string; due_date: string | null; owner_party: string; confidence: number; evidence: string }>;
+  fields: Array<{
+    key: string;
+    label: string;
+    value: string | null;
+    confidence: number;
+    evidence: string | null;
+  }>;
+  commitments: Array<{
+    title: string;
+    due_date: string | null;
+    owner_party: string;
+    confidence: number;
+    evidence: string;
+  }>;
   score: { value: number; rationale: string };
   risks: string[];
 };
 
-type TaskItem = { id: string; leadId: string; title: string; dueDate?: string; status: string; fullName: string; company: string; version: number; reminderAt?: number; completedAt?: number; cancelledAt?: number; cancellationReason?: string };
-type MeetingItem = { id:string;eventId:string;leadId?:string;title:string;startsAt:number;endsAt:number;timezone:string;location?:string;agenda?:string;status:string;cancellationReason?:string;version:number;leadName?:string;company?:string;participantCount:number };
-type OpportunityContact = { leadId:string;fullName:string;company:string;buyingRole?:string;contactRole?:string;isPrimary?:number };
-type Opportunity = { id: string; eventId?: string; leadId?: string; company: string; title: string; stage: string; value: number; currency: string; probability: number; expectedCloseDate?: string;lossReason?:string;closedAt?:number;version:number;contacts:OpportunityContact[] };
-type Account = { id: string; company: string; contacts: number; latestAt: number; stakeholders: number };
-type View = 'today' | 'people' | 'opportunities' | 'rfqs' | 'meetings' | 'events' | 'roi' | 'knowledge' | 'settings';
-type AppContext = { workspace: { id: string; name: string; slug: string; timezone: string; currency: string; plan: string; status: string }; role: string; user: { id: string; email: string } };
-type Member = { id: string; userId: string; email?: string; displayName?: string; role: string; status: string };
-type Invitation = { id: string; email: string; role: string; status: string; expiresAt: number };
-type AuditEvent = { id: string; action: string; entityType: string; createdAt: number };
-type WorkspaceUsage = { leads: number; activeEvents: number; knowledgeSources: number; storageBytes: number; activeMembers: number };
-type LeadMerge = { id:string;sourceLeadId:string;targetLeadId:string;sourceName:string;targetName:string;mergedAt:number };
-type DeletionRequest = { id: string; status: string; scheduledFor: number; createdAt: number };
-type KnowledgeData = { profile: null | { legalName: string; websiteUrl?: string; description?: string; targetIndustries: string[]; targetGeographies: string[]; eventObjective?: string; onboardingStep: number }; products: Array<{ id: string; name: string; kind: string; description?: string; buyerRoles: string[]; painPoints: string[] }>; icps: Array<{ id: string; name: string; industries: string[]; buyerRoles: string[]; mustHaveSignals: string[]; disqualifiers: string[] }>; rules: Array<{ id: string; label: string; field: string; expectedValue: string; weight: number }>; sources: Array<{ id: string; name: string; sourceType: string; sourceUrl?: string; contentType?: string; sizeBytes?: number; status: string }> };
-type EventItem = { id: string; name: string; venue?: string; hall?: string; booth?: string; startsOn: string; endsOn: string; timezone: string; budget: number; objective?: string; products: string[]; targetAccounts: string[]; qualificationQuestions: string[]; leadRoutingRule: string; followupSlaHours: number; dailyLeadTarget: number; badgeProvider?: string; qrCampaignCode?: string; status: string };
-type FollowupDraft = { id: string; channel: string; recipient: string; subject?: string; body: string; status: string; model: string; version: number; createdAt: number; updatedAt?:number };
-type RfqExtraction = { deliveryLocation: string | null; submissionDeadline: string | null; summary: string; items: Array<{ product: string; quantity: string | null; specifications: string | null; evidence: string }>; warnings: string[] };
-type RfqItem = { id: string; title: string; reference?: string; requesterCompany: string; contactName?: string; deliveryLocation?: string; submissionDeadline?: string; status: string; processingStatus: string; ownerId: string; itemCount: number; documentCount: number; extractionId?: string; extractionStatus?: string; extractionJson?: string; createdAt: number };
-type Quotation = { id: string; rfqId?: string; opportunityId?: string; quoteNumber: string; customer: string; amount: number; currency: string; validUntil?: string; status: string; hasDocument: boolean; originalName?: string; createdAt: number };
-type OfflineCapture = { id: string; workspaceId: string; eventId: string; fields: Record<string, string>; attachment?: File; attachmentKind?: string; queuedAt: number };
+type TaskItem = {
+  id: string;
+  leadId: string;
+  title: string;
+  dueDate?: string;
+  status: string;
+  fullName: string;
+  company: string;
+  version: number;
+  reminderAt?: number;
+  completedAt?: number;
+  cancelledAt?: number;
+  cancellationReason?: string;
+};
+type MeetingItem = {
+  id: string;
+  eventId: string;
+  leadId?: string;
+  title: string;
+  startsAt: number;
+  endsAt: number;
+  timezone: string;
+  location?: string;
+  agenda?: string;
+  status: string;
+  cancellationReason?: string;
+  version: number;
+  leadName?: string;
+  company?: string;
+  participantCount: number;
+};
+type OpportunityContact = {
+  leadId: string;
+  fullName: string;
+  company: string;
+  buyingRole?: string;
+  contactRole?: string;
+  isPrimary?: number;
+};
+type Opportunity = {
+  id: string;
+  eventId?: string;
+  leadId?: string;
+  company: string;
+  title: string;
+  stage: string;
+  value: number;
+  currency: string;
+  probability: number;
+  expectedCloseDate?: string;
+  lossReason?: string;
+  closedAt?: number;
+  version: number;
+  contacts: OpportunityContact[];
+};
+type Account = {
+  id: string;
+  company: string;
+  contacts: number;
+  latestAt: number;
+  stakeholders: number;
+};
+type View =
+  | 'today'
+  | 'people'
+  | 'opportunities'
+  | 'rfqs'
+  | 'meetings'
+  | 'events'
+  | 'roi'
+  | 'knowledge'
+  | 'settings';
+type AppContext = {
+  workspace: {
+    id: string;
+    name: string;
+    slug: string;
+    timezone: string;
+    currency: string;
+    plan: string;
+    status: string;
+  };
+  role: string;
+  user: { id: string; email: string };
+};
+type Member = {
+  id: string;
+  userId: string;
+  email?: string;
+  displayName?: string;
+  role: string;
+  status: string;
+};
+type Invitation = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  expiresAt: number;
+};
+type AuditEvent = {
+  id: string;
+  action: string;
+  entityType: string;
+  createdAt: number;
+};
+type WorkspaceUsage = {
+  leads: number;
+  activeEvents: number;
+  knowledgeSources: number;
+  storageBytes: number;
+  activeMembers: number;
+};
+type LeadMerge = {
+  id: string;
+  sourceLeadId: string;
+  targetLeadId: string;
+  sourceName: string;
+  targetName: string;
+  mergedAt: number;
+};
+type DeletionRequest = {
+  id: string;
+  status: string;
+  scheduledFor: number;
+  createdAt: number;
+};
+type KnowledgeData = {
+  profile: null | {
+    legalName: string;
+    websiteUrl?: string;
+    description?: string;
+    targetIndustries: string[];
+    targetGeographies: string[];
+    eventObjective?: string;
+    onboardingStep: number;
+  };
+  products: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    description?: string;
+    buyerRoles: string[];
+    painPoints: string[];
+  }>;
+  icps: Array<{
+    id: string;
+    name: string;
+    industries: string[];
+    buyerRoles: string[];
+    mustHaveSignals: string[];
+    disqualifiers: string[];
+  }>;
+  rules: Array<{
+    id: string;
+    label: string;
+    field: string;
+    expectedValue: string;
+    weight: number;
+  }>;
+  sources: Array<{
+    id: string;
+    name: string;
+    sourceType: string;
+    sourceUrl?: string;
+    contentType?: string;
+    sizeBytes?: number;
+    status: string;
+  }>;
+};
+type EventItem = {
+  id: string;
+  name: string;
+  venue?: string;
+  hall?: string;
+  booth?: string;
+  startsOn: string;
+  endsOn: string;
+  timezone: string;
+  budget: number;
+  objective?: string;
+  products: string[];
+  targetAccounts: string[];
+  qualificationQuestions: string[];
+  leadRoutingRule: string;
+  followupSlaHours: number;
+  dailyLeadTarget: number;
+  badgeProvider?: string;
+  qrCampaignCode?: string;
+  status: string;
+};
+type FollowupDraft = {
+  id: string;
+  channel: string;
+  recipient: string;
+  subject?: string;
+  body: string;
+  status: string;
+  model: string;
+  version: number;
+  createdAt: number;
+  updatedAt?: number;
+};
+type RfqExtraction = {
+  deliveryLocation: string | null;
+  submissionDeadline: string | null;
+  summary: string;
+  items: Array<{
+    product: string;
+    quantity: string | null;
+    specifications: string | null;
+    evidence: string;
+  }>;
+  warnings: string[];
+};
+type RfqItem = {
+  id: string;
+  title: string;
+  reference?: string;
+  requesterCompany: string;
+  contactName?: string;
+  deliveryLocation?: string;
+  submissionDeadline?: string;
+  status: string;
+  processingStatus: string;
+  ownerId: string;
+  ownerName?: string;
+  ownerDueAt?: number;
+  version: number;
+  submissionCount: number;
+  latestSubmissionNote?: string;
+  clarificationNote?: string;
+  itemCount: number;
+  documentCount: number;
+  extractionId?: string;
+  extractionStatus?: string;
+  extractionJson?: string;
+  createdAt: number;
+};
+type Quotation = {
+  id: string;
+  rfqId?: string;
+  opportunityId?: string;
+  quoteNumber: string;
+  customer: string;
+  amount: number;
+  currency: string;
+  validUntil?: string;
+  status: string;
+  hasDocument: boolean;
+  originalName?: string;
+  createdAt: number;
+};
+type OfflineCapture = {
+  id: string;
+  workspaceId: string;
+  eventId: string;
+  fields: Record<string, string>;
+  attachment?: File;
+  attachmentKind?: string;
+  queuedAt: number;
+};
 
 function openOutbox() {
-  return new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('revenue-os-offline', 1); request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('captures')) request.result.createObjectStore('captures', { keyPath: 'id' }); }; request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('revenue-os-offline', 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('captures'))
+        request.result.createObjectStore('captures', { keyPath: 'id' });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
 
-async function outboxWrite(value: OfflineCapture | string, mode: 'put' | 'delete') {
-  const db = await openOutbox(); await new Promise<void>((resolve, reject) => { const transaction = db.transaction('captures', 'readwrite'); const store = transaction.objectStore('captures'); if (mode === 'put') store.put(value as OfflineCapture); else store.delete(value as string); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); }); db.close();
+async function outboxWrite(
+  value: OfflineCapture | string,
+  mode: 'put' | 'delete',
+) {
+  const db = await openOutbox();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction('captures', 'readwrite');
+    const store = transaction.objectStore('captures');
+    if (mode === 'put') store.put(value as OfflineCapture);
+    else store.delete(value as string);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
 }
 
 async function outboxItems() {
-  const db = await openOutbox(); const items = await new Promise<OfflineCapture[]>((resolve, reject) => { const request = db.transaction('captures').objectStore('captures').getAll(); request.onsuccess = () => resolve(request.result as OfflineCapture[]); request.onerror = () => reject(request.error); }); db.close(); return items;
+  const db = await openOutbox();
+  const items = await new Promise<OfflineCapture[]>((resolve, reject) => {
+    const request = db.transaction('captures').objectStore('captures').getAll();
+    request.onsuccess = () => resolve(request.result as OfflineCapture[]);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return items;
 }
 
-function NavItem({ icon: Icon, label, active = false, onClick }: { icon: typeof LayoutDashboard; label: string; active?: boolean; onClick: () => void }) {
-  return <button className={`nav-item ${active ? 'nav-item-active' : ''}`} onClick={onClick} type="button"><Icon size={18} strokeWidth={1.8} /><span>{label}</span></button>;
+function NavItem({
+  icon: Icon,
+  label,
+  active = false,
+  onClick,
+}: {
+  icon: typeof LayoutDashboard;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`nav-item ${active ? 'nav-item-active' : ''}`}
+      onClick={onClick}
+      type="button"
+    >
+      <Icon size={18} strokeWidth={1.8} />
+      <span>{label}</span>
+    </button>
+  );
 }
 
 function apiFetch(path: string, init?: RequestInit) {
-  const headers = new Headers(init?.headers); const workspaceId = window.localStorage.getItem('revenue-workspace-id');
+  const headers = new Headers(init?.headers);
+  const workspaceId = window.localStorage.getItem('revenue-workspace-id');
   if (workspaceId) headers.set('x-revenue-workspace-id', workspaceId);
   const eventId = window.localStorage.getItem('revenue-event-id');
   if (eventId) headers.set('x-revenue-event-id', eventId);
   return fetch(path, { ...init, headers });
 }
 
-function money(value: number, currency = 'INR') { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency, currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }).format(value); } catch { return `${currency} ${value.toLocaleString()}`; } }
-function rfqExtraction(value?: string) { try { return value ? JSON.parse(value) as RfqExtraction : null; } catch { return null; } }
+function money(value: number, currency = 'INR') {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toLocaleString()}`;
+  }
+}
+function rfqExtraction(value?: string) {
+  try {
+    return value ? (JSON.parse(value) as RfqExtraction) : null;
+  } catch {
+    return null;
+  }
+}
 function dueStatus(dueDate: string | undefined, timezone: string) {
   if (!dueDate) return { label: 'No date', tone: 'neutral' };
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()); const read = (type: string) => parts.find((part) => part.type === type)?.value || ''; const today = `${read('year')}-${read('month')}-${read('day')}`;
-  if (dueDate < today) return { label: `Overdue · ${dueDate}`, tone: 'urgent' }; if (dueDate === today) return { label: 'Due today', tone: 'warning' }; return { label: dueDate, tone: 'neutral' };
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const read = (type: string) =>
+    parts.find((part) => part.type === type)?.value || '';
+  const today = `${read('year')}-${read('month')}-${read('day')}`;
+  if (dueDate < today) return { label: `Overdue · ${dueDate}`, tone: 'urgent' };
+  if (dueDate === today) return { label: 'Due today', tone: 'warning' };
+  return { label: dueDate, tone: 'neutral' };
 }
 
 export default function Home() {
@@ -100,38 +487,69 @@ export default function Home() {
   const [mobileNav, setMobileNav] = useState(false);
   const [activeView, setActiveView] = useState<View>('today');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [showAllTasks,setShowAllTasks]=useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [leadMerges,setLeadMerges]=useState<LeadMerge[]>([]);
-  const [metrics, setMetrics] = useState({ totalLeads: 0, qualifiedLeads: 0, openTasks: 0, pipelineValue: 0 });
+  const [leadMerges, setLeadMerges] = useState<LeadMerge[]>([]);
+  const [metrics, setMetrics] = useState({
+    totalLeads: 0,
+    qualifiedLeads: 0,
+    openTasks: 0,
+    pipelineValue: 0,
+  });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [opportunityOpen, setOpportunityOpen] = useState(false);
-  const [opportunityLead, setOpportunityLead] = useState<SavedLead | null>(null);
+  const [opportunityLead, setOpportunityLead] = useState<SavedLead | null>(
+    null,
+  );
   const [notice, setNotice] = useState('');
-  const [clockNow,setClockNow]=useState(0);
+  const [clockNow, setClockNow] = useState(0);
   const [appContext, setAppContext] = useState<AppContext | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-  const [availableWorkspaces, setAvailableWorkspaces] = useState<Array<AppContext['workspace'] & { role: string }>>([]);
-  const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsage>({ leads: 0, activeEvents: 0, knowledgeSources: 0, storageBytes: 0, activeMembers: 0 });
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<
+    Array<AppContext['workspace'] & { role: string }>
+  >([]);
+  const [workspaceUsage, setWorkspaceUsage] = useState<WorkspaceUsage>({
+    leads: 0,
+    activeEvents: 0,
+    knowledgeSources: 0,
+    storageBytes: 0,
+    activeMembers: 0,
+  });
   const [capabilities, setCapabilities] = useState({ aiConfigured: false });
-  const [deletionRequest, setDeletionRequest] = useState<DeletionRequest | null>(null);
+  const [deletionRequest, setDeletionRequest] =
+    useState<DeletionRequest | null>(null);
   const [settingsLoadedAt, setSettingsLoadedAt] = useState(0);
-  const [knowledge, setKnowledge] = useState<KnowledgeData>({ profile: null, products: [], icps: [], rules: [], sources: [] });
+  const [knowledge, setKnowledge] = useState<KnowledgeData>({
+    profile: null,
+    products: [],
+    icps: [],
+    rules: [],
+    sources: [],
+  });
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [activeEventId, setActiveEventId] = useState(() => typeof window === 'undefined' ? '' : window.localStorage.getItem('revenue-event-id') || '');
+  const [activeEventId, setActiveEventId] = useState(() =>
+    typeof window === 'undefined'
+      ? ''
+      : window.localStorage.getItem('revenue-event-id') || '',
+  );
   const [outboxCount, setOutboxCount] = useState(0);
   const [followups, setFollowups] = useState<FollowupDraft[]>([]);
-  const [meetings,setMeetings]=useState<MeetingItem[]>([]);
+  const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [drafting, setDrafting] = useState('');
   const [extractingCapture, setExtractingCapture] = useState(false);
   const [rfqs, setRfqs] = useState<RfqItem[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [processingRfq, setProcessingRfq] = useState('');
-  const [attachment, setAttachment] = useState<{ name: string; url: string; kind: 'card' | 'badge' | 'qr' | 'audio'; file: File } | null>(null);
+  const [attachment, setAttachment] = useState<{
+    name: string;
+    url: string;
+    kind: 'card' | 'badge' | 'qr' | 'audio';
+    file: File;
+  } | null>(null);
   const [recording, setRecording] = useState(false);
   const cardInput = useRef<HTMLInputElement>(null);
   const badgeInput = useRef<HTMLInputElement>(null);
@@ -141,81 +559,312 @@ export default function Home() {
   const audioChunks = useRef<Blob[]>([]);
 
   useEffect(() => {
-    const context = (document as Document & { modelContext?: { registerTool: (tool: unknown, options?: { signal?: AbortSignal }) => void | Promise<void> } }).modelContext;
+    const context = (
+      document as Document & {
+        modelContext?: {
+          registerTool: (
+            tool: unknown,
+            options?: { signal?: AbortSignal },
+          ) => void | Promise<void>;
+        };
+      }
+    ).modelContext;
     if (!context?.registerTool) return;
     const lifecycle = new AbortController();
-    const toolEvent = events.find((item) => item.id === activeEventId)?.name || 'No active event';
-    const register = context.registerTool({
-      name: 'start_lead_capture',
-      title: 'Start lead capture',
-      description: 'Open the lead capture flow for the active exhibition event.',
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-      annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute: () => { setCaptureOpen(true); return { status: 'capture_open', event: toolEvent }; },
-    }, { signal: lifecycle.signal });
+    const toolEvent =
+      events.find((item) => item.id === activeEventId)?.name ||
+      'No active event';
+    const register = context.registerTool(
+      {
+        name: 'start_lead_capture',
+        title: 'Start lead capture',
+        description:
+          'Open the lead capture flow for the active exhibition event.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, untrustedContentHint: false },
+        execute: () => {
+          setCaptureOpen(true);
+          return { status: 'capture_open', event: toolEvent };
+        },
+      },
+      { signal: lifecycle.signal },
+    );
     void Promise.resolve(register).catch(() => undefined);
     return () => lifecycle.abort();
   }, [activeEventId, events]);
 
   async function loadWorkspace() {
-    apiFetch('/api/workspace').then(async (response) => {
-      if (!response.ok) return;
-      const data = await response.json() as { context?: AppContext; leads?: SavedLead[]; tasks?: TaskItem[]; opportunities?: Opportunity[]; accounts?: Account[]; merges?:LeadMerge[]; metrics?: typeof metrics };
-      setCapturedLeads(data.leads || []); setTasks(data.tasks || []); setOpportunities(data.opportunities || []); setAccounts(data.accounts || []); setLeadMerges(data.merges||[]);
-      if (data.context) setAppContext(data.context);
-      if (data.metrics) setMetrics(data.metrics);
-    }).catch(() => undefined);
+    apiFetch('/api/workspace')
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          context?: AppContext;
+          leads?: SavedLead[];
+          tasks?: TaskItem[];
+          opportunities?: Opportunity[];
+          accounts?: Account[];
+          merges?: LeadMerge[];
+          metrics?: typeof metrics;
+        };
+        setCapturedLeads(data.leads || []);
+        setTasks(data.tasks || []);
+        setOpportunities(data.opportunities || []);
+        setAccounts(data.accounts || []);
+        setLeadMerges(data.merges || []);
+        if (data.context) setAppContext(data.context);
+        if (data.metrics) setMetrics(data.metrics);
+      })
+      .catch(() => undefined);
   }
-  async function loadEvents() { const response = await apiFetch('/api/events'); if (response.ok) { const data = await response.json() as { events: EventItem[] }; setEvents(data.events); const selected = window.localStorage.getItem('revenue-event-id'); if (selected && !data.events.some((item) => item.id === selected && item.status !== 'archived')) { window.localStorage.removeItem('revenue-event-id'); setActiveEventId(''); } } }
-  async function loadSettings() { const response = await apiFetch('/api/settings'); if (!response.ok) return; const data = await response.json() as { context: AppContext; serverTime: number; members: Member[]; invitations: Invitation[]; audit: AuditEvent[]; usage?: WorkspaceUsage; deletionRequest?: DeletionRequest | null; capabilities?: { aiConfigured: boolean }; workspaces?: Array<AppContext['workspace'] & { role: string }> }; setAppContext(data.context); setMembers(data.members); setInvitations(data.invitations); setAuditEvents(data.audit); setWorkspaceUsage(data.usage || { leads: 0, activeEvents: 0, knowledgeSources: 0, storageBytes: 0, activeMembers: 0 }); setDeletionRequest(data.deletionRequest || null); setSettingsLoadedAt(data.serverTime); setCapabilities(data.capabilities || { aiConfigured: false }); setAvailableWorkspaces(data.workspaces || []); }
-  async function loadKnowledge() { const response = await apiFetch('/api/company-intelligence'); if (response.ok) setKnowledge(await response.json() as KnowledgeData); }
-  async function loadRfqs() { const response = await apiFetch('/api/rfqs'); if (response.ok) { const data = await response.json() as { rfqs: RfqItem[] }; setRfqs(data.rfqs); } }
-  async function loadQuotations() { const response = await apiFetch('/api/quotations'); if (response.ok) { const data = await response.json() as { quotations: Quotation[] }; setQuotations(data.quotations); } }
-  async function loadMeetings(){const response=await apiFetch('/api/meetings');if(response.ok){const data=await response.json() as {meetings:MeetingItem[]};setMeetings(data.meetings);}}
-  async function refreshOutbox() { try { setOutboxCount((await outboxItems()).length); } catch { setOutboxCount(0); } }
-  async function flushOutbox() {
-    if (!navigator.onLine) return; const queued = await outboxItems().catch(() => []); let synced = 0;
-    for (const item of queued) {
-      const form = new FormData(); Object.entries(item.fields).forEach(([key, value]) => form.set(key, value)); if (item.attachment) { form.set('attachment', item.attachment); form.set('attachmentKind', item.attachmentKind || 'document'); }
-      try { const headers = new Headers(); if (item.workspaceId) headers.set('x-revenue-workspace-id', item.workspaceId); if (item.eventId) headers.set('x-revenue-event-id', item.eventId); const response = await fetch('/api/leads', { method: 'POST', headers, body: form }); if (!response.ok) continue; await outboxWrite(item.id, 'delete'); synced += 1; } catch { break; }
+  async function loadEvents() {
+    const response = await apiFetch('/api/events');
+    if (response.ok) {
+      const data = (await response.json()) as { events: EventItem[] };
+      setEvents(data.events);
+      const selected = window.localStorage.getItem('revenue-event-id');
+      if (
+        selected &&
+        !data.events.some(
+          (item) => item.id === selected && item.status !== 'archived',
+        )
+      ) {
+        window.localStorage.removeItem('revenue-event-id');
+        setActiveEventId('');
+      }
     }
-    await refreshOutbox(); if (synced) { setNotice(`${synced} offline capture${synced === 1 ? '' : 's'} synchronized`); void loadWorkspace(); }
   }
-  useEffect(() => { const timer = window.setTimeout(() => { void loadWorkspace(); void loadEvents(); void refreshOutbox(); }, 0); return () => window.clearTimeout(timer); }, []);
-  useEffect(()=>{const tick=()=>setClockNow(Date.now());tick();const timer=window.setInterval(tick,60_000);return()=>window.clearInterval(timer);},[]);
+  async function loadSettings() {
+    const response = await apiFetch('/api/settings');
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      context: AppContext;
+      serverTime: number;
+      members: Member[];
+      invitations: Invitation[];
+      audit: AuditEvent[];
+      usage?: WorkspaceUsage;
+      deletionRequest?: DeletionRequest | null;
+      capabilities?: { aiConfigured: boolean };
+      workspaces?: Array<AppContext['workspace'] & { role: string }>;
+    };
+    setAppContext(data.context);
+    setMembers(data.members);
+    setInvitations(data.invitations);
+    setAuditEvents(data.audit);
+    setWorkspaceUsage(
+      data.usage || {
+        leads: 0,
+        activeEvents: 0,
+        knowledgeSources: 0,
+        storageBytes: 0,
+        activeMembers: 0,
+      },
+    );
+    setDeletionRequest(data.deletionRequest || null);
+    setSettingsLoadedAt(data.serverTime);
+    setCapabilities(data.capabilities || { aiConfigured: false });
+    setAvailableWorkspaces(data.workspaces || []);
+  }
+  async function loadKnowledge() {
+    const response = await apiFetch('/api/company-intelligence');
+    if (response.ok) setKnowledge((await response.json()) as KnowledgeData);
+  }
+  async function loadRfqs() {
+    const response = await apiFetch('/api/rfqs');
+    if (response.ok) {
+      const data = (await response.json()) as { rfqs: RfqItem[] };
+      setRfqs(data.rfqs);
+    }
+  }
+  async function loadQuotations() {
+    const response = await apiFetch('/api/quotations');
+    if (response.ok) {
+      const data = (await response.json()) as { quotations: Quotation[] };
+      setQuotations(data.quotations);
+    }
+  }
+  async function loadMeetings() {
+    const response = await apiFetch('/api/meetings');
+    if (response.ok) {
+      const data = (await response.json()) as { meetings: MeetingItem[] };
+      setMeetings(data.meetings);
+    }
+  }
+  async function refreshOutbox() {
+    try {
+      setOutboxCount((await outboxItems()).length);
+    } catch {
+      setOutboxCount(0);
+    }
+  }
+  async function flushOutbox() {
+    if (!navigator.onLine) return;
+    const queued = await outboxItems().catch(() => []);
+    let synced = 0;
+    for (const item of queued) {
+      const form = new FormData();
+      Object.entries(item.fields).forEach(([key, value]) =>
+        form.set(key, value),
+      );
+      if (item.attachment) {
+        form.set('attachment', item.attachment);
+        form.set('attachmentKind', item.attachmentKind || 'document');
+      }
+      try {
+        const headers = new Headers();
+        if (item.workspaceId)
+          headers.set('x-revenue-workspace-id', item.workspaceId);
+        if (item.eventId) headers.set('x-revenue-event-id', item.eventId);
+        const response = await fetch('/api/leads', {
+          method: 'POST',
+          headers,
+          body: form,
+        });
+        if (!response.ok) continue;
+        await outboxWrite(item.id, 'delete');
+        synced += 1;
+      } catch {
+        break;
+      }
+    }
+    await refreshOutbox();
+    if (synced) {
+      setNotice(
+        `${synced} offline capture${synced === 1 ? '' : 's'} synchronized`,
+      );
+      void loadWorkspace();
+    }
+  }
   useEffect(() => {
-    const sync = () => { void flushOutbox(); };
+    const timer = window.setTimeout(() => {
+      void loadWorkspace();
+      void loadEvents();
+      void refreshOutbox();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    const tick = () => setClockNow(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const sync = () => {
+      void flushOutbox();
+    };
     const initialRetry = window.setTimeout(sync, 0);
     const retryTimer = window.setInterval(sync, 15_000);
     window.addEventListener('online', sync);
-    return () => { window.clearTimeout(initialRetry); window.clearInterval(retryTimer); window.removeEventListener('online', sync); };
+    return () => {
+      window.clearTimeout(initialRetry);
+      window.clearInterval(retryTimer);
+      window.removeEventListener('online', sync);
+    };
   }, []);
   useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true); } };
-    window.addEventListener('keydown', shortcut); return () => window.removeEventListener('keydown', shortcut);
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
   }, []);
-  function go(view: View) { setActiveView(view); setMobileNav(false); if (view === 'settings') void loadSettings(); if (view === 'knowledge') void loadKnowledge(); if (view === 'rfqs') { void loadRfqs(); void loadQuotations(); } if(view==='meetings')void loadMeetings(); if (view === 'roi') void loadEvents(); if (view === 'events') { void loadEvents(); void loadSettings(); } }
+  function go(view: View) {
+    setActiveView(view);
+    setMobileNav(false);
+    if (view === 'settings') void loadSettings();
+    if (view === 'knowledge') void loadKnowledge();
+    if (view === 'rfqs') {
+      void loadRfqs();
+      void loadQuotations();
+    }
+    if (view === 'meetings') void loadMeetings();
+    if (view === 'roi') void loadEvents();
+    if (view === 'events') {
+      void loadEvents();
+      void loadSettings();
+    }
+  }
 
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true); setSaveError('');
+    setSaving(true);
+    setSaveError('');
     const form = new FormData(event.currentTarget);
     form.set('clientCaptureId', crypto.randomUUID());
-    if (attachment) { form.set('attachment', attachment.file); form.set('attachmentKind', attachment.kind); }
+    if (attachment) {
+      form.set('attachment', attachment.file);
+      form.set('attachmentKind', attachment.kind);
+    }
     try {
-      const response = await apiFetch('/api/leads', { method: 'POST', body: form });
-      const data = await response.json() as { lead?: SavedLead; error?: string };
-      if (!response.ok || !data.lead) { setSaveError(data.error || 'Unable to save this lead.'); return; }
-      setSavedLead(data.lead); setCapturedLeads((current) => [data.lead!, ...current]); setSaved(true); void loadWorkspace();
+      const response = await apiFetch('/api/leads', {
+        method: 'POST',
+        body: form,
+      });
+      const data = (await response.json()) as {
+        lead?: SavedLead;
+        error?: string;
+      };
+      if (!response.ok || !data.lead) {
+        setSaveError(data.error || 'Unable to save this lead.');
+        return;
+      }
+      setSavedLead(data.lead);
+      setCapturedLeads((current) => [data.lead!, ...current]);
+      setSaved(true);
+      void loadWorkspace();
     } catch (error) {
       try {
-        const fields: Record<string, string> = {}; form.forEach((value, key) => { if (typeof value === 'string') fields[key] = value; }); const id = fields.clientCaptureId;
-        await outboxWrite({ id, workspaceId: window.localStorage.getItem('revenue-workspace-id') || appContext?.workspace.id || '', eventId: activeEventId, fields, attachment: attachment?.file, attachmentKind: attachment?.kind, queuedAt: Date.now() }, 'put');
-        const queuedLead: SavedLead = { id: `offline-${id}`, fullName: fields.fullName, company: fields.company, role: fields.role, note: fields.note, nextAction: fields.nextAction, dueDate: fields.dueDate, reviewStatus: 'queued_offline', createdAt: Date.now() };
-        setSavedLead(queuedLead); setCapturedLeads((current) => [queuedLead, ...current]); setSaved(true); await refreshOutbox();
-      } catch { setSaveError(error instanceof Error ? error.message : 'Unable to save this lead.'); }
+        const fields: Record<string, string> = {};
+        form.forEach((value, key) => {
+          if (typeof value === 'string') fields[key] = value;
+        });
+        const id = fields.clientCaptureId;
+        await outboxWrite(
+          {
+            id,
+            workspaceId:
+              window.localStorage.getItem('revenue-workspace-id') ||
+              appContext?.workspace.id ||
+              '',
+            eventId: activeEventId,
+            fields,
+            attachment: attachment?.file,
+            attachmentKind: attachment?.kind,
+            queuedAt: Date.now(),
+          },
+          'put',
+        );
+        const queuedLead: SavedLead = {
+          id: `offline-${id}`,
+          fullName: fields.fullName,
+          company: fields.company,
+          role: fields.role,
+          note: fields.note,
+          nextAction: fields.nextAction,
+          dueDate: fields.dueDate,
+          reviewStatus: 'queued_offline',
+          createdAt: Date.now(),
+        };
+        setSavedLead(queuedLead);
+        setCapturedLeads((current) => [queuedLead, ...current]);
+        setSaved(true);
+        await refreshOutbox();
+      } catch {
+        setSaveError(
+          error instanceof Error ? error.message : 'Unable to save this lead.',
+        );
+      }
+    } finally {
+      setSaving(false);
     }
-    finally { setSaving(false); }
   }
   function resetCapture(open: boolean) {
     setCaptureOpen(open);
@@ -223,417 +872,5067 @@ export default function Home() {
       if (recording) recorder.current?.stop();
       setTimeout(() => {
         if (attachment?.url) URL.revokeObjectURL(attachment.url);
-        setAttachment(null); setSaved(false); setSavedLead(null); setSaveError('');
+        setAttachment(null);
+        setSaved(false);
+        setSavedLead(null);
+        setSaveError('');
       }, 150);
     }
   }
 
-  function selectAttachment(event: SyntheticEvent<HTMLInputElement>, kind: 'card' | 'badge' | 'qr') {
+  function selectAttachment(
+    event: SyntheticEvent<HTMLInputElement>,
+    kind: 'card' | 'badge' | 'qr',
+  ) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     if (attachment?.url) URL.revokeObjectURL(attachment.url);
-    setAttachment({ name: file.name, url: URL.createObjectURL(file), kind, file });
+    setAttachment({
+      name: file.name,
+      url: URL.createObjectURL(file),
+      kind,
+      file,
+    });
   }
 
   async function toggleRecording() {
-    if (recording) { recorder.current?.stop(); return; }
+    if (recording) {
+      recorder.current?.stop();
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const nextRecorder = new MediaRecorder(stream);
       audioChunks.current = [];
-      nextRecorder.ondataavailable = (event) => { if (event.data.size) audioChunks.current.push(event.data); };
+      nextRecorder.ondataavailable = (event) => {
+        if (event.data.size) audioChunks.current.push(event.data);
+      };
       nextRecorder.onstop = () => {
-        const blob = new Blob(audioChunks.current, { type: nextRecorder.mimeType || 'audio/webm' });
+        const blob = new Blob(audioChunks.current, {
+          type: nextRecorder.mimeType || 'audio/webm',
+        });
         if (attachment?.url) URL.revokeObjectURL(attachment.url);
-        const file = new File([blob], `conversation-${Date.now()}.webm`, { type: blob.type });
-        setAttachment({ name: file.name, url: URL.createObjectURL(file), kind: 'audio', file });
+        const file = new File([blob], `conversation-${Date.now()}.webm`, {
+          type: blob.type,
+        });
+        setAttachment({
+          name: file.name,
+          url: URL.createObjectURL(file),
+          kind: 'audio',
+          file,
+        });
         stream.getTracks().forEach((track) => track.stop());
         setRecording(false);
       };
       recorder.current = nextRecorder;
-      nextRecorder.start(); setRecording(true); setSaveError('');
-    } catch { setSaveError('Microphone access was not available. You can still type the conversation note.'); }
+      nextRecorder.start();
+      setRecording(true);
+      setSaveError('');
+    } catch {
+      setSaveError(
+        'Microphone access was not available. You can still type the conversation note.',
+      );
+    }
   }
 
   function openReview(lead: SavedLead) {
-    setActiveView('today'); setMobileNav(false); setReviewLead(lead); setAnalysis(null); setExtractionId(''); setAnalysisError(''); setConfirmed(false); setFollowups([]); void loadFollowups(lead.id); if(['owner','admin','manager'].includes(appContext?.role||''))void loadSettings();
+    setActiveView('today');
+    setMobileNav(false);
+    setReviewLead(lead);
+    setAnalysis(null);
+    setExtractionId('');
+    setAnalysisError('');
+    setConfirmed(false);
+    setFollowups([]);
+    void loadFollowups(lead.id);
+    if (['owner', 'admin', 'manager'].includes(appContext?.role || ''))
+      void loadSettings();
   }
 
-  async function loadFollowups(leadId: string) { const response = await apiFetch(`/api/followups?leadId=${encodeURIComponent(leadId)}`); if (response.ok) { const data = await response.json() as { drafts: FollowupDraft[] }; setFollowups(data.drafts); } }
-  async function generateFollowup(channel: 'email' | 'whatsapp') { if (!reviewLead) return; setDrafting(channel); setAnalysisError(''); const response = await apiFetch('/api/followups', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'generate', leadId: reviewLead.id, channel }) }); const data = await response.json() as { draft?: FollowupDraft; error?: string }; if (response.ok && data.draft) setFollowups((current) => [data.draft!, ...current]); else setAnalysisError(data.error || 'Could not create follow-up draft.'); setDrafting(''); }
-  async function approveFollowup(draft:FollowupDraft){const response=await apiFetch('/api/followups',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'approve',id:draft.id,version:draft.version})});const data=await response.json() as {error?:string};if(response.ok)setFollowups((current)=>current.map((item)=>item.id===draft.id?{...item,status:'approved'}:item));else setAnalysisError(data.error||'Could not approve this draft.');}
-  async function editFollowup(event:SyntheticEvent<HTMLFormElement>,draft:FollowupDraft){event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget).entries());const response=await apiFetch('/api/followups',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'edit',id:draft.id,version:draft.version,...values})});const data=await response.json() as {draft?:Partial<FollowupDraft>;error?:string};if(!response.ok||!data.draft){setAnalysisError(data.error||'Could not save this draft.');return;}setFollowups((current)=>current.map((item)=>item.id===draft.id?{...item,...data.draft}:item));setNotice('Draft saved · approval reset');}
+  async function loadFollowups(leadId: string) {
+    const response = await apiFetch(
+      `/api/followups?leadId=${encodeURIComponent(leadId)}`,
+    );
+    if (response.ok) {
+      const data = (await response.json()) as { drafts: FollowupDraft[] };
+      setFollowups(data.drafts);
+    }
+  }
+  async function generateFollowup(channel: 'email' | 'whatsapp') {
+    if (!reviewLead) return;
+    setDrafting(channel);
+    setAnalysisError('');
+    const response = await apiFetch('/api/followups', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'generate',
+        leadId: reviewLead.id,
+        channel,
+      }),
+    });
+    const data = (await response.json()) as {
+      draft?: FollowupDraft;
+      error?: string;
+    };
+    if (response.ok && data.draft)
+      setFollowups((current) => [data.draft!, ...current]);
+    else setAnalysisError(data.error || 'Could not create follow-up draft.');
+    setDrafting('');
+  }
+  async function approveFollowup(draft: FollowupDraft) {
+    const response = await apiFetch('/api/followups', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve',
+        id: draft.id,
+        version: draft.version,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (response.ok)
+      setFollowups((current) =>
+        current.map((item) =>
+          item.id === draft.id ? { ...item, status: 'approved' } : item,
+        ),
+      );
+    else setAnalysisError(data.error || 'Could not approve this draft.');
+  }
+  async function editFollowup(
+    event: SyntheticEvent<HTMLFormElement>,
+    draft: FollowupDraft,
+  ) {
+    event.preventDefault();
+    const values = Object.fromEntries(
+      new FormData(event.currentTarget).entries(),
+    );
+    const response = await apiFetch('/api/followups', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'edit',
+        id: draft.id,
+        version: draft.version,
+        ...values,
+      }),
+    });
+    const data = (await response.json()) as {
+      draft?: Partial<FollowupDraft>;
+      error?: string;
+    };
+    if (!response.ok || !data.draft) {
+      setAnalysisError(data.error || 'Could not save this draft.');
+      return;
+    }
+    setFollowups((current) =>
+      current.map((item) =>
+        item.id === draft.id ? { ...item, ...data.draft } : item,
+      ),
+    );
+    setNotice('Draft saved · approval reset');
+  }
   async function openApprovedFollowup(draft: FollowupDraft) {
-    if (draft.status !== 'approved') return; const response=await apiFetch('/api/followups',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'authorize_open',id:draft.id})}); const data=await response.json() as {draft?:FollowupDraft;error?:string}; if(!response.ok||!data.draft){setAnalysisError(data.error||'This message is no longer eligible to open.');return;} const authorized=data.draft;
-    const url = authorized.channel === 'email' ? `mailto:${encodeURIComponent(authorized.recipient)}?subject=${encodeURIComponent(authorized.subject || '')}&body=${encodeURIComponent(authorized.body)}` : `https://wa.me/${authorized.recipient.replace(/\D/g, '')}?text=${encodeURIComponent(authorized.body)}`;
+    if (draft.status !== 'approved') return;
+    const response = await apiFetch('/api/followups', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'authorize_open', id: draft.id }),
+    });
+    const data = (await response.json()) as {
+      draft?: FollowupDraft;
+      error?: string;
+    };
+    if (!response.ok || !data.draft) {
+      setAnalysisError(
+        data.error || 'This message is no longer eligible to open.',
+      );
+      return;
+    }
+    const authorized = data.draft;
+    const url =
+      authorized.channel === 'email'
+        ? `mailto:${encodeURIComponent(authorized.recipient)}?subject=${encodeURIComponent(authorized.subject || '')}&body=${encodeURIComponent(authorized.body)}`
+        : `https://wa.me/${authorized.recipient.replace(/\D/g, '')}?text=${encodeURIComponent(authorized.body)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   }
-  async function setStakeholderRole(buyingRole: string) { if (!reviewLead) return; const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'set_stakeholder', leadId: reviewLead.id, buyingRole }) }); const data = await response.json() as { error?: string }; if (!response.ok) { setAnalysisError(data.error || 'Could not update stakeholder role.'); return; } setReviewLead({ ...reviewLead, buyingRole }); setCapturedLeads((current) => current.map((lead) => lead.id === reviewLead.id ? { ...lead, buyingRole } : lead)); setNotice('Buying-committee role saved'); }
-  async function setContactPermission(channel:'email'|'whatsapp',status:'granted'|'withdrawn'){if(!reviewLead)return;const response=await apiFetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'set_consent',leadId:reviewLead.id,channel,status,source:'salesperson_attestation'})});const data=await response.json() as {error?:string};if(!response.ok){setAnalysisError(data.error||'Could not update contact permission.');return;}const field=channel==='email'?'emailConsentStatus':'whatsappConsentStatus';const next={...reviewLead,[field]:status};setReviewLead(next);setCapturedLeads((current)=>current.map((lead)=>lead.id===next.id?next:lead));setNotice(`${channel==='email'?'Email':'WhatsApp'} permission ${status}`);}
-  async function mergeDuplicateLead(source:SavedLead){if(!source.duplicateLeadId||!window.confirm(`Merge ${source.fullName} into ${source.duplicateLeadName||'the existing contact'}? You can undo this from People.`))return;const response=await apiFetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'merge_leads',sourceLeadId:source.id,targetLeadId:source.duplicateLeadId})});const data=await response.json() as {error?:string};if(!response.ok){setAnalysisError(data.error||'Could not merge contacts.');return;}setReviewLead(null);setNotice('Contacts merged · undo is available in People');await loadWorkspace();}
-  async function revertLeadMerge(id:string){const response=await apiFetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'revert_lead_merge',mergeId:id})});const data=await response.json() as {error?:string};if(!response.ok){setNotice(data.error||'Could not undo merge');return;}setNotice('Contact merge reversed');await loadWorkspace();}
-  async function updateQualification(event:SyntheticEvent<HTMLFormElement>){event.preventDefault();if(!reviewLead)return;const values=Object.fromEntries(new FormData(event.currentTarget).entries());const response=await apiFetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'set_qualification',leadId:reviewLead.id,...values})});const data=await response.json() as {error?:string;state?:string;reason?:string};if(!response.ok){setAnalysisError(data.error||'Could not update qualification.');return;}const next={...reviewLead,qualificationState:data.state,qualificationReason:data.reason};setReviewLead(next);setCapturedLeads((current)=>current.map((lead)=>lead.id===next.id?next:lead));setNotice('Qualification override recorded');}
-  async function assignLeadOwner(event:SyntheticEvent<HTMLFormElement>){event.preventDefault();if(!reviewLead)return;const values=Object.fromEntries(new FormData(event.currentTarget).entries());const response=await apiFetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'assign_lead',leadId:reviewLead.id,...values})});const data=await response.json() as {error?:string;ownerId?:string};if(!response.ok){setAnalysisError(data.error||'Could not assign contact.');return;}const owner=members.find((member)=>member.userId===data.ownerId);const next={...reviewLead,ownerId:data.ownerId,ownerName:owner?.displayName||owner?.email};setReviewLead(next);setCapturedLeads((current)=>current.map((lead)=>lead.id===next.id?next:lead));setNotice('Lead owner updated');}
+  async function setStakeholderRole(buyingRole: string) {
+    if (!reviewLead) return;
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_stakeholder',
+        leadId: reviewLead.id,
+        buyingRole,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not update stakeholder role.');
+      return;
+    }
+    setReviewLead({ ...reviewLead, buyingRole });
+    setCapturedLeads((current) =>
+      current.map((lead) =>
+        lead.id === reviewLead.id ? { ...lead, buyingRole } : lead,
+      ),
+    );
+    setNotice('Buying-committee role saved');
+  }
+  async function setContactPermission(
+    channel: 'email' | 'whatsapp',
+    status: 'granted' | 'withdrawn',
+  ) {
+    if (!reviewLead) return;
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_consent',
+        leadId: reviewLead.id,
+        channel,
+        status,
+        source: 'salesperson_attestation',
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not update contact permission.');
+      return;
+    }
+    const field =
+      channel === 'email' ? 'emailConsentStatus' : 'whatsappConsentStatus';
+    const next = { ...reviewLead, [field]: status };
+    setReviewLead(next);
+    setCapturedLeads((current) =>
+      current.map((lead) => (lead.id === next.id ? next : lead)),
+    );
+    setNotice(
+      `${channel === 'email' ? 'Email' : 'WhatsApp'} permission ${status}`,
+    );
+  }
+  async function mergeDuplicateLead(source: SavedLead) {
+    if (
+      !source.duplicateLeadId ||
+      !window.confirm(
+        `Merge ${source.fullName} into ${source.duplicateLeadName || 'the existing contact'}? You can undo this from People.`,
+      )
+    )
+      return;
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'merge_leads',
+        sourceLeadId: source.id,
+        targetLeadId: source.duplicateLeadId,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not merge contacts.');
+      return;
+    }
+    setReviewLead(null);
+    setNotice('Contacts merged · undo is available in People');
+    await loadWorkspace();
+  }
+  async function revertLeadMerge(id: string) {
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'revert_lead_merge', mergeId: id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not undo merge');
+      return;
+    }
+    setNotice('Contact merge reversed');
+    await loadWorkspace();
+  }
+  async function updateQualification(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reviewLead) return;
+    const values = Object.fromEntries(
+      new FormData(event.currentTarget).entries(),
+    );
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_qualification',
+        leadId: reviewLead.id,
+        ...values,
+      }),
+    });
+    const data = (await response.json()) as {
+      error?: string;
+      state?: string;
+      reason?: string;
+    };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not update qualification.');
+      return;
+    }
+    const next = {
+      ...reviewLead,
+      qualificationState: data.state,
+      qualificationReason: data.reason,
+    };
+    setReviewLead(next);
+    setCapturedLeads((current) =>
+      current.map((lead) => (lead.id === next.id ? next : lead)),
+    );
+    setNotice('Qualification override recorded');
+  }
+  async function assignLeadOwner(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reviewLead) return;
+    const values = Object.fromEntries(
+      new FormData(event.currentTarget).entries(),
+    );
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'assign_lead',
+        leadId: reviewLead.id,
+        ...values,
+      }),
+    });
+    const data = (await response.json()) as {
+      error?: string;
+      ownerId?: string;
+    };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not assign contact.');
+      return;
+    }
+    const owner = members.find((member) => member.userId === data.ownerId);
+    const next = {
+      ...reviewLead,
+      ownerId: data.ownerId,
+      ownerName: owner?.displayName || owner?.email,
+    };
+    setReviewLead(next);
+    setCapturedLeads((current) =>
+      current.map((lead) => (lead.id === next.id ? next : lead)),
+    );
+    setNotice('Lead owner updated');
+  }
 
   async function processCapture() {
-    if (!reviewLead) return; setExtractingCapture(true); setAnalysisError('');
-    const response = await apiFetch('/api/capture-extraction', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ leadId: reviewLead.id }) });
-    const data = await response.json() as { extraction?: CaptureExtraction; error?: string };
-    if (!response.ok || !data.extraction) setAnalysisError(data.error || 'Could not process this capture.');
+    if (!reviewLead) return;
+    setExtractingCapture(true);
+    setAnalysisError('');
+    const response = await apiFetch('/api/capture-extraction', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ leadId: reviewLead.id }),
+    });
+    const data = (await response.json()) as {
+      extraction?: CaptureExtraction;
+      error?: string;
+    };
+    if (!response.ok || !data.extraction)
+      setAnalysisError(data.error || 'Could not process this capture.');
     else {
-      const extraction = data.extraction; const next = { ...reviewLead, fullName: extraction.fullName || reviewLead.fullName, company: extraction.company || reviewLead.company, role: extraction.role || reviewLead.role, email: extraction.email || reviewLead.email, phone: extraction.phone || reviewLead.phone, note: extraction.transcript || reviewLead.note, captureStatus: 'completed', extractedJson: JSON.stringify(extraction) };
-      setReviewLead(next); setCapturedLeads((current) => current.map((lead) => lead.id === next.id ? next : lead)); setNotice('Capture processed · review every extracted field'); void loadWorkspace();
+      const extraction = data.extraction;
+      const next = {
+        ...reviewLead,
+        fullName: extraction.fullName || reviewLead.fullName,
+        company: extraction.company || reviewLead.company,
+        role: extraction.role || reviewLead.role,
+        email: extraction.email || reviewLead.email,
+        phone: extraction.phone || reviewLead.phone,
+        note: extraction.transcript || reviewLead.note,
+        captureStatus: 'completed',
+        extractedJson: JSON.stringify(extraction),
+      };
+      setReviewLead(next);
+      setCapturedLeads((current) =>
+        current.map((lead) => (lead.id === next.id ? next : lead)),
+      );
+      setNotice('Capture processed · review every extracted field');
+      void loadWorkspace();
     }
     setExtractingCapture(false);
   }
 
   async function saveLeadDetails(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!reviewLead) return; const values = Object.fromEntries(new FormData(event.currentTarget).entries());
-    const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_lead', id: reviewLead.id, ...values }) }); const data = await response.json() as { lead?: Partial<SavedLead>; error?: string };
-    if (!response.ok || !data.lead) { setAnalysisError(data.error || 'Could not save contact details.'); return; }
-    const next = { ...reviewLead, ...data.lead }; setReviewLead(next); setCapturedLeads((current) => current.map((lead) => lead.id === next.id ? next : lead)); setNotice('Contact details saved'); void loadWorkspace();
+    event.preventDefault();
+    if (!reviewLead) return;
+    const values = Object.fromEntries(
+      new FormData(event.currentTarget).entries(),
+    );
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_lead',
+        id: reviewLead.id,
+        ...values,
+      }),
+    });
+    const data = (await response.json()) as {
+      lead?: Partial<SavedLead>;
+      error?: string;
+    };
+    if (!response.ok || !data.lead) {
+      setAnalysisError(data.error || 'Could not save contact details.');
+      return;
+    }
+    const next = { ...reviewLead, ...data.lead };
+    setReviewLead(next);
+    setCapturedLeads((current) =>
+      current.map((lead) => (lead.id === next.id ? next : lead)),
+    );
+    setNotice('Contact details saved');
+    void loadWorkspace();
   }
 
   async function eraseLead() {
-    if (!reviewLead || !window.confirm(`Erase personal data for ${reviewLead.fullName}? Conversation notes, tasks, AI facts, drafts, and capture files will be permanently removed. Company-level revenue records will remain.`)) return;
-    const id = reviewLead.id; const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'erase_lead', id }) }); const data = await response.json() as { error?: string };
-    if (!response.ok) { setAnalysisError(data.error || 'Could not erase this contact.'); return; }
-    setReviewLead(null); setCapturedLeads((current) => current.map((lead) => lead.id === id ? { ...lead, fullName: 'Deleted contact', role: undefined, email: undefined, phone: undefined, note: undefined, nextAction: undefined, dueDate: undefined, reviewStatus: 'erased', captureStatus: undefined, extractedJson: undefined } : lead)); setNotice('Personal data erased; company revenue history retained'); void loadWorkspace();
+    if (
+      !reviewLead ||
+      !window.confirm(
+        `Erase personal data for ${reviewLead.fullName}? Conversation notes, tasks, AI facts, drafts, and capture files will be permanently removed. Company-level revenue records will remain.`,
+      )
+    )
+      return;
+    const id = reviewLead.id;
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'erase_lead', id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not erase this contact.');
+      return;
+    }
+    setReviewLead(null);
+    setCapturedLeads((current) =>
+      current.map((lead) =>
+        lead.id === id
+          ? {
+              ...lead,
+              fullName: 'Deleted contact',
+              role: undefined,
+              email: undefined,
+              phone: undefined,
+              note: undefined,
+              nextAction: undefined,
+              dueDate: undefined,
+              reviewStatus: 'erased',
+              captureStatus: undefined,
+              extractedJson: undefined,
+            }
+          : lead,
+      ),
+    );
+    setNotice('Personal data erased; company revenue history retained');
+    void loadWorkspace();
   }
 
   async function createLeadTask(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!reviewLead) return; const form = event.currentTarget; const values = Object.fromEntries(new FormData(form).entries());
-    const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create_task', leadId: reviewLead.id, ...values }) }); const data = await response.json() as { task?: TaskItem; error?: string };
-    if (!response.ok || !data.task) { setAnalysisError(data.error || 'Could not create task.'); return; } form.reset(); setNotice('Follow-up task created'); void loadWorkspace();
+    event.preventDefault();
+    if (!reviewLead) return;
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_task',
+        leadId: reviewLead.id,
+        ...values,
+      }),
+    });
+    const data = (await response.json()) as { task?: TaskItem; error?: string };
+    if (!response.ok || !data.task) {
+      setAnalysisError(data.error || 'Could not create task.');
+      return;
+    }
+    form.reset();
+    setNotice('Follow-up task created');
+    void loadWorkspace();
   }
 
-  async function updateOpportunityStage(item: Opportunity, stage: string, value=item.value) {
-    let reason='';if(stage==='lost')reason=window.prompt('Why was this opportunity lost? This reason will be retained in history.',item.lossReason||'')?.trim()||'';else if(['won','lost'].includes(item.stage)&&stage!==item.stage)reason=window.prompt('Why is this closed opportunity changing?')?.trim()||'';if((stage==='lost'||(['won','lost'].includes(item.stage)&&stage!==item.stage))&&!reason){setNotice('A reason is required for this change.');return;}
-    const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_opportunity', id:item.id, stage, value,version:item.version,reason }) }); const data = await response.json() as { probability?: number;value?:number;version?:number;lossReason?:string;closedAt?:number; error?: string };
-    if (!response.ok) { setNotice(data.error || 'Could not update opportunity');void loadWorkspace(); return; } setOpportunities((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, stage,value:data.value??currentItem.value,version:data.version??currentItem.version, probability: data.probability ?? currentItem.probability,lossReason:data.lossReason,closedAt:data.closedAt } : currentItem)); setNotice('Opportunity updated with history');
+  async function updateOpportunityStage(
+    item: Opportunity,
+    stage: string,
+    value = item.value,
+  ) {
+    let reason = '';
+    if (stage === 'lost')
+      reason =
+        window
+          .prompt(
+            'Why was this opportunity lost? This reason will be retained in history.',
+            item.lossReason || '',
+          )
+          ?.trim() || '';
+    else if (['won', 'lost'].includes(item.stage) && stage !== item.stage)
+      reason =
+        window.prompt('Why is this closed opportunity changing?')?.trim() || '';
+    if (
+      (stage === 'lost' ||
+        (['won', 'lost'].includes(item.stage) && stage !== item.stage)) &&
+      !reason
+    ) {
+      setNotice('A reason is required for this change.');
+      return;
+    }
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_opportunity',
+        id: item.id,
+        stage,
+        value,
+        version: item.version,
+        reason,
+      }),
+    });
+    const data = (await response.json()) as {
+      probability?: number;
+      value?: number;
+      version?: number;
+      lossReason?: string;
+      closedAt?: number;
+      error?: string;
+    };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update opportunity');
+      void loadWorkspace();
+      return;
+    }
+    setOpportunities((current) =>
+      current.map((currentItem) =>
+        currentItem.id === item.id
+          ? {
+              ...currentItem,
+              stage,
+              value: data.value ?? currentItem.value,
+              version: data.version ?? currentItem.version,
+              probability: data.probability ?? currentItem.probability,
+              lossReason: data.lossReason,
+              closedAt: data.closedAt,
+            }
+          : currentItem,
+      ),
+    );
+    setNotice('Opportunity updated with history');
   }
 
-  async function changeOpportunityValue(item:Opportunity){const answer=window.prompt(`Update opportunity value (${item.currency})`,String(item.value));if(answer===null)return;const value=Number(answer);if(!Number.isFinite(value)||value<0){setNotice('Enter a valid non-negative value.');return;}await updateOpportunityStage(item,item.stage,value);}
+  async function changeOpportunityValue(item: Opportunity) {
+    const answer = window.prompt(
+      `Update opportunity value (${item.currency})`,
+      String(item.value),
+    );
+    if (answer === null) return;
+    const value = Number(answer);
+    if (!Number.isFinite(value) || value < 0) {
+      setNotice('Enter a valid non-negative value.');
+      return;
+    }
+    await updateOpportunityStage(item, item.stage, value);
+  }
 
-  async function changeOpportunityContact(item:Opportunity,leadId:string,command:'add'|'remove'){
-    const response=await apiFetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:`${command}_opportunity_contact`,id:item.id,leadId})});const data=await response.json() as {contact?:OpportunityContact;error?:string};if(!response.ok){setNotice(data.error||'Could not update opportunity contacts.');void loadWorkspace();return;}setNotice(command==='add'?'Stakeholder linked':'Stakeholder removed');void loadWorkspace();
+  async function changeOpportunityContact(
+    item: Opportunity,
+    leadId: string,
+    command: 'add' | 'remove',
+  ) {
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: `${command}_opportunity_contact`,
+        id: item.id,
+        leadId,
+      }),
+    });
+    const data = (await response.json()) as {
+      contact?: OpportunityContact;
+      error?: string;
+    };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update opportunity contacts.');
+      void loadWorkspace();
+      return;
+    }
+    setNotice(command === 'add' ? 'Stakeholder linked' : 'Stakeholder removed');
+    void loadWorkspace();
   }
 
   async function analyzeConversation() {
     if (!reviewLead) return;
-    setAnalyzing(true); setAnalysisError('');
+    setAnalyzing(true);
+    setAnalysisError('');
     try {
-      const response = await apiFetch('/api/analysis', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ leadId: reviewLead.id }) });
-      const data = await response.json() as { analysis?: Analysis; extractionId?: string; error?: string };
-      if (!response.ok || !data.analysis || !data.extractionId) throw new Error(data.error || 'Unable to analyze this conversation.');
-      setAnalysis(data.analysis); setExtractionId(data.extractionId);
-    } catch (error) { setAnalysisError(error instanceof Error ? error.message : 'Unable to analyze this conversation.'); }
-    finally { setAnalyzing(false); }
+      const response = await apiFetch('/api/analysis', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ leadId: reviewLead.id }),
+      });
+      const data = (await response.json()) as {
+        analysis?: Analysis;
+        extractionId?: string;
+        error?: string;
+      };
+      if (!response.ok || !data.analysis || !data.extractionId)
+        throw new Error(data.error || 'Unable to analyze this conversation.');
+      setAnalysis(data.analysis);
+      setExtractionId(data.extractionId);
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to analyze this conversation.',
+      );
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   async function confirmAnalysis() {
-    const response = await apiFetch('/api/analysis/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ extractionId, commitments: analysis?.commitments }) });
-    if (response.ok) { setConfirmed(true); setCapturedLeads((current) => current.map((lead) => lead.id === reviewLead?.id ? { ...lead, reviewStatus: 'confirmed' } : lead)); }
-    else { const data = await response.json() as { error?: string }; setAnalysisError(data.error || 'Could not confirm this analysis. Please try again.'); }
+    const response = await apiFetch('/api/analysis/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        extractionId,
+        commitments: analysis?.commitments,
+      }),
+    });
+    if (response.ok) {
+      setConfirmed(true);
+      setCapturedLeads((current) =>
+        current.map((lead) =>
+          lead.id === reviewLead?.id
+            ? { ...lead, reviewStatus: 'confirmed' }
+            : lead,
+        ),
+      );
+    } else {
+      const data = (await response.json()) as { error?: string };
+      setAnalysisError(
+        data.error || 'Could not confirm this analysis. Please try again.',
+      );
+    }
   }
 
-  async function updateTask(task:TaskItem,command:'complete'|'cancel'|'reopen'|'schedule_reminder'|'clear_reminder') {
-    let reason='';let reminderAt:number|undefined;
-    if(command==='cancel'||command==='reopen'){reason=window.prompt(command==='cancel'?'Why is this commitment being cancelled?':'Why is this commitment being reopened?')?.trim()||'';if(!reason)return;}
-    if(command==='schedule_reminder')reminderAt=clockNow+24*60*60*1000;
-    const response=await apiFetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'update_task',id:task.id,version:task.version,command,reason,reminderAt})});const data=await response.json() as {task?:Partial<TaskItem>;error?:string};
-    if(!response.ok||!data.task){setNotice(data.error||'Could not update this task.');void loadWorkspace();return;}
-    setTasks((current)=>current.map((item)=>item.id===task.id?{...item,...data.task}:item));setNotice(command==='schedule_reminder'?'Reminder scheduled for tomorrow':command==='clear_reminder'?'Reminder cleared':command==='complete'?'Task completed':command==='cancel'?'Task cancelled':'Task reopened');setTimeout(()=>setNotice(''),2200);void loadWorkspace();
+  async function updateTask(
+    task: TaskItem,
+    command:
+      | 'complete'
+      | 'cancel'
+      | 'reopen'
+      | 'schedule_reminder'
+      | 'clear_reminder',
+  ) {
+    let reason = '';
+    let reminderAt: number | undefined;
+    if (command === 'cancel' || command === 'reopen') {
+      reason =
+        window
+          .prompt(
+            command === 'cancel'
+              ? 'Why is this commitment being cancelled?'
+              : 'Why is this commitment being reopened?',
+          )
+          ?.trim() || '';
+      if (!reason) return;
+    }
+    if (command === 'schedule_reminder')
+      reminderAt = clockNow + 24 * 60 * 60 * 1000;
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_task',
+        id: task.id,
+        version: task.version,
+        command,
+        reason,
+        reminderAt,
+      }),
+    });
+    const data = (await response.json()) as {
+      task?: Partial<TaskItem>;
+      error?: string;
+    };
+    if (!response.ok || !data.task) {
+      setNotice(data.error || 'Could not update this task.');
+      void loadWorkspace();
+      return;
+    }
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id ? { ...item, ...data.task } : item,
+      ),
+    );
+    setNotice(
+      command === 'schedule_reminder'
+        ? 'Reminder scheduled for tomorrow'
+        : command === 'clear_reminder'
+          ? 'Reminder cleared'
+          : command === 'complete'
+            ? 'Task completed'
+            : command === 'cancel'
+              ? 'Task cancelled'
+              : 'Task reopened',
+    );
+    setTimeout(() => setNotice(''), 2200);
+    void loadWorkspace();
   }
 
-  async function createMeeting(event:SyntheticEvent<HTMLFormElement>){
-    event.preventDefault();const form=event.currentTarget;const values=Object.fromEntries(new FormData(form).entries()) as Record<string,string>;const startValue=Date.parse(values.startsAt||'');const endValue=Date.parse(values.endsAt||'');if(!Number.isFinite(startValue)||!Number.isFinite(endValue)){setNotice('Choose valid meeting start and end times.');return;}const startsAt=new Date(startValue).toISOString();const endsAt=new Date(endValue).toISOString();const response=await apiFetch('/api/meetings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'create',...values,startsAt,endsAt})});const data=await response.json() as {meeting?:MeetingItem;error?:string};if(!response.ok||!data.meeting){setNotice(data.error||'Could not schedule the meeting.');return;}setMeetings((current)=>[data.meeting!,...current]);form.reset();setNotice('Meeting scheduled');
+  async function createMeeting(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries()) as Record<
+      string,
+      string
+    >;
+    const startValue = Date.parse(values.startsAt || '');
+    const endValue = Date.parse(values.endsAt || '');
+    if (!Number.isFinite(startValue) || !Number.isFinite(endValue)) {
+      setNotice('Choose valid meeting start and end times.');
+      return;
+    }
+    const startsAt = new Date(startValue).toISOString();
+    const endsAt = new Date(endValue).toISOString();
+    const response = await apiFetch('/api/meetings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'create', ...values, startsAt, endsAt }),
+    });
+    const data = (await response.json()) as {
+      meeting?: MeetingItem;
+      error?: string;
+    };
+    if (!response.ok || !data.meeting) {
+      setNotice(data.error || 'Could not schedule the meeting.');
+      return;
+    }
+    setMeetings((current) => [data.meeting!, ...current]);
+    form.reset();
+    setNotice('Meeting scheduled');
   }
 
-  async function transitionMeeting(meeting:MeetingItem,command:'complete'|'cancel'|'reopen'){
-    let reason='';if(command==='cancel'||command==='reopen'){reason=window.prompt(command==='cancel'?'Why is this meeting being cancelled?':'Why is this meeting being reopened?')?.trim()||'';if(!reason)return;}const response=await apiFetch('/api/meetings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'transition',id:meeting.id,version:meeting.version,command,reason})});const data=await response.json() as {meeting?:Partial<MeetingItem>;error?:string};if(!response.ok||!data.meeting){setNotice(data.error||'Could not update this meeting.');void loadMeetings();return;}setMeetings((current)=>current.map((item)=>item.id===meeting.id?{...item,...data.meeting}:item));setNotice(command==='complete'?'Meeting completed':command==='cancel'?'Meeting cancelled':'Meeting reopened');
+  async function transitionMeeting(
+    meeting: MeetingItem,
+    command: 'complete' | 'cancel' | 'reopen',
+  ) {
+    let reason = '';
+    if (command === 'cancel' || command === 'reopen') {
+      reason =
+        window
+          .prompt(
+            command === 'cancel'
+              ? 'Why is this meeting being cancelled?'
+              : 'Why is this meeting being reopened?',
+          )
+          ?.trim() || '';
+      if (!reason) return;
+    }
+    const response = await apiFetch('/api/meetings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'transition',
+        id: meeting.id,
+        version: meeting.version,
+        command,
+        reason,
+      }),
+    });
+    const data = (await response.json()) as {
+      meeting?: Partial<MeetingItem>;
+      error?: string;
+    };
+    if (!response.ok || !data.meeting) {
+      setNotice(data.error || 'Could not update this meeting.');
+      void loadMeetings();
+      return;
+    }
+    setMeetings((current) =>
+      current.map((item) =>
+        item.id === meeting.id ? { ...item, ...data.meeting } : item,
+      ),
+    );
+    setNotice(
+      command === 'complete'
+        ? 'Meeting completed'
+        : command === 'cancel'
+          ? 'Meeting cancelled'
+          : 'Meeting reopened',
+    );
   }
 
-  async function downloadMeeting(meeting:MeetingItem){const response=await apiFetch(`/api/meetings?id=${encodeURIComponent(meeting.id)}&format=ics`);if(!response.ok){setNotice('Calendar file is unavailable.');return;}const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`${meeting.title.replace(/[^a-z0-9]+/gi,'-')||'meeting'}.ics`;link.click();URL.revokeObjectURL(url);}
+  async function downloadMeeting(meeting: MeetingItem) {
+    const response = await apiFetch(
+      `/api/meetings?id=${encodeURIComponent(meeting.id)}&format=ics`,
+    );
+    if (!response.ok) {
+      setNotice('Calendar file is unavailable.');
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${meeting.title.replace(/[^a-z0-9]+/gi, '-') || 'meeting'}.ics`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function createOpportunity(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); const formData=new FormData(event.currentTarget);const payload = {...Object.fromEntries(formData.entries()),contactIds:formData.getAll('contactIds').map(String)};
-    const response = await apiFetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create_opportunity', ...payload }) });
-    const data = await response.json() as { opportunity?: Opportunity; error?: string };
-    if (!response.ok || !data.opportunity) { setNotice(data.error || 'Could not create opportunity'); return; }
-    setOpportunityOpen(false); setOpportunityLead(null); setNotice('Opportunity created'); setTimeout(() => setNotice(''), 1800); void loadWorkspace();
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      ...Object.fromEntries(formData.entries()),
+      contactIds: formData.getAll('contactIds').map(String),
+    };
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'create_opportunity', ...payload }),
+    });
+    const data = (await response.json()) as {
+      opportunity?: Opportunity;
+      error?: string;
+    };
+    if (!response.ok || !data.opportunity) {
+      setNotice(data.error || 'Could not create opportunity');
+      return;
+    }
+    setOpportunityOpen(false);
+    setOpportunityLead(null);
+    setNotice('Opportunity created');
+    setTimeout(() => setNotice(''), 1800);
+    void loadWorkspace();
   }
 
   async function saveSettings(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget).entries());
-    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_workspace', ...values }) });
-    const data = await response.json() as { workspace?: AppContext['workspace']; error?: string };
-    if (!response.ok || !data.workspace) { setNotice(data.error || 'Could not save settings'); return; }
-    setAppContext((current) => current ? { ...current, workspace: data.workspace! } : current); setNotice('Workspace settings saved'); setTimeout(() => setNotice(''), 1800); void loadSettings();
+    event.preventDefault();
+    const values = Object.fromEntries(
+      new FormData(event.currentTarget).entries(),
+    );
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'update_workspace', ...values }),
+    });
+    const data = (await response.json()) as {
+      workspace?: AppContext['workspace'];
+      error?: string;
+    };
+    if (!response.ok || !data.workspace) {
+      setNotice(data.error || 'Could not save settings');
+      return;
+    }
+    setAppContext((current) =>
+      current ? { ...current, workspace: data.workspace! } : current,
+    );
+    setNotice('Workspace settings saved');
+    setTimeout(() => setNotice(''), 1800);
+    void loadSettings();
   }
 
   async function inviteMember(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const values = Object.fromEntries(new FormData(form).entries());
-    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'invite', ...values }) });
-    const data = await response.json() as { invitation?: Invitation; error?: string };
-    if (!response.ok || !data.invitation) { setNotice(data.error || 'Could not create invitation'); return; }
-    form.reset(); setInvitations((current) => [data.invitation!, ...current]); setNotice('Invitation recorded'); setTimeout(() => setNotice(''), 1800); void loadSettings();
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'invite', ...values }),
+    });
+    const data = (await response.json()) as {
+      invitation?: Invitation;
+      error?: string;
+    };
+    if (!response.ok || !data.invitation) {
+      setNotice(data.error || 'Could not create invitation');
+      return;
+    }
+    form.reset();
+    setInvitations((current) => [data.invitation!, ...current]);
+    setNotice('Invitation recorded');
+    setTimeout(() => setNotice(''), 1800);
+    void loadSettings();
   }
 
   async function createWorkspace(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const values = Object.fromEntries(new FormData(form).entries());
-    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create_workspace', ...values }) });
-    const data = await response.json() as { workspace?: AppContext['workspace']; error?: string };
-    if (!response.ok || !data.workspace) { setNotice(data.error || 'Could not create workspace'); return; }
-    window.localStorage.setItem('revenue-workspace-id', data.workspace.id); window.localStorage.removeItem('revenue-event-id'); setActiveEventId(''); setEvents([]); form.reset(); setNotice('Workspace created'); await loadWorkspace(); await loadSettings(); await loadEvents();
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'create_workspace', ...values }),
+    });
+    const data = (await response.json()) as {
+      workspace?: AppContext['workspace'];
+      error?: string;
+    };
+    if (!response.ok || !data.workspace) {
+      setNotice(data.error || 'Could not create workspace');
+      return;
+    }
+    window.localStorage.setItem('revenue-workspace-id', data.workspace.id);
+    window.localStorage.removeItem('revenue-event-id');
+    setActiveEventId('');
+    setEvents([]);
+    form.reset();
+    setNotice('Workspace created');
+    await loadWorkspace();
+    await loadSettings();
+    await loadEvents();
   }
 
   async function switchWorkspace(id: string) {
-    window.localStorage.setItem('revenue-workspace-id', id); window.localStorage.removeItem('revenue-event-id'); setActiveEventId(''); setNotice('Workspace switched'); await loadWorkspace(); await loadSettings(); await loadEvents();
+    window.localStorage.setItem('revenue-workspace-id', id);
+    window.localStorage.removeItem('revenue-event-id');
+    setActiveEventId('');
+    setNotice('Workspace switched');
+    await loadWorkspace();
+    await loadSettings();
+    await loadEvents();
   }
 
   async function updateMember(id: string, role: string, status: string) {
-    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_member', id, role, status }) });
-    const data = await response.json() as { error?: string }; if (!response.ok) { setNotice(data.error || 'Could not update member'); return; }
-    setNotice('Member updated'); void loadSettings();
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'update_member', id, role, status }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update member');
+      return;
+    }
+    setNotice('Member updated');
+    void loadSettings();
   }
 
   async function revokeInvitation(id: string) {
-    const response = await apiFetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'revoke_invitation', id }) });
-    if (response.ok) { setNotice('Invitation revoked'); void loadSettings(); }
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'revoke_invitation', id }),
+    });
+    if (response.ok) {
+      setNotice('Invitation revoked');
+      void loadSettings();
+    }
   }
 
   async function exportWorkspace() {
-    const response = await apiFetch('/api/settings?export=1'); if (!response.ok) { setNotice('Export could not be prepared'); return; }
-    const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `${appContext?.workspace.slug || 'workspace'}-export.json`; link.click(); URL.revokeObjectURL(url); setNotice('Workspace export downloaded');
+    const response = await apiFetch('/api/settings?export=1');
+    if (!response.ok) {
+      setNotice('Export could not be prepared');
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${appContext?.workspace.slug || 'workspace'}-export.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setNotice('Workspace export downloaded');
   }
 
-  async function submitWorkspaceDeletion(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); const form=event.currentTarget; const values=Object.fromEntries(new FormData(form).entries()); const action=typeof values.action==='string'?values.action:'';
-    const response=await apiFetch('/api/settings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(values)}); const data=await response.json() as {error?:string;deletionRequest?:DeletionRequest};
-    if(!response.ok){setNotice(data.error||'Could not update workspace deletion');return;}
-    if(action==='execute_deletion'){window.localStorage.removeItem('revenue-workspace-id');window.localStorage.removeItem('revenue-event-id');window.location.reload();return;}
-    if(data.deletionRequest)setDeletionRequest(data.deletionRequest); form.reset(); setNotice('Workspace deletion scheduled with a seven-day recovery period');
+  async function submitWorkspaceDeletion(
+    event: SyntheticEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const action = typeof values.action === 'string' ? values.action : '';
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    const data = (await response.json()) as {
+      error?: string;
+      deletionRequest?: DeletionRequest;
+    };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update workspace deletion');
+      return;
+    }
+    if (action === 'execute_deletion') {
+      window.localStorage.removeItem('revenue-workspace-id');
+      window.localStorage.removeItem('revenue-event-id');
+      window.location.reload();
+      return;
+    }
+    if (data.deletionRequest) setDeletionRequest(data.deletionRequest);
+    form.reset();
+    setNotice('Workspace deletion scheduled with a seven-day recovery period');
   }
 
   async function cancelWorkspaceDeletion() {
-    const response=await apiFetch('/api/settings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'cancel_deletion'})}); const data=await response.json() as {error?:string};
-    if(!response.ok){setNotice(data.error||'Could not cancel deletion');return;} setDeletionRequest(null);setNotice('Workspace deletion canceled');
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'cancel_deletion' }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not cancel deletion');
+      return;
+    }
+    setDeletionRequest(null);
+    setNotice('Workspace deletion canceled');
   }
 
   async function submitKnowledge(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const values = Object.fromEntries(new FormData(form).entries());
-    const response = await apiFetch('/api/company-intelligence', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) }); const data = await response.json() as { error?: string };
-    if (!response.ok) { setNotice(data.error || 'Could not save company intelligence'); return; } form.reset(); setNotice('Company intelligence saved'); await loadKnowledge();
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const response = await apiFetch('/api/company-intelligence', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not save company intelligence');
+      return;
+    }
+    form.reset();
+    setNotice('Company intelligence saved');
+    await loadKnowledge();
   }
 
   async function uploadKnowledge(event: SyntheticEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0]; if (!file) return; const form = new FormData(); form.set('file', file);
-    const response = await apiFetch('/api/company-intelligence', { method: 'POST', body: form }); const data = await response.json() as { error?: string };
-    setNotice(response.ok ? 'Knowledge file stored securely' : data.error || 'Upload failed'); if (response.ok) await loadKnowledge(); event.currentTarget.value = '';
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.set('file', file);
+    const response = await apiFetch('/api/company-intelligence', {
+      method: 'POST',
+      body: form,
+    });
+    const data = (await response.json()) as { error?: string };
+    setNotice(
+      response.ok
+        ? 'Knowledge file stored securely'
+        : data.error || 'Upload failed',
+    );
+    if (response.ok) await loadKnowledge();
+    event.currentTarget.value = '';
   }
 
-  async function removeKnowledge(action: 'archive_product' | 'remove_icp' | 'archive_rule' | 'remove_source', id: string, label: string) {
-    if (!window.confirm(`Remove ${label}? This change cannot be undone.`)) return;
-    const response = await apiFetch('/api/company-intelligence', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, id }) }); const data = await response.json() as { error?: string };
-    setNotice(response.ok ? `${label} removed` : data.error || `Could not remove ${label}`); if (response.ok) await loadKnowledge();
+  async function removeKnowledge(
+    action: 'archive_product' | 'remove_icp' | 'archive_rule' | 'remove_source',
+    id: string,
+    label: string,
+  ) {
+    if (!window.confirm(`Remove ${label}? This change cannot be undone.`))
+      return;
+    const response = await apiFetch('/api/company-intelligence', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action, id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    setNotice(
+      response.ok
+        ? `${label} removed`
+        : data.error || `Could not remove ${label}`,
+    );
+    if (response.ok) await loadKnowledge();
   }
 
   async function submitEvent(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const formData = new FormData(form); const values = Object.fromEntries(formData.entries()); values.teamMemberIds = formData.getAll('teamMemberIds').map(String).join(',');
-    const response = await apiFetch('/api/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', ...values }) }); const data = await response.json() as { error?: string };
-    if (!response.ok) { setNotice(data.error || 'Could not create event'); return; } form.reset(); setNotice('Event created'); await loadEvents();
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const values = Object.fromEntries(formData.entries());
+    values.teamMemberIds = formData
+      .getAll('teamMemberIds')
+      .map(String)
+      .join(',');
+    const response = await apiFetch('/api/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'create', ...values }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not create event');
+      return;
+    }
+    form.reset();
+    setNotice('Event created');
+    await loadEvents();
   }
 
   async function eventAction(action: 'duplicate' | 'archive', id: string) {
-    const response = await apiFetch('/api/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, id }) });
-    const data = await response.json() as { error?: string };
-    if (response.ok) { if (action === 'archive' && activeEventId === id) selectEvent(''); setNotice(action === 'duplicate' ? 'Event duplicated' : 'Event archived'); await loadEvents(); }
-    else setNotice(data.error || `Could not ${action} event`);
+    const response = await apiFetch('/api/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action, id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (response.ok) {
+      if (action === 'archive' && activeEventId === id) selectEvent('');
+      setNotice(action === 'duplicate' ? 'Event duplicated' : 'Event archived');
+      await loadEvents();
+    } else setNotice(data.error || `Could not ${action} event`);
   }
 
-  async function submitRfq(event: SyntheticEvent<HTMLFormElement>) { event.preventDefault(); const form=event.currentTarget; const response=await apiFetch('/api/rfqs',{method:'POST',body:new FormData(form)}); const data=await response.json() as {error?:string}; if(!response.ok){setNotice(data.error||'Could not create RFQ');return;} form.reset();setNotice('RFQ intake created');await loadRfqs(); }
-  async function updateRfqStatus(id:string,status:string){const response=await apiFetch('/api/rfqs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'update_status',id,status})});if(response.ok){setNotice('RFQ status updated');await loadRfqs();}}
-  async function analyzeRfq(id: string) { setProcessingRfq(id); const response = await apiFetch('/api/rfqs/extract', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'analyze', rfqId: id }) }); const data = await response.json() as { error?: string }; setNotice(response.ok ? 'RFQ requirements extracted · confirm before use' : data.error || 'Could not extract RFQ'); setProcessingRfq(''); await loadRfqs(); }
-  async function confirmRfqExtraction(event: SyntheticEvent<HTMLFormElement>, item: RfqItem) { event.preventDefault(); if (!item.extractionId) return; const form = new FormData(event.currentTarget); const products = form.getAll('product').map(String); const quantities = form.getAll('quantity').map(String); const specifications = form.getAll('specifications').map(String); const deliveryEntry = form.get('deliveryLocation'); const deadlineEntry = form.get('submissionDeadline'); const reviewedExtraction = { deliveryLocation: typeof deliveryEntry === 'string' ? deliveryEntry : '', submissionDeadline: typeof deadlineEntry === 'string' ? deadlineEntry : '', items: products.map((product, index) => ({ product, quantity: quantities[index] || '', specifications: specifications[index] || '' })) }; setProcessingRfq(item.id); const response = await apiFetch('/api/rfqs/extract', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'confirm', rfqId: item.id, extractionId: item.extractionId, reviewedExtraction }) }); const data = await response.json() as { error?: string }; setNotice(response.ok ? 'Reviewed RFQ requirements confirmed' : data.error || 'Could not confirm RFQ extraction'); setProcessingRfq(''); await loadRfqs(); }
-  async function submitQuotation(event: SyntheticEvent<HTMLFormElement>) { event.preventDefault(); const form = event.currentTarget; const response = await apiFetch('/api/quotations', { method: 'POST', body: new FormData(form) }); const data = await response.json() as { error?: string }; if (!response.ok) { setNotice(data.error || 'Could not create quotation'); return; } form.reset(); setNotice('Quotation created'); await loadQuotations(); }
-  async function updateQuotationStatus(id: string, status: string) { const response = await apiFetch('/api/quotations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'update_status', id, status }) }); const data = await response.json() as { error?: string }; if (!response.ok) { setNotice(data.error || 'Could not update quotation'); return; } setNotice('Quotation status updated'); await loadQuotations(); }
-  async function downloadQuotation(item: Quotation) { const response = await apiFetch(`/api/quotations?download=${encodeURIComponent(item.id)}`); if (!response.ok) { setNotice('Quotation document is unavailable'); return; } const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = item.originalName || `${item.quoteNumber}.pdf`; link.click(); URL.revokeObjectURL(url); }
+  async function submitRfq(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const response = await apiFetch('/api/rfqs', {
+      method: 'POST',
+      body: new FormData(form),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not create RFQ');
+      return;
+    }
+    form.reset();
+    setNotice('RFQ intake created');
+    await loadRfqs();
+  }
+  async function updateRfqStatus(item: RfqItem, status: string) {
+    let note = '';
+    if (status === 'clarification')
+      note =
+        window
+          .prompt('What clarification is required from the customer?')
+          ?.trim() || '';
+    else if (
+      status === 'lost' ||
+      (['won', 'lost'].includes(item.status) && status !== item.status)
+    )
+      note =
+        window
+          .prompt(
+            status === 'lost'
+              ? 'Why was this RFQ lost?'
+              : 'Why is this closed RFQ changing?',
+          )
+          ?.trim() || '';
+    if (
+      (status === 'clarification' ||
+        status === 'lost' ||
+        (['won', 'lost'].includes(item.status) && status !== item.status)) &&
+      !note
+    ) {
+      setNotice('A reason is required for this RFQ change.');
+      return;
+    }
+    const response = await apiFetch('/api/rfqs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_status',
+        id: item.id,
+        status,
+        version: item.version,
+        note,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update RFQ status.');
+      await loadRfqs();
+      return;
+    }
+    setNotice('RFQ status updated with history');
+    await loadRfqs();
+  }
+  async function recordRfqSubmission(item: RfqItem) {
+    const note =
+      window
+        .prompt(
+          'What was submitted? Include the quotation or proposal reference.',
+        )
+        ?.trim() || '';
+    if (!note) return;
+    const response = await apiFetch('/api/rfqs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'record_submission',
+        id: item.id,
+        version: item.version,
+        note,
+      }),
+    });
+    const data = (await response.json()) as {
+      submissionVersion?: number;
+      error?: string;
+    };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not record this submission.');
+      await loadRfqs();
+      return;
+    }
+    setNotice(`RFQ submission v${data.submissionVersion} recorded`);
+    await loadRfqs();
+  }
+  async function analyzeRfq(id: string) {
+    setProcessingRfq(id);
+    const response = await apiFetch('/api/rfqs/extract', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'analyze', rfqId: id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    setNotice(
+      response.ok
+        ? 'RFQ requirements extracted · confirm before use'
+        : data.error || 'Could not extract RFQ',
+    );
+    setProcessingRfq('');
+    await loadRfqs();
+  }
+  async function confirmRfqExtraction(
+    event: SyntheticEvent<HTMLFormElement>,
+    item: RfqItem,
+  ) {
+    event.preventDefault();
+    if (!item.extractionId) return;
+    const form = new FormData(event.currentTarget);
+    const products = form.getAll('product').map(String);
+    const quantities = form.getAll('quantity').map(String);
+    const specifications = form.getAll('specifications').map(String);
+    const deliveryEntry = form.get('deliveryLocation');
+    const deadlineEntry = form.get('submissionDeadline');
+    const reviewedExtraction = {
+      deliveryLocation: typeof deliveryEntry === 'string' ? deliveryEntry : '',
+      submissionDeadline:
+        typeof deadlineEntry === 'string' ? deadlineEntry : '',
+      items: products.map((product, index) => ({
+        product,
+        quantity: quantities[index] || '',
+        specifications: specifications[index] || '',
+      })),
+    };
+    setProcessingRfq(item.id);
+    const response = await apiFetch('/api/rfqs/extract', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'confirm',
+        rfqId: item.id,
+        extractionId: item.extractionId,
+        reviewedExtraction,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    setNotice(
+      response.ok
+        ? 'Reviewed RFQ requirements confirmed'
+        : data.error || 'Could not confirm RFQ extraction',
+    );
+    setProcessingRfq('');
+    await loadRfqs();
+  }
+  async function submitQuotation(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const response = await apiFetch('/api/quotations', {
+      method: 'POST',
+      body: new FormData(form),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not create quotation');
+      return;
+    }
+    form.reset();
+    setNotice('Quotation created');
+    await loadQuotations();
+  }
+  async function updateQuotationStatus(id: string, status: string) {
+    const response = await apiFetch('/api/quotations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'update_status', id, status }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update quotation');
+      return;
+    }
+    setNotice('Quotation status updated');
+    await loadQuotations();
+  }
+  async function downloadQuotation(item: Quotation) {
+    const response = await apiFetch(
+      `/api/quotations?download=${encodeURIComponent(item.id)}`,
+    );
+    if (!response.ok) {
+      setNotice('Quotation document is unavailable');
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = item.originalName || `${item.quoteNumber}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   function selectEvent(id: string) {
-    if (id) window.localStorage.setItem('revenue-event-id', id); else window.localStorage.removeItem('revenue-event-id');
-    setActiveEventId(id); setNotice(id ? 'Active event changed' : 'Active event cleared'); void loadWorkspace();
+    if (id) window.localStorage.setItem('revenue-event-id', id);
+    else window.localStorage.removeItem('revenue-event-id');
+    setActiveEventId(id);
+    setNotice(id ? 'Active event changed' : 'Active event cleared');
+    void loadWorkspace();
   }
 
-  const activeEvent = events.find((item) => item.id === activeEventId && item.status !== 'archived');
-  const activeEventOpportunities = activeEvent ? opportunities.filter((item) => item.eventId === activeEvent.id) : opportunities;
-  const eventInvestment = activeEvent?.budget ?? events.filter((item) => item.status !== 'archived').reduce((sum, item) => sum + item.budget, 0);
-  const closedRevenue = activeEventOpportunities.filter((item) => item.stage === 'won').reduce((sum, item) => sum + item.value, 0);
+  const activeEvent = events.find(
+    (item) => item.id === activeEventId && item.status !== 'archived',
+  );
+  const activeEventOpportunities = activeEvent
+    ? opportunities.filter((item) => item.eventId === activeEvent.id)
+    : opportunities;
+  const eventInvestment =
+    activeEvent?.budget ??
+    events
+      .filter((item) => item.status !== 'archived')
+      .reduce((sum, item) => sum + item.budget, 0);
+  const closedRevenue = activeEventOpportunities
+    .filter((item) => item.stage === 'won')
+    .reduce((sum, item) => sum + item.value, 0);
 
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
-        <div className="brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Revenue OS</span></div>
-        <div className="workspace-switcher"><span className="workspace-logo">{appContext?.workspace.name.split(' ').map((word) => word[0]).join('').slice(0,2) || 'NA'}</span><span><strong>{appContext?.workspace.name || 'Nova Automation'}</strong><small>{appContext?.workspace.plan || 'Trial'} workspace</small></span><ChevronDown size={15} /></div>
+        <div className="brand">
+          <span className="brand-mark">
+            <Sparkles size={18} />
+          </span>
+          <span>Revenue OS</span>
+        </div>
+        <div className="workspace-switcher">
+          <span className="workspace-logo">
+            {appContext?.workspace.name
+              .split(' ')
+              .map((word) => word[0])
+              .join('')
+              .slice(0, 2) || 'NA'}
+          </span>
+          <span>
+            <strong>{appContext?.workspace.name || 'Nova Automation'}</strong>
+            <small>{appContext?.workspace.plan || 'Trial'} workspace</small>
+          </span>
+          <ChevronDown size={15} />
+        </div>
         <nav aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          <NavItem icon={LayoutDashboard} label="Today" active={activeView === 'today'} onClick={() => go('today')} />
-          <NavItem icon={Users} label="People & accounts" active={activeView === 'people'} onClick={() => go('people')} />
-          <NavItem icon={Target} label="Opportunities" active={activeView === 'opportunities'} onClick={() => go('opportunities')} />
-          <NavItem icon={FileText} label="RFQs & quotations" active={activeView === 'rfqs'} onClick={() => go('rfqs')} />
-          <NavItem icon={CalendarDays} label="Meetings" active={activeView === 'meetings'} onClick={() => go('meetings')} />
+          <NavItem
+            icon={LayoutDashboard}
+            label="Today"
+            active={activeView === 'today'}
+            onClick={() => go('today')}
+          />
+          <NavItem
+            icon={Users}
+            label="People & accounts"
+            active={activeView === 'people'}
+            onClick={() => go('people')}
+          />
+          <NavItem
+            icon={Target}
+            label="Opportunities"
+            active={activeView === 'opportunities'}
+            onClick={() => go('opportunities')}
+          />
+          <NavItem
+            icon={FileText}
+            label="RFQs & quotations"
+            active={activeView === 'rfqs'}
+            onClick={() => go('rfqs')}
+          />
+          <NavItem
+            icon={CalendarDays}
+            label="Meetings"
+            active={activeView === 'meetings'}
+            onClick={() => go('meetings')}
+          />
           <p className="nav-label nav-label-spaced">Manage</p>
-          <NavItem icon={CalendarDays} label="Events" active={activeView === 'events'} onClick={() => go('events')} />
-          <NavItem icon={BarChart3} label="Revenue & ROI" active={activeView === 'roi'} onClick={() => go('roi')} />
-          <NavItem icon={Building2} label="Company knowledge" active={activeView === 'knowledge'} onClick={() => go('knowledge')} />
-          <NavItem icon={Settings} label="Workspace settings" active={activeView === 'settings'} onClick={() => go('settings')} />
+          <NavItem
+            icon={CalendarDays}
+            label="Events"
+            active={activeView === 'events'}
+            onClick={() => go('events')}
+          />
+          <NavItem
+            icon={BarChart3}
+            label="Revenue & ROI"
+            active={activeView === 'roi'}
+            onClick={() => go('roi')}
+          />
+          <NavItem
+            icon={Building2}
+            label="Company knowledge"
+            active={activeView === 'knowledge'}
+            onClick={() => go('knowledge')}
+          />
+          <NavItem
+            icon={Settings}
+            label="Workspace settings"
+            active={activeView === 'settings'}
+            onClick={() => go('settings')}
+          />
         </nav>
         <div className="sidebar-foot">
-          {outboxCount ? <button type="button" className="sync-state sync-state-button sync-pending" onClick={() => void flushOutbox()} aria-label="Retry offline captures now"><Wifi size={15} /><span>{outboxCount} capture{outboxCount === 1 ? '' : 's'} waiting to sync · Retry now</span></button> : <div className="sync-state"><Wifi size={15} /><span>Online · All synced</span></div>}
-          <div className="profile-row"><span className="profile-avatar">{(appContext?.user.email || 'AS').slice(0,2).toUpperCase()}</span><span><strong>{appContext?.user.email || 'Local tester'}</strong><small>{appContext?.role || 'Loading role'}</small></span></div>
+          {outboxCount ? (
+            <button
+              type="button"
+              className="sync-state sync-state-button sync-pending"
+              onClick={() => void flushOutbox()}
+              aria-label="Retry offline captures now"
+            >
+              <Wifi size={15} />
+              <span>
+                {outboxCount} capture{outboxCount === 1 ? '' : 's'} waiting to
+                sync · Retry now
+              </span>
+            </button>
+          ) : (
+            <div className="sync-state">
+              <Wifi size={15} />
+              <span>Online · All synced</span>
+            </div>
+          )}
+          <div className="profile-row">
+            <span className="profile-avatar">
+              {(appContext?.user.email || 'AS').slice(0, 2).toUpperCase()}
+            </span>
+            <span>
+              <strong>{appContext?.user.email || 'Local tester'}</strong>
+              <small>{appContext?.role || 'Loading role'}</small>
+            </span>
+          </div>
         </div>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label="Toggle navigation"><Menu /></button>
-          <div className="event-context"><span className="live-dot" /> {activeEvent?.name || 'No active event'} <span>· {activeEvent ? `${activeEvent.venue || 'Venue pending'} · ${activeEvent.status}` : 'Select one in Events'}</span></div>
-          <div className="topbar-actions"><button className="search-button" aria-label="Search" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Search</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="Profile" onClick={() => { setNotice('Signed in as Arjun Singh'); setTimeout(() => setNotice(''), 1800); }}><CircleUserRound size={21} /></button></div>
+          <button
+            className="mobile-menu"
+            onClick={() => setMobileNav(!mobileNav)}
+            aria-label="Toggle navigation"
+          >
+            <Menu />
+          </button>
+          <div className="event-context">
+            <span className="live-dot" />{' '}
+            {activeEvent?.name || 'No active event'}{' '}
+            <span>
+              ·{' '}
+              {activeEvent
+                ? `${activeEvent.venue || 'Venue pending'} · ${activeEvent.status}`
+                : 'Select one in Events'}
+            </span>
+          </div>
+          <div className="topbar-actions">
+            <button
+              className="search-button"
+              aria-label="Search"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search size={17} />
+              <span>Search</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Profile"
+              onClick={() => {
+                setNotice('Signed in as Arjun Singh');
+                setTimeout(() => setNotice(''), 1800);
+              }}
+            >
+              <CircleUserRound size={21} />
+            </button>
+          </div>
         </header>
 
         <div className="content">
-          {activeView === 'today' ? <>
-          <section className="welcome-row">
-            <div><p className="eyebrow">{new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'long', timeZone: appContext?.workspace.timezone || 'UTC' }).format(new Date())}</p><h1>Good afternoon.</h1><p className="subtle">{metrics.openTasks ? `${metrics.openTasks} commitment${metrics.openTasks === 1 ? '' : 's'} ${metrics.openTasks === 1 ? 'needs' : 'need'} attention.` : 'No open commitments need attention.'}</p></div>
-            <Dialog open={captureOpen} onOpenChange={resetCapture}>
-              <DialogTrigger render={<Button className="capture-button" />}><Plus size={19} strokeWidth={2.4} /> Capture lead</DialogTrigger>
-              <DialogContent className="capture-dialog" showCloseButton={!saved}>
-                {!saved ? <>
-                  <DialogHeader><p className="dialog-kicker">{activeEvent?.name || 'Unassigned event'}</p><DialogTitle className="dialog-title">Capture a new conversation</DialogTitle><DialogDescription>Start with whatever the visitor gives you. Add the conversation immediately after.</DialogDescription></DialogHeader>
-                  <div className="capture-methods">
-                    <button type="button" onClick={() => cardInput.current?.click()}><Camera /><span><strong>Upload card</strong><small>Choose or photograph a visiting card</small></span></button>
-                    <button type="button" onClick={() => badgeInput.current?.click()}><QrCode /><span><strong>Upload badge</strong><small>Choose or photograph an event badge</small></span></button>
-                    <button type="button" onClick={() => qrInput.current?.click()}><QrCode /><span><strong>Upload QR</strong><small>Attach a visitor or campaign QR image</small></span></button>
-                    <button type="button" className={recording ? 'recording' : ''} onClick={toggleRecording}>{recording ? <Square /> : <Mic />}<span><strong>{recording ? 'Stop recording' : 'Record conversation'}</strong><small>{recording ? 'Recording from your microphone…' : 'Capture the context that matters'}</small></span></button>
-                    <input ref={cardInput} className="capture-file-input" type="file" accept="image/*" capture="environment" onInput={(event) => selectAttachment(event, 'card')} />
-                    <input ref={badgeInput} className="capture-file-input" type="file" accept="image/*" capture="environment" onInput={(event) => selectAttachment(event, 'badge')} />
-                    <input ref={qrInput} className="capture-file-input" type="file" accept="image/*" capture="environment" onInput={(event) => selectAttachment(event, 'qr')} />
-                  </div>
-                  {attachment ? <div className="attachment-preview">{attachment.kind === 'audio' ? <audio aria-label="Recorded conversation preview" controls src={attachment.url}><track kind="captions" label="Transcript unavailable" /></audio> :
-                    // oxlint-disable-next-line next/no-img-element -- Blob URLs are local previews and cannot use the image optimizer.
-                    <img src={attachment.url} alt={`${attachment.kind} preview`} />}<span><strong>{attachment.name}</strong><small>Attached for this local test · automatic reading comes with OCR</small></span></div> : null}
-                  <div className="or"><span>or enter the basics</span></div>
-                  <form ref={leadForm} onSubmit={saveLead} className="lead-form">
-                    <div className="field-grid"><div className="field-block"><label htmlFor="lead-name">Full name</label><Input id="lead-name" name="fullName" required={!attachment} placeholder={attachment ? 'Optional · extract from capture' : 'e.g. Rajesh Mehta'} /></div><div className="field-block"><label htmlFor="lead-company">Company</label><Input id="lead-company" name="company" required={!attachment} placeholder={attachment ? 'Optional · extract from capture' : 'e.g. ABC Pharma'} /></div></div>
-                    <div className="field-block"><label htmlFor="lead-role">Role</label><Input id="lead-role" name="role" placeholder="e.g. Procurement Head" /></div>
-                    <div className="field-grid"><div className="field-block"><label htmlFor="lead-email">Work email</label><Input id="lead-email" name="email" type="email" autoComplete="email" placeholder="rajesh@company.com" /></div><div className="field-block"><label htmlFor="lead-phone">Phone / WhatsApp</label><Input id="lead-phone" name="phone" type="tel" autoComplete="tel" placeholder="+91 98765 43210" /></div></div>
-                    <fieldset className="field-block"><legend>Follow-up permission</legend><label><input type="checkbox" name="emailConsent"/> Visitor clearly agreed to an email follow-up</label><label><input type="checkbox" name="whatsappConsent"/> Visitor clearly agreed to a WhatsApp follow-up</label><input type="hidden" name="consentSource" value="event_conversation_attestation"/><small className="field-help">Leave unchecked if permission was not clearly given. The system will block message drafting until it is recorded.</small></fieldset>
-                    <div className="field-block"><label htmlFor="lead-note">Conversation note</label><Textarea id="lead-note" name="note" placeholder="What did they need, what did you promise, and when?" /></div>
-                    <div className="field-grid"><div className="field-block"><label htmlFor="lead-action">Next action</label><Input id="lead-action" name="nextAction" placeholder="e.g. Send preliminary pricing" /></div><div className="field-block"><label htmlFor="lead-due">Due date</label><Input id="lead-due" name="dueDate" type="date" /></div></div>
-                    {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
-                    <Button type="submit" className="save-button" disabled={saving || !activeEvent}>{saving ? 'Saving securely…' : !activeEvent ? 'Create or select an event before capture' : 'Save conversation'} {!saving && activeEvent && <ArrowRight />}</Button>
-                    <p className="offline-note"><Wifi size={14} /> Offline-safe. Failed submissions stay on this device and retry when connection returns.</p>
-                  </form>
-                </> : <div className="success-state"><span className="success-icon"><Check /></span><p className="dialog-kicker">{savedLead?.reviewStatus === 'queued_offline' ? 'Saved on this device' : 'Lead saved'}</p><DialogTitle className="dialog-title">{savedLead?.fullName} is {savedLead?.reviewStatus === 'queued_offline' ? 'waiting to sync' : 'ready for review'}</DialogTitle><DialogDescription>{savedLead?.reviewStatus === 'queued_offline' ? 'Keep working. Revenue OS will retry this exact capture without creating duplicates when the connection returns.' : attachment ? 'The original file is stored securely and queued for extraction. No facts have been invented.' : 'The conversation is stored as source evidence. No facts have been invented.'}</DialogDescription><div className="saved-summary"><span><small>Account</small><strong>{savedLead?.company}</strong></span><span><small>Review</small><strong>{savedLead?.reviewStatus === 'queued_offline' ? 'Offline queue' : 'Needs review'}</strong></span>{savedLead?.nextAction ? <span><small>Commitment</small><strong>{savedLead.nextAction}</strong></span> : null}{savedLead?.dueDate ? <span><small>Due</small><strong>{savedLead.dueDate}</strong></span> : null}</div><Button className="save-button" onClick={() => resetCapture(false)}>Back to today</Button></div>}
-              </DialogContent>
-            </Dialog>
-            <Dialog open={Boolean(reviewLead)} onOpenChange={(open) => { if (!open) setReviewLead(null); }}>
-              <DialogContent className="review-dialog">
-                <DialogHeader><p className="dialog-kicker">Conversation intelligence</p><DialogTitle className="dialog-title">Review {reviewLead?.fullName}</DialogTitle><DialogDescription>AI suggestions remain separate from confirmed customer facts until you approve them.</DialogDescription></DialogHeader>
-                <div className="source-note"><span>Source conversation</span><p>{reviewLead?.note || 'No conversation note was captured.'}</p></div>
-                {reviewLead?.captureStatus ? <div className={`capture-status ${reviewLead.captureStatus}`}><span><strong>{reviewLead.captureKind?.toUpperCase()} capture</strong><small>{reviewLead.captureStatus === 'completed' ? 'Processed · verify the extracted details below' : reviewLead.captureStatus === 'failed' ? 'Processing failed · original retained' : 'Original stored · ready for processing'}</small></span><Button type="button" variant="outline" onClick={processCapture} disabled={extractingCapture || reviewLead.captureStatus === 'completed'}>{extractingCapture ? 'Processing…' : reviewLead.captureStatus === 'completed' ? 'Processed' : 'Extract details'}</Button></div> : null}
-                {reviewLead?.extractedJson ? (() => { try { const extracted = JSON.parse(reviewLead.extractedJson) as CaptureExtraction; return <div className="extraction-evidence"><strong>Machine-read suggestion · {Math.round(extracted.confidence * 100)}% confidence</strong>{extracted.warnings.length ? <span>{extracted.warnings.join(' · ')}</span> : <span>No extraction warnings. Human verification is still required.</span>}</div>; } catch { return null; } })() : null}
-                {reviewLead ? <form className="lead-form review-contact-form" onSubmit={saveLeadDetails}><h3>Verified contact details</h3><div className="field-grid"><div className="field-block"><label htmlFor="review-name">Full name</label><Input id="review-name" name="fullName" defaultValue={reviewLead.fullName === 'Unidentified visitor' ? '' : reviewLead.fullName} required /></div><div className="field-block"><label htmlFor="review-company">Company</label><Input id="review-company" name="company" defaultValue={reviewLead.company === 'Company pending' ? '' : reviewLead.company} required /></div></div><div className="field-grid"><Input name="role" aria-label="Verified role" defaultValue={reviewLead.role || ''} placeholder="Role" /><Input name="email" aria-label="Verified work email" type="email" defaultValue={reviewLead.email || ''} placeholder="Work email" /></div><Input name="phone" aria-label="Verified phone" type="tel" defaultValue={reviewLead.phone || ''} placeholder="Phone / WhatsApp" /><Button type="submit" variant="outline">Save verified details</Button><div className="field-grid"><div><small>Email permission: {reviewLead.emailConsentStatus||'not recorded'}</small><Button type="button" variant="outline" onClick={()=>setContactPermission('email',reviewLead.emailConsentStatus==='granted'?'withdrawn':'granted')}>{reviewLead.emailConsentStatus==='granted'?'Withdraw email permission':'Record email permission'}</Button></div><div><small>WhatsApp permission: {reviewLead.whatsappConsentStatus||'not recorded'}</small><Button type="button" variant="outline" onClick={()=>setContactPermission('whatsapp',reviewLead.whatsappConsentStatus==='granted'?'withdrawn':'granted')}>{reviewLead.whatsappConsentStatus==='granted'?'Withdraw WhatsApp permission':'Record WhatsApp permission'}</Button></div></div></form> : null}
-                {reviewLead?.duplicateLeadId ? <div className="ai-config-warning"><strong>Possible duplicate contact</strong><span>This may already exist as {reviewLead.duplicateLeadName} at {reviewLead.duplicateLeadCompany||reviewLead.company}. Review both records before merging.</span><Button type="button" variant="outline" onClick={()=>mergeDuplicateLead(reviewLead)} disabled={!['owner','admin','manager'].includes(appContext?.role||'')}>Merge into existing contact</Button></div> : null}
-                {reviewLead ? <form className="lead-form task-quick-add" onSubmit={updateQualification}><h3>Qualification · {reviewLead.qualificationState||'unqualified'}</h3><div className="field-grid"><select name="state" defaultValue={reviewLead.qualificationState||'unqualified'}><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option><option value="unqualified">Unqualified</option></select><Input name="reason" required defaultValue={reviewLead.qualificationReason||''} placeholder="Reason for this classification"/></div><Button type="submit" variant="outline">Record qualification</Button></form> : null}
-                {reviewLead&&['owner','admin','manager'].includes(appContext?.role||'') ? <form className="lead-form task-quick-add" onSubmit={assignLeadOwner}><h3>Lead owner · {reviewLead.ownerName||reviewLead.ownerId||'Unassigned'}</h3><div className="field-grid"><select name="ownerId" defaultValue={reviewLead.ownerId||''} required><option value="" disabled>Select owner</option>{members.filter((member)=>member.status==='active').map((member)=><option key={member.id} value={member.userId}>{member.displayName||member.email||member.role}</option>)}</select><Input name="reason" placeholder="Assignment reason" defaultValue="manager_assignment"/></div><Button type="submit" variant="outline">Assign owner</Button></form> : null}
-                <div className="stakeholder-control"><span><strong>Buying-committee role</strong><small>Link this person’s influence to the shared company account.</small></span><select aria-label="Buying-committee role" value={reviewLead?.buyingRole || 'unknown'} onChange={(event) => setStakeholderRole(event.target.value)}><option value="unknown">Not classified</option><option value="buyer">Buyer</option><option value="technical_evaluator">Technical evaluator</option><option value="internal_champion">Internal champion</option><option value="decision_maker">Decision-maker</option><option value="influencer">Influencer</option><option value="user">End user</option></select></div>
-                {reviewLead ? <form className="lead-form task-quick-add" onSubmit={createLeadTask}><h3>Add a commitment</h3><div className="field-grid"><Input name="title" required placeholder="Next action" aria-label="New commitment" /><Input name="dueDate" type="date" aria-label="Commitment due date" /></div><Button type="submit" variant="outline">Create task</Button></form> : null}
-                {reviewLead && ['owner','admin'].includes(appContext?.role || '') ? <button className="privacy-erase" type="button" onClick={eraseLead}><Trash2 /> Erase personal data</button> : null}
-                {!analysis ? <div className="analysis-empty"><span className="analysis-mark"><Sparkles /></span><h3>Turn this note into accountable sales data</h3><p>Extract requirements, buying signals, commitments, deadlines, and supporting evidence.</p>{analysisError ? <div className="ai-config-warning"><strong>AI analysis unavailable</strong><span>{analysisError}</span></div> : null}<Button onClick={analyzeConversation} disabled={analyzing || !reviewLead?.note}>{analyzing ? 'Analyzing evidence…' : 'Analyze conversation'} <Sparkles /></Button></div> : <div className="analysis-result">
-                  <div className="analysis-summary"><span className="analysis-score">{analysis.score.value}</span><div><small>AI qualification score · explainable</small><p>{analysis.summary}</p></div></div>
-                  <div className="intelligence-grid">{analysis.fields.filter((field) => field.value).map((field) => <article key={field.key}><span>{field.label}<i>{Math.round(field.confidence * 100)}%</i></span><strong>{field.value}</strong>{field.evidence ? <q>{field.evidence}</q> : null}</article>)}</div>
-                  {analysis.commitments.length ? <div className="commitments"><h3>Proposed commitments</h3>{analysis.commitments.map((item, index) => <article key={`${item.title}-${index}`}><Clock3 /><span><strong>{item.title}</strong><label><small>Confirmed deadline · {item.owner_party}</small><Input aria-label={`Deadline for ${item.title}`} type="date" value={item.due_date || ''} onChange={(event) => setAnalysis((current) => current ? { ...current, commitments: current.commitments.map((commitment, position) => position === index ? { ...commitment, due_date: event.target.value || null } : commitment) } : current)} required /></label><q>{item.evidence}</q></span></article>)}</div> : null}
-                  {analysis.risks.length ? <div className="risk-note"><strong>Needs attention</strong>{analysis.risks.join(' · ')}</div> : null}
-                  {analysisError ? <p className="form-error" role="alert">{analysisError}</p> : null}<Button className="save-button" onClick={confirmAnalysis} disabled={confirmed || analysis.commitments.some((item) => !item.due_date)}>{confirmed ? <><Check /> Confirmed and tasks created</> : analysis.commitments.some((item) => !item.due_date) ? 'Confirm commitment dates first' : 'Confirm facts and create tasks'}</Button>
-                </div>}
-                {(confirmed || reviewLead?.reviewStatus === 'confirmed') ? <section className="followup-composer"><div><span><h3>Personalized follow-up</h3><p>AI drafts from confirmed facts only. Any edit resets approval. Approval never sends the message.</p></span><div className="followup-buttons"><Button type="button" variant="outline" onClick={() => generateFollowup('email')} disabled={Boolean(drafting)}>{drafting === 'email' ? 'Drafting…' : 'Draft email'}</Button><Button type="button" variant="outline" onClick={() => generateFollowup('whatsapp')} disabled={Boolean(drafting)}>{drafting === 'whatsapp' ? 'Drafting…' : 'Draft WhatsApp'}</Button><Button type="button" onClick={() => { setOpportunityLead(reviewLead); setReviewLead(null); setOpportunityOpen(true); }}>Create opportunity</Button></div></div>{analysisError ? <p className="form-error" role="alert">{analysisError}</p> : null}{followups.map((draft)=><article key={draft.id}><span><b>{draft.channel}</b><small>To {draft.recipient} · {draft.status} · v{draft.version}</small></span><form className="lead-form" onSubmit={(event)=>editFollowup(event,draft)}>{draft.channel==='email'?<Input name="subject" defaultValue={draft.subject||''} aria-label="Follow-up subject"/>:<input type="hidden" name="subject" value=""/>}<Textarea name="message" defaultValue={draft.body} aria-label="Follow-up message" required/><div><Button type="submit" variant="outline">Save edits</Button><Button type="button" variant="outline" onClick={()=>navigator.clipboard.writeText(draft.body)}>Copy</Button>{draft.status==='approved'?<Button type="button" variant="outline" onClick={()=>openApprovedFollowup(draft)}>Open {draft.channel==='email'?'email':'WhatsApp'}</Button>:null}<Button type="button" onClick={()=>approveFollowup(draft)} disabled={draft.status!=='draft'}>{draft.status==='approved'?<><Check/> Approved</>:'Approve draft'}</Button></div></form></article>)}</section> : null}
-              </DialogContent>
-            </Dialog>
-          </section>
-
-          <section className="signal-grid" aria-label="Event performance">
-            <article className="signal-card primary-signal"><div className="signal-head"><span>Captured leads</span><span className="trend">Live</span></div><strong>{metrics.totalLeads}</strong><small>{metrics.qualifiedLeads} confirmed conversations</small><div className="spark-bars" aria-hidden="true">{[32,44,37,58,49,70,63,82,76,91].map((h,i)=><i key={i} style={{height:`${h}%`}} />)}</div></article>
-            <article className="signal-card"><div className="signal-head"><span>Open promises</span><span className="mini-icon amber"><Clock3 /></span></div><strong>{metrics.openTasks}</strong><small>Complete, remind or cancel with a recorded reason</small><div className="progress-track"><i style={{width: `${Math.min(100, metrics.openTasks * 12)}%`}} /></div></article>
-            <article className="signal-card"><div className="signal-head"><span>Event pipeline</span><span className="mini-icon blue"><Target /></span></div><strong>{money(metrics.pipelineValue, appContext?.workspace.currency)}</strong><small>Across {activeEventOpportunities.length} opportunit{activeEventOpportunities.length === 1 ? 'y' : 'ies'}</small><div className="pipeline-note"><span>{metrics.qualifiedLeads}</span> qualified leads</div></article>
-          </section>
-
-          <section className="main-grid">
-            <article className="panel action-panel">
-              <div className="panel-head"><div><p className="eyebrow">Next best action</p><h2>What needs attention</h2></div><button type="button" onClick={()=>setShowAllTasks((value)=>!value)}>{showAllTasks?'Show priority':'View all'} <ArrowRight /></button></div>
-              <div className="action-list">{tasks.filter((task)=>task.status==='open').length?tasks.filter((task)=>task.status==='open').slice(0,showAllTasks?tasks.length:5).map((task)=>{const due=dueStatus(task.dueDate,appContext?.workspace.timezone||'UTC');const reminderDue=Boolean(task.reminderAt&&task.reminderAt<=clockNow);return <article className="action-row task-row" key={task.id}><span className="initial-avatar">{task.fullName.split(' ').map((word)=>word[0]).join('').slice(0,2)}</span><span className="action-copy"><strong>{task.title}</strong><small>{task.fullName} · {task.company}{task.reminderAt?` · ${reminderDue?'Reminder due':`Reminder ${new Date(task.reminderAt).toLocaleString()}`}`:''}</small></span><span className={`due ${reminderDue?'urgent':due.tone}`}>{reminderDue?'Reminder due':due.label}</span><span className="task-actions"><Button type="button" variant="outline" onClick={()=>updateTask(task,'complete')}>Complete</Button>{task.reminderAt?<Button type="button" variant="outline" onClick={()=>updateTask(task,'clear_reminder')}>Clear reminder</Button>:<Button type="button" variant="outline" onClick={()=>updateTask(task,'schedule_reminder')}>Remind tomorrow</Button>}<Button type="button" variant="outline" onClick={()=>updateTask(task,'cancel')}>Cancel</Button></span></article>;}):<div className="empty-state">No open commitments. Capture a lead and add a next action.</div>}{tasks.some((task)=>task.status!=='open')?<details className="closed-tasks"><summary>Recently closed commitments</summary>{tasks.filter((task)=>task.status!=='open').slice(0,5).map((task)=><article key={task.id}><span><strong>{task.title}</strong><small>{task.fullName} · {task.status}{task.cancellationReason?` · ${task.cancellationReason}`:''}</small></span><Button type="button" variant="outline" onClick={()=>updateTask(task,'reopen')}>Reopen</Button></article>)}</details>:null}</div>
-            </article>
-            <article className="panel briefing-panel"><div className="ai-label"><Sparkles size={14}/> Workspace briefing</div><h2>{metrics.totalLeads ? `${metrics.totalLeads} conversations captured, with ${metrics.qualifiedLeads} confirmed.` : 'Capture the first conversation to start the briefing.'}</h2><p>{metrics.openTasks ? `${metrics.openTasks} customer commitment${metrics.openTasks === 1 ? '' : 's'} ${metrics.openTasks === 1 ? 'remains' : 'remain'} open. Prioritize dated tasks first.` : 'There are no open customer commitments. The briefing only reports current workspace data.'}</p><button onClick={() => go('people')}>Review accounts <ArrowRight /></button><div className="briefing-orb" aria-hidden="true"><span/><span/><span/></div></article>
-          </section>
-
-          <section className="panel leads-panel">
-            <div className="panel-head"><div><p className="eyebrow">Live from the booth</p><h2>Recent conversations</h2></div><button>See all leads <ArrowRight /></button></div>
-            <div className="lead-table" aria-label="Recent conversations">
-              <div className="lead-row lead-header"><span>Person</span><span>Interest</span><span>AI score</span><span>Captured</span></div>
-              {capturedLeads.map(lead=><button className="lead-row new-lead" key={lead.id} onClick={() => openReview(lead)}><span className="person-cell"><span className="initial-avatar small">{lead.fullName.split(' ').map(n=>n[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span></span><span>{lead.nextAction || 'Needs review'}</span><span>{typeof lead.score === 'number' ? <b className={`score ${lead.score >= 70 ? 'hot' : ''}`} title={lead.scoreRationale || 'Confirmed qualification score'}>{lead.score}</b> : <b className={`review-chip ${lead.reviewStatus === 'confirmed' ? 'confirmed' : ''}`}>{lead.reviewStatus === 'confirmed' ? 'Confirmed' : 'Review'}</b>}</span><span>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: appContext?.workspace.timezone || 'UTC' }).format(new Date(lead.createdAt))}</span></button>)}
-              {!capturedLeads.length ? <div className="empty-state">No conversations captured in this workspace yet.</div> : null}
-            </div>
-          </section>
-          </> : <section className="section-view">
-            <div className="section-title"><div><p className="eyebrow">Revenue workspace</p><h1>{activeView === 'people' ? 'People & accounts' : activeView === 'opportunities' ? 'Opportunities' : activeView === 'rfqs' ? 'RFQs & quotations' : activeView==='meetings'?'Meetings':activeView === 'events' ? 'Events' : activeView === 'roi' ? 'Revenue & ROI' : activeView === 'settings' ? 'Workspace settings' : 'Company knowledge'}</h1></div>{activeView === 'opportunities' ? <Button className="capture-button" onClick={() => { setOpportunityLead(null); setOpportunityOpen(true); }}><Plus /> New opportunity</Button> : null}</div>
-            {activeView === 'people' ? <div className="records-grid"><article className="panel records-panel"><h2>Accounts</h2>{accounts.length ? accounts.map((account) => <button key={account.id} className="record-row"><span className="initial-avatar">{account.company.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{account.company}</strong><small>{account.contacts} contact{account.contacts === 1 ? '' : 's'} · {account.stakeholders || 0} classified</small></span><ArrowRight /></button>) : <div className="empty-state">Capture a lead to create the first account.</div>}</article><article className="panel records-panel"><h2>Contacts</h2>{capturedLeads.length ? capturedLeads.map((lead) => <button key={lead.id} className="record-row" onClick={() => openReview(lead)}><span className="initial-avatar">{lead.fullName.split(' ').map((word) => word[0]).join('').slice(0,2)}</span><span><strong>{lead.fullName}</strong><small>{lead.role || 'Role not added'} · {lead.company}</small></span><b className="review-chip">{lead.buyingRole?.replaceAll('_',' ') || 'Classify'}</b></button>) : <div className="empty-state">No captured contacts yet.</div>}</article></div> : null}
-            {activeView === 'opportunities' ? <article className="panel data-panel">{opportunities.length ? <><div className="data-header"><span>Opportunity</span><span>Stage</span><span>Value</span><span>Probability</span></div>{opportunities.map((item) => <div className="data-row opportunity-row" key={item.id}><span><strong>{item.title}</strong><small>{item.company}</small><small>{item.contacts.length?item.contacts.map((contact)=>contact.fullName).join(' · '):'No stakeholders linked'}</small>{item.lossReason?<small className="form-error">Lost: {item.lossReason}</small>:null}<span className="opportunity-contact-actions">{item.contacts.map((contact)=><button type="button" key={contact.leadId} onClick={()=>changeOpportunityContact(item,contact.leadId,'remove')} title={`Remove ${contact.fullName}`}>{contact.fullName} ×</button>)}<select aria-label={`Add stakeholder to ${item.title}`} defaultValue="" onChange={(event)=>{if(event.target.value){void changeOpportunityContact(item,event.target.value,'add');event.target.value='';}}}><option value="">+ Add stakeholder</option>{capturedLeads.filter((lead)=>lead.company===item.company&&!item.contacts.some((contact)=>contact.leadId===lead.id)).map((lead)=><option key={lead.id} value={lead.id}>{lead.fullName} · {lead.buyingRole||lead.role||'Contact'}</option>)}</select></span></span><select className="stage-select" aria-label={`Stage for ${item.title}`} value={item.stage} onChange={(event) => updateOpportunityStage(item, event.target.value)}><option value="qualified">Qualified</option><option value="requirement">Requirement</option><option value="sample">Sample</option><option value="rfq">RFQ</option><option value="quotation">Quotation</option><option value="meeting">Meeting</option><option value="negotiation">Negotiation</option><option value="won">Won</option><option value="lost">Lost</option></select><button className="value-button" type="button" onClick={()=>changeOpportunityValue(item)} title="Update value with history">{money(item.value, item.currency)}</button><span>{item.probability}%</span></div>)}</> : <div className="empty-state large"><Target /><h2>No opportunities yet</h2><p>Convert a qualified conversation into your first pipeline record.</p><Button onClick={() => setOpportunityOpen(true)}>Create opportunity</Button></div>}</article> : null}
-            {activeView === 'rfqs' ? <div className="rfq-layout"><article className="panel rfq-intake"><div className="settings-heading"><FileText/><div><h2>Receive an RFQ</h2><p>Store the original document and create accountable response deadlines.</p></div></div><form className="lead-form" onSubmit={submitRfq}><input type="hidden" name="action" value="create"/><div className="field-grid"><div className="field-block"><label htmlFor="rfq-title">RFQ title</label><Input id="rfq-title" name="title" required placeholder="Machine monitoring rollout"/></div><div className="field-block"><label htmlFor="rfq-reference">Customer reference</label><Input id="rfq-reference" name="reference" placeholder="RFQ/2026/184"/></div></div><div className="field-grid"><div className="field-block"><label htmlFor="rfq-company">Requester company</label><Input id="rfq-company" name="requesterCompany" required placeholder="ABC Pharma"/></div><div className="field-block"><label htmlFor="rfq-contact">Contact</label><Input id="rfq-contact" name="contactName" placeholder="Rajesh Mehta"/></div></div><div className="field-grid"><div className="field-block"><label htmlFor="rfq-location">Delivery location</label><Input id="rfq-location" name="deliveryLocation" placeholder="Ahmedabad, Gujarat"/></div><div className="field-block"><label htmlFor="rfq-deadline">Submission deadline</label><Input id="rfq-deadline" name="submissionDeadline" type="date"/></div></div><div className="field-block"><label htmlFor="rfq-items">Requested items</label><Textarea id="rfq-items" name="items" placeholder={'One per line: Product | Quantity | Specification\nSensor gateway | 40 | IP65, SAP integration'}/><small className="field-help">Each line becomes a structured RFQ item with its original text retained as evidence.</small></div><label className="upload-control rfq-upload"><FileText/>Attach original RFQ<input name="document" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg"/></label><Button className="save-button" type="submit">Create RFQ workflow</Button></form></article><section className="rfq-list"><div className="event-list-heading"><div><h2>RFQ pipeline</h2><p>Earliest submission deadlines appear first.</p></div><b>{rfqs.length} total</b></div>{rfqs.length?rfqs.map((item)=><article className="panel rfq-record" key={item.id}><div><span><strong>{item.title}</strong><small>{item.requesterCompany}{item.reference?` · ${item.reference}`:''}</small></span><b className="stage-chip">{item.status.replaceAll('_',' ')}</b></div><div className="event-meta"><span><small>Deadline</small><strong>{item.submissionDeadline||'Not set'}</strong></span><span><small>Contents</small><strong>{item.itemCount} item{item.itemCount === 1 ? '' : 's'} · {item.documentCount} file{item.documentCount === 1 ? '' : 's'}</strong></span></div><p>{item.processingStatus==='stored_pending_extraction'?'Original stored securely · AI extraction pending configuration':'Manual structured intake'}</p><select aria-label={`Status for ${item.title}`} value={item.status} onChange={(event)=>updateRfqStatus(item.id,event.target.value)}><option value="received">Received</option><option value="reviewing">Reviewing</option><option value="clarification">Clarification needed</option><option value="ready_to_quote">Ready to quote</option><option value="quoted">Quoted</option><option value="won">Won</option><option value="lost">Lost</option></select></article>):<article className="panel empty-state large"><FileText/><h2>No RFQs received</h2><p>Upload the original request or enter structured requirements manually.</p></article>}</section></div> : null}
-            {activeView === 'rfqs' ? <section className="quotation-section"><div className="event-list-heading"><div><h2>Quotations</h2><p>Track the commercial document from draft through customer acceptance.</p></div><b>{quotations.length} total</b></div><div className="quotation-layout"><article className="panel rfq-intake"><form className="lead-form" onSubmit={submitQuotation}><input type="hidden" name="action" value="create"/><div className="field-grid"><div className="field-block"><label htmlFor="quote-number">Quotation number</label><Input id="quote-number" name="quoteNumber" required placeholder="Q-2026-001"/></div><div className="field-block"><label htmlFor="quote-customer">Customer</label><Input id="quote-customer" name="customer" required placeholder="ABC Pharma"/></div></div><div className="field-grid"><div className="field-block"><label htmlFor="quote-amount">Amount ({appContext?.workspace.currency || 'INR'})</label><Input id="quote-amount" name="amount" type="number" min="1" required/></div><div className="field-block"><label htmlFor="quote-valid">Valid until</label><Input id="quote-valid" name="validUntil" type="date"/></div></div><div className="field-grid"><div className="field-block"><label htmlFor="quote-rfq">Related RFQ</label><select id="quote-rfq" name="rfqId" defaultValue=""><option value="">No RFQ selected</option>{rfqs.map((item)=><option key={item.id} value={item.id}>{item.title}</option>)}</select></div><div className="field-block"><label htmlFor="quote-opportunity">Related opportunity</label><select id="quote-opportunity" name="opportunityId" defaultValue=""><option value="">No opportunity selected</option>{opportunities.map((item)=><option key={item.id} value={item.id}>{item.title} · {item.company}</option>)}</select></div></div><label className="upload-control rfq-upload"><FileText/>Attach PDF or DOCX<input name="document" type="file" accept=".pdf,.docx"/></label><Button type="submit" className="save-button">Create quotation</Button></form></article><div className="quotation-list">{quotations.length ? quotations.map((item)=><article className="panel quote-record" key={item.id}><div><span><strong>{item.quoteNumber}</strong><small>{item.customer}</small></span><strong>{money(item.amount,item.currency)}</strong></div><div><span>Valid until {item.validUntil || 'not set'}</span>{item.hasDocument ? <button type="button" onClick={()=>downloadQuotation(item)}>Download {item.originalName || 'document'}</button> : <span>No document attached</span>}</div><select aria-label={`Status for quotation ${item.quoteNumber}`} value={item.status} onChange={(event)=>updateQuotationStatus(item.id,event.target.value)}><option value="draft">Draft</option><option value="approved">Approved internally</option><option value="sent">Sent</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="expired">Expired</option></select></article>) : <article className="panel empty-state large"><FileText/><h2>No quotations yet</h2><p>Create the first commercial response and link it to an RFQ or opportunity.</p></article>}</div></div></section> : null}
-            {activeView === 'rfqs' && rfqs.some((item) => item.documentCount) ? <section className="rfq-extraction-section"><div className="event-list-heading"><div><h2>Document extraction</h2><p>Review and correct every machine-read requirement before confirmation.</p></div></div><div className="rfq-extraction-list">{rfqs.filter((item) => item.documentCount).map((item) => { const extracted = rfqExtraction(item.extractionJson); return <article className="panel rfq-extraction" key={item.id}><div><span><strong>{item.title}</strong><small>{item.requesterCompany}</small></span><b>{item.extractionStatus?.replaceAll('_', ' ') || 'not processed'}</b></div>{item.extractionStatus === 'completed' && extracted ? <form className="rfq-review-form" onSubmit={(event) => confirmRfqExtraction(event, item)}><p>{extracted.summary}</p><div className="field-grid"><div className="field-block"><label htmlFor={`rfq-location-${item.id}`}>Delivery location</label><Input id={`rfq-location-${item.id}`} name="deliveryLocation" defaultValue={extracted.deliveryLocation || ''} /></div><div className="field-block"><label htmlFor={`rfq-deadline-${item.id}`}>Submission deadline</label><Input id={`rfq-deadline-${item.id}`} name="submissionDeadline" type="date" defaultValue={extracted.submissionDeadline || ''} /></div></div>{extracted.items.map((line, index) => <fieldset key={`${line.product}-${index}`}><legend>Requirement {index + 1}</legend><Input name="product" required defaultValue={line.product} aria-label={`Product ${index + 1}`} /><Input name="quantity" defaultValue={line.quantity || ''} placeholder="Quantity" aria-label={`Quantity ${index + 1}`} /><Textarea name="specifications" defaultValue={line.specifications || ''} placeholder="Specifications" aria-label={`Specifications ${index + 1}`} /><small>Evidence: {line.evidence}</small></fieldset>)}{extracted.warnings.length ? <small>{extracted.warnings.join(' · ')}</small> : null}<Button type="submit" disabled={processingRfq === item.id}>{processingRfq === item.id ? 'Confirming…' : 'Confirm reviewed requirements'}</Button></form> : item.extractionStatus === 'confirmed' ? <p>Human-reviewed requirements are now part of the RFQ workflow.</p> : <Button type="button" variant="outline" onClick={() => analyzeRfq(item.id)} disabled={processingRfq === item.id}>{processingRfq === item.id ? 'Extracting…' : 'Extract requirements'}</Button>}</article>; })}</div></section> : null}
-            {activeView==='meetings'?<div className="meetings-layout"><article className="panel meeting-intake"><div className="settings-heading"><CalendarDays/><div><h2>Schedule a meeting</h2><p>Create an accountable calendar record without sending anything automatically.</p></div></div><form className="lead-form" onSubmit={createMeeting}><div className="field-block"><label htmlFor="meeting-title">Meeting title</label><Input id="meeting-title" name="title" required placeholder="Machine monitoring architecture review"/></div><div className="field-block"><label htmlFor="meeting-lead">Primary contact</label><select id="meeting-lead" name="leadId" defaultValue=""><option value="">No linked contact</option>{capturedLeads.filter((lead)=>lead.reviewStatus!=='erased').map((lead)=><option key={lead.id} value={lead.id}>{lead.fullName} · {lead.company}</option>)}</select></div><div className="field-grid"><div className="field-block"><label htmlFor="meeting-start">Starts</label><Input id="meeting-start" name="startsAt" type="datetime-local" required/></div><div className="field-block"><label htmlFor="meeting-end">Ends</label><Input id="meeting-end" name="endsAt" type="datetime-local" required/></div></div><div className="field-block"><label htmlFor="meeting-location">Location or call link</label><Input id="meeting-location" name="location" placeholder="Google Meet, booth, customer office…"/></div><div className="field-block"><label htmlFor="meeting-participants">Additional participant emails</label><Input id="meeting-participants" name="participantEmails" placeholder="it@customer.com, operations@customer.com"/><small className="field-help">The primary contact is included automatically when an email is available. No invitation is sent.</small></div><div className="field-block"><label htmlFor="meeting-agenda">Agenda</label><Textarea id="meeting-agenda" name="agenda" placeholder="Topics, required documents and intended decision"/></div><Button className="save-button" type="submit" disabled={!activeEventId}>Schedule meeting</Button>{!activeEventId?<p className="field-help">Select an active event before creating an unlinked meeting.</p>:null}</form></article><section className="meeting-list"><div className="event-list-heading"><div><h2>Meeting schedule</h2><p>Calendar files are generated on demand; the system does not claim an invitation was delivered.</p></div><b>{meetings.length} total</b></div>{meetings.length?meetings.map((meeting)=><article className="panel meeting-record" key={meeting.id}><div><span><strong>{meeting.title}</strong><small>{meeting.leadName?`${meeting.leadName}${meeting.company?` · ${meeting.company}`:''}`:'No primary contact'} · {meeting.participantCount} participant{meeting.participantCount===1?'':'s'}</small></span><b className={`event-status ${meeting.status}`}>{meeting.status}</b></div><div className="event-meta"><span><small>Starts</small><strong>{new Date(meeting.startsAt).toLocaleString()}</strong></span><span><small>Ends</small><strong>{new Date(meeting.endsAt).toLocaleString()}</strong></span></div>{meeting.location?<p>{meeting.location}</p>:null}{meeting.cancellationReason?<p className="form-error">Cancelled: {meeting.cancellationReason}</p>:null}<div className="event-actions"><Button type="button" variant="outline" onClick={()=>downloadMeeting(meeting)}>Download .ics</Button>{meeting.status==='scheduled'?<><button type="button" onClick={()=>transitionMeeting(meeting,'complete')}>Mark complete</button><button className="danger-link" type="button" onClick={()=>transitionMeeting(meeting,'cancel')}>Cancel</button></>:<button type="button" onClick={()=>transitionMeeting(meeting,'reopen')}>Reopen</button>}</div></article>):<article className="panel empty-state large"><CalendarDays/><h2>No meetings scheduled</h2><p>Create a meeting linked to an event and optionally a customer contact.</p></article>}</section></div>:null}
-            {activeView === 'events' ? <div className="events-layout">
-              <article className="panel event-builder"><div className="settings-heading"><CalendarDays /><div><h2>Prepare an event</h2><p>Configure the booth goal, qualification playbook, routing and follow-up standard before the team arrives.</p></div></div><form className="lead-form" onSubmit={submitEvent}>
-                <div className="field-grid"><div className="field-block"><label htmlFor="event-name">Event name</label><Input id="event-name" name="name" required placeholder="IndustrialTech Expo 2027" /></div><div className="field-block"><label htmlFor="event-venue">Venue</label><Input id="event-venue" name="venue" placeholder="Bombay Exhibition Centre" /></div></div>
-                <div className="event-three"><div className="field-block"><label htmlFor="event-hall">Hall</label><Input id="event-hall" name="hall" placeholder="2" /></div><div className="field-block"><label htmlFor="event-booth">Booth</label><Input id="event-booth" name="booth" placeholder="B-18" /></div><div className="field-block"><label htmlFor="event-zone">Timezone</label><Input id="event-zone" name="timezone" defaultValue={appContext?.workspace.timezone || 'Asia/Kolkata'} required /></div></div>
-                <div className="field-grid"><div className="field-block"><label htmlFor="event-start">Starts</label><Input id="event-start" name="startsOn" type="date" required /></div><div className="field-block"><label htmlFor="event-end">Ends</label><Input id="event-end" name="endsOn" type="date" required /></div></div>
-                <div className="field-block"><label htmlFor="event-objective-detail">Business objective</label><Textarea id="event-objective-detail" name="objective" placeholder="Book 30 qualified demos and create a measurable sales pipeline." /></div>
-                <div className="field-grid"><div className="field-block"><label htmlFor="event-products">Products or services</label><Input id="event-products" name="products" placeholder="MachineSight, Integration assessment" /></div><div className="field-block"><label htmlFor="event-targets">Target accounts</label><Input id="event-targets" name="targetAccounts" placeholder="ABC Pharma, Prime Polymers" /></div></div>
-                <div className="field-block"><label htmlFor="event-questions">Qualification questions</label><Textarea id="event-questions" name="qualificationQuestions" placeholder="How many machines?, Which ERP?, When does budget open? (comma separated)" /></div>
-                <div className="field-grid"><div className="field-block"><label htmlFor="event-budget">Event budget ({appContext?.workspace.currency || 'INR'})</label><Input id="event-budget" name="budget" type="number" min="0" defaultValue="0" /></div><div className="field-block"><label htmlFor="event-badge">Badge or QR provider</label><Input id="event-badge" name="badgeProvider" placeholder="Manual / provider name" /></div></div>
-                <div className="event-three"><div className="field-block"><label htmlFor="event-route">Lead owner</label><select id="event-route" name="leadRoutingRule" defaultValue="capturer"><option value="capturer">Person who captures</option><option value="round_robin">Round robin</option><option value="manager_review">Manager assigns</option></select></div><div className="field-block"><label htmlFor="event-sla">Follow-up SLA (hours)</label><Input id="event-sla" name="followupSlaHours" type="number" min="1" max="720" defaultValue="24" /></div><div className="field-block"><label htmlFor="event-target">Daily lead target</label><Input id="event-target" name="dailyLeadTarget" type="number" min="1" defaultValue="25" /></div></div>
-                <div className="field-block"><label htmlFor="event-team">Assigned team members</label><select id="event-team" name="teamMemberIds" multiple size={Math.min(4, Math.max(2, members.length))}>{members.filter((member) => member.status === 'active').map((member) => <option key={member.id} value={member.userId}>{member.displayName || member.email || 'Team member'} · {member.role}</option>)}</select><small className="field-help">Hold Ctrl or Command to select more than one person. The creator is assigned automatically; owners and admins retain workspace oversight.</small></div>
-                <Button className="save-button" type="submit" disabled={!['owner','admin','manager'].includes(appContext?.role || '')}>Create event workspace</Button>
-              </form></article>
-              <section className="event-list" aria-label="Configured events"><div className="event-list-heading"><div><h2>Configured events</h2><p>Select the event used for new lead captures.</p></div><b>{events.filter((item) => item.status !== 'archived').length} active</b></div>
-                {events.length ? events.map((item) => <article className={`panel event-record ${item.id === activeEventId ? 'selected' : ''} ${item.status === 'archived' ? 'archived' : ''}`} key={item.id}><div className="event-record-head"><span className="calendar-tile"><b>{new Date(`${item.startsOn}T00:00:00`).toLocaleDateString('en', { day: '2-digit' })}</b><small>{new Date(`${item.startsOn}T00:00:00`).toLocaleDateString('en', { month: 'short' })}</small></span><span><strong>{item.name}</strong><small>{item.venue || 'Venue pending'}{item.hall ? ` · Hall ${item.hall}` : ''}{item.booth ? ` · Booth ${item.booth}` : ''}</small></span><b className={`event-status ${item.status}`}>{item.status}</b></div><p>{item.objective || 'Business objective not added yet.'}</p><div className="event-meta"><span><small>Dates</small><strong>{item.startsOn} → {item.endsOn}</strong></span><span><small>Budget</small><strong>{appContext?.workspace.currency || 'INR'} {item.budget.toLocaleString()}</strong></span><span><small>Follow-up</small><strong>{item.followupSlaHours}h SLA</strong></span><span><small>QR campaign</small><strong>{item.qrCampaignCode || 'Pending'}</strong></span></div>{item.products.length ? <div className="event-tags">{item.products.map((product) => <span key={product}>{product}</span>)}</div> : null}<div className="event-actions">{item.status !== 'archived' ? <Button type="button" variant={item.id === activeEventId ? 'default' : 'outline'} onClick={() => selectEvent(item.id)}>{item.id === activeEventId ? <><Check /> Active event</> : 'Use for capture'}</Button> : null}<button type="button" onClick={() => eventAction('duplicate', item.id)}>Duplicate</button>{item.status !== 'archived' ? <button className="danger-link" type="button" onClick={() => eventAction('archive', item.id)}>Archive</button> : null}</div></article>) : <article className="panel empty-state large"><CalendarDays /><h2>No event configured</h2><p>Create the first event playbook. It stays in draft until selected for capture.</p></article>}
+          {activeView === 'today' ? (
+            <>
+              <section className="welcome-row">
+                <div>
+                  <p className="eyebrow">
+                    {new Intl.DateTimeFormat('en-US', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                      timeZone: appContext?.workspace.timezone || 'UTC',
+                    }).format(new Date())}
+                  </p>
+                  <h1>Good afternoon.</h1>
+                  <p className="subtle">
+                    {metrics.openTasks
+                      ? `${metrics.openTasks} commitment${metrics.openTasks === 1 ? '' : 's'} ${metrics.openTasks === 1 ? 'needs' : 'need'} attention.`
+                      : 'No open commitments need attention.'}
+                  </p>
+                </div>
+                <Dialog open={captureOpen} onOpenChange={resetCapture}>
+                  <DialogTrigger render={<Button className="capture-button" />}>
+                    <Plus size={19} strokeWidth={2.4} /> Capture lead
+                  </DialogTrigger>
+                  <DialogContent
+                    className="capture-dialog"
+                    showCloseButton={!saved}
+                  >
+                    {!saved ? (
+                      <>
+                        <DialogHeader>
+                          <p className="dialog-kicker">
+                            {activeEvent?.name || 'Unassigned event'}
+                          </p>
+                          <DialogTitle className="dialog-title">
+                            Capture a new conversation
+                          </DialogTitle>
+                          <DialogDescription>
+                            Start with whatever the visitor gives you. Add the
+                            conversation immediately after.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="capture-methods">
+                          <button
+                            type="button"
+                            onClick={() => cardInput.current?.click()}
+                          >
+                            <Camera />
+                            <span>
+                              <strong>Upload card</strong>
+                              <small>
+                                Choose or photograph a visiting card
+                              </small>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => badgeInput.current?.click()}
+                          >
+                            <QrCode />
+                            <span>
+                              <strong>Upload badge</strong>
+                              <small>Choose or photograph an event badge</small>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => qrInput.current?.click()}
+                          >
+                            <QrCode />
+                            <span>
+                              <strong>Upload QR</strong>
+                              <small>
+                                Attach a visitor or campaign QR image
+                              </small>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className={recording ? 'recording' : ''}
+                            onClick={toggleRecording}
+                          >
+                            {recording ? <Square /> : <Mic />}
+                            <span>
+                              <strong>
+                                {recording
+                                  ? 'Stop recording'
+                                  : 'Record conversation'}
+                              </strong>
+                              <small>
+                                {recording
+                                  ? 'Recording from your microphone…'
+                                  : 'Capture the context that matters'}
+                              </small>
+                            </span>
+                          </button>
+                          <input
+                            ref={cardInput}
+                            className="capture-file-input"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onInput={(event) => selectAttachment(event, 'card')}
+                          />
+                          <input
+                            ref={badgeInput}
+                            className="capture-file-input"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onInput={(event) =>
+                              selectAttachment(event, 'badge')
+                            }
+                          />
+                          <input
+                            ref={qrInput}
+                            className="capture-file-input"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onInput={(event) => selectAttachment(event, 'qr')}
+                          />
+                        </div>
+                        {attachment ? (
+                          <div className="attachment-preview">
+                            {attachment.kind === 'audio' ? (
+                              <audio
+                                aria-label="Recorded conversation preview"
+                                controls
+                                src={attachment.url}
+                              >
+                                <track
+                                  kind="captions"
+                                  label="Transcript unavailable"
+                                />
+                              </audio>
+                            ) : (
+                              // oxlint-disable-next-line next/no-img-element -- Blob URLs are local previews and cannot use the image optimizer.
+                              <img
+                                src={attachment.url}
+                                alt={`${attachment.kind} preview`}
+                              />
+                            )}
+                            <span>
+                              <strong>{attachment.name}</strong>
+                              <small>
+                                Attached for this local test · automatic reading
+                                comes with OCR
+                              </small>
+                            </span>
+                          </div>
+                        ) : null}
+                        <div className="or">
+                          <span>or enter the basics</span>
+                        </div>
+                        <form
+                          ref={leadForm}
+                          onSubmit={saveLead}
+                          className="lead-form"
+                        >
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="lead-name">Full name</label>
+                              <Input
+                                id="lead-name"
+                                name="fullName"
+                                required={!attachment}
+                                placeholder={
+                                  attachment
+                                    ? 'Optional · extract from capture'
+                                    : 'e.g. Rajesh Mehta'
+                                }
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="lead-company">Company</label>
+                              <Input
+                                id="lead-company"
+                                name="company"
+                                required={!attachment}
+                                placeholder={
+                                  attachment
+                                    ? 'Optional · extract from capture'
+                                    : 'e.g. ABC Pharma'
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="lead-role">Role</label>
+                            <Input
+                              id="lead-role"
+                              name="role"
+                              placeholder="e.g. Procurement Head"
+                            />
+                          </div>
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="lead-email">Work email</label>
+                              <Input
+                                id="lead-email"
+                                name="email"
+                                type="email"
+                                autoComplete="email"
+                                placeholder="rajesh@company.com"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="lead-phone">
+                                Phone / WhatsApp
+                              </label>
+                              <Input
+                                id="lead-phone"
+                                name="phone"
+                                type="tel"
+                                autoComplete="tel"
+                                placeholder="+91 98765 43210"
+                              />
+                            </div>
+                          </div>
+                          <fieldset className="field-block">
+                            <legend>Follow-up permission</legend>
+                            <label>
+                              <input type="checkbox" name="emailConsent" />{' '}
+                              Visitor clearly agreed to an email follow-up
+                            </label>
+                            <label>
+                              <input type="checkbox" name="whatsappConsent" />{' '}
+                              Visitor clearly agreed to a WhatsApp follow-up
+                            </label>
+                            <input
+                              type="hidden"
+                              name="consentSource"
+                              value="event_conversation_attestation"
+                            />
+                            <small className="field-help">
+                              Leave unchecked if permission was not clearly
+                              given. The system will block message drafting
+                              until it is recorded.
+                            </small>
+                          </fieldset>
+                          <div className="field-block">
+                            <label htmlFor="lead-note">Conversation note</label>
+                            <Textarea
+                              id="lead-note"
+                              name="note"
+                              placeholder="What did they need, what did you promise, and when?"
+                            />
+                          </div>
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="lead-action">Next action</label>
+                              <Input
+                                id="lead-action"
+                                name="nextAction"
+                                placeholder="e.g. Send preliminary pricing"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="lead-due">Due date</label>
+                              <Input id="lead-due" name="dueDate" type="date" />
+                            </div>
+                          </div>
+                          {saveError ? (
+                            <p className="form-error" role="alert">
+                              {saveError}
+                            </p>
+                          ) : null}
+                          <Button
+                            type="submit"
+                            className="save-button"
+                            disabled={saving || !activeEvent}
+                          >
+                            {saving
+                              ? 'Saving securely…'
+                              : !activeEvent
+                                ? 'Create or select an event before capture'
+                                : 'Save conversation'}{' '}
+                            {!saving && activeEvent && <ArrowRight />}
+                          </Button>
+                          <p className="offline-note">
+                            <Wifi size={14} /> Offline-safe. Failed submissions
+                            stay on this device and retry when connection
+                            returns.
+                          </p>
+                        </form>
+                      </>
+                    ) : (
+                      <div className="success-state">
+                        <span className="success-icon">
+                          <Check />
+                        </span>
+                        <p className="dialog-kicker">
+                          {savedLead?.reviewStatus === 'queued_offline'
+                            ? 'Saved on this device'
+                            : 'Lead saved'}
+                        </p>
+                        <DialogTitle className="dialog-title">
+                          {savedLead?.fullName} is{' '}
+                          {savedLead?.reviewStatus === 'queued_offline'
+                            ? 'waiting to sync'
+                            : 'ready for review'}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {savedLead?.reviewStatus === 'queued_offline'
+                            ? 'Keep working. Revenue OS will retry this exact capture without creating duplicates when the connection returns.'
+                            : attachment
+                              ? 'The original file is stored securely and queued for extraction. No facts have been invented.'
+                              : 'The conversation is stored as source evidence. No facts have been invented.'}
+                        </DialogDescription>
+                        <div className="saved-summary">
+                          <span>
+                            <small>Account</small>
+                            <strong>{savedLead?.company}</strong>
+                          </span>
+                          <span>
+                            <small>Review</small>
+                            <strong>
+                              {savedLead?.reviewStatus === 'queued_offline'
+                                ? 'Offline queue'
+                                : 'Needs review'}
+                            </strong>
+                          </span>
+                          {savedLead?.nextAction ? (
+                            <span>
+                              <small>Commitment</small>
+                              <strong>{savedLead.nextAction}</strong>
+                            </span>
+                          ) : null}
+                          {savedLead?.dueDate ? (
+                            <span>
+                              <small>Due</small>
+                              <strong>{savedLead.dueDate}</strong>
+                            </span>
+                          ) : null}
+                        </div>
+                        <Button
+                          className="save-button"
+                          onClick={() => resetCapture(false)}
+                        >
+                          Back to today
+                        </Button>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
+                <Dialog
+                  open={Boolean(reviewLead)}
+                  onOpenChange={(open) => {
+                    if (!open) setReviewLead(null);
+                  }}
+                >
+                  <DialogContent className="review-dialog">
+                    <DialogHeader>
+                      <p className="dialog-kicker">Conversation intelligence</p>
+                      <DialogTitle className="dialog-title">
+                        Review {reviewLead?.fullName}
+                      </DialogTitle>
+                      <DialogDescription>
+                        AI suggestions remain separate from confirmed customer
+                        facts until you approve them.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="source-note">
+                      <span>Source conversation</span>
+                      <p>
+                        {reviewLead?.note ||
+                          'No conversation note was captured.'}
+                      </p>
+                    </div>
+                    {reviewLead?.captureStatus ? (
+                      <div
+                        className={`capture-status ${reviewLead.captureStatus}`}
+                      >
+                        <span>
+                          <strong>
+                            {reviewLead.captureKind?.toUpperCase()} capture
+                          </strong>
+                          <small>
+                            {reviewLead.captureStatus === 'completed'
+                              ? 'Processed · verify the extracted details below'
+                              : reviewLead.captureStatus === 'failed'
+                                ? 'Processing failed · original retained'
+                                : 'Original stored · ready for processing'}
+                          </small>
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={processCapture}
+                          disabled={
+                            extractingCapture ||
+                            reviewLead.captureStatus === 'completed'
+                          }
+                        >
+                          {extractingCapture
+                            ? 'Processing…'
+                            : reviewLead.captureStatus === 'completed'
+                              ? 'Processed'
+                              : 'Extract details'}
+                        </Button>
+                      </div>
+                    ) : null}
+                    {reviewLead?.extractedJson
+                      ? (() => {
+                          try {
+                            const extracted = JSON.parse(
+                              reviewLead.extractedJson,
+                            ) as CaptureExtraction;
+                            return (
+                              <div className="extraction-evidence">
+                                <strong>
+                                  Machine-read suggestion ·{' '}
+                                  {Math.round(extracted.confidence * 100)}%
+                                  confidence
+                                </strong>
+                                {extracted.warnings.length ? (
+                                  <span>{extracted.warnings.join(' · ')}</span>
+                                ) : (
+                                  <span>
+                                    No extraction warnings. Human verification
+                                    is still required.
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          } catch {
+                            return null;
+                          }
+                        })()
+                      : null}
+                    {reviewLead ? (
+                      <form
+                        className="lead-form review-contact-form"
+                        onSubmit={saveLeadDetails}
+                      >
+                        <h3>Verified contact details</h3>
+                        <div className="field-grid">
+                          <div className="field-block">
+                            <label htmlFor="review-name">Full name</label>
+                            <Input
+                              id="review-name"
+                              name="fullName"
+                              defaultValue={
+                                reviewLead.fullName === 'Unidentified visitor'
+                                  ? ''
+                                  : reviewLead.fullName
+                              }
+                              required
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="review-company">Company</label>
+                            <Input
+                              id="review-company"
+                              name="company"
+                              defaultValue={
+                                reviewLead.company === 'Company pending'
+                                  ? ''
+                                  : reviewLead.company
+                              }
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="field-grid">
+                          <Input
+                            name="role"
+                            aria-label="Verified role"
+                            defaultValue={reviewLead.role || ''}
+                            placeholder="Role"
+                          />
+                          <Input
+                            name="email"
+                            aria-label="Verified work email"
+                            type="email"
+                            defaultValue={reviewLead.email || ''}
+                            placeholder="Work email"
+                          />
+                        </div>
+                        <Input
+                          name="phone"
+                          aria-label="Verified phone"
+                          type="tel"
+                          defaultValue={reviewLead.phone || ''}
+                          placeholder="Phone / WhatsApp"
+                        />
+                        <Button type="submit" variant="outline">
+                          Save verified details
+                        </Button>
+                        <div className="field-grid">
+                          <div>
+                            <small>
+                              Email permission:{' '}
+                              {reviewLead.emailConsentStatus || 'not recorded'}
+                            </small>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                setContactPermission(
+                                  'email',
+                                  reviewLead.emailConsentStatus === 'granted'
+                                    ? 'withdrawn'
+                                    : 'granted',
+                                )
+                              }
+                            >
+                              {reviewLead.emailConsentStatus === 'granted'
+                                ? 'Withdraw email permission'
+                                : 'Record email permission'}
+                            </Button>
+                          </div>
+                          <div>
+                            <small>
+                              WhatsApp permission:{' '}
+                              {reviewLead.whatsappConsentStatus ||
+                                'not recorded'}
+                            </small>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                setContactPermission(
+                                  'whatsapp',
+                                  reviewLead.whatsappConsentStatus === 'granted'
+                                    ? 'withdrawn'
+                                    : 'granted',
+                                )
+                              }
+                            >
+                              {reviewLead.whatsappConsentStatus === 'granted'
+                                ? 'Withdraw WhatsApp permission'
+                                : 'Record WhatsApp permission'}
+                            </Button>
+                          </div>
+                        </div>
+                      </form>
+                    ) : null}
+                    {reviewLead?.duplicateLeadId ? (
+                      <div className="ai-config-warning">
+                        <strong>Possible duplicate contact</strong>
+                        <span>
+                          This may already exist as{' '}
+                          {reviewLead.duplicateLeadName} at{' '}
+                          {reviewLead.duplicateLeadCompany ||
+                            reviewLead.company}
+                          . Review both records before merging.
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => mergeDuplicateLead(reviewLead)}
+                          disabled={
+                            !['owner', 'admin', 'manager'].includes(
+                              appContext?.role || '',
+                            )
+                          }
+                        >
+                          Merge into existing contact
+                        </Button>
+                      </div>
+                    ) : null}
+                    {reviewLead ? (
+                      <form
+                        className="lead-form task-quick-add"
+                        onSubmit={updateQualification}
+                      >
+                        <h3>
+                          Qualification ·{' '}
+                          {reviewLead.qualificationState || 'unqualified'}
+                        </h3>
+                        <div className="field-grid">
+                          <select
+                            name="state"
+                            defaultValue={
+                              reviewLead.qualificationState || 'unqualified'
+                            }
+                          >
+                            <option value="hot">Hot</option>
+                            <option value="warm">Warm</option>
+                            <option value="cold">Cold</option>
+                            <option value="unqualified">Unqualified</option>
+                          </select>
+                          <Input
+                            name="reason"
+                            required
+                            defaultValue={reviewLead.qualificationReason || ''}
+                            placeholder="Reason for this classification"
+                          />
+                        </div>
+                        <Button type="submit" variant="outline">
+                          Record qualification
+                        </Button>
+                      </form>
+                    ) : null}
+                    {reviewLead &&
+                    ['owner', 'admin', 'manager'].includes(
+                      appContext?.role || '',
+                    ) ? (
+                      <form
+                        className="lead-form task-quick-add"
+                        onSubmit={assignLeadOwner}
+                      >
+                        <h3>
+                          Lead owner ·{' '}
+                          {reviewLead.ownerName ||
+                            reviewLead.ownerId ||
+                            'Unassigned'}
+                        </h3>
+                        <div className="field-grid">
+                          <select
+                            name="ownerId"
+                            defaultValue={reviewLead.ownerId || ''}
+                            required
+                          >
+                            <option value="" disabled>
+                              Select owner
+                            </option>
+                            {members
+                              .filter((member) => member.status === 'active')
+                              .map((member) => (
+                                <option key={member.id} value={member.userId}>
+                                  {member.displayName ||
+                                    member.email ||
+                                    member.role}
+                                </option>
+                              ))}
+                          </select>
+                          <Input
+                            name="reason"
+                            placeholder="Assignment reason"
+                            defaultValue="manager_assignment"
+                          />
+                        </div>
+                        <Button type="submit" variant="outline">
+                          Assign owner
+                        </Button>
+                      </form>
+                    ) : null}
+                    <div className="stakeholder-control">
+                      <span>
+                        <strong>Buying-committee role</strong>
+                        <small>
+                          Link this person’s influence to the shared company
+                          account.
+                        </small>
+                      </span>
+                      <select
+                        aria-label="Buying-committee role"
+                        value={reviewLead?.buyingRole || 'unknown'}
+                        onChange={(event) =>
+                          setStakeholderRole(event.target.value)
+                        }
+                      >
+                        <option value="unknown">Not classified</option>
+                        <option value="buyer">Buyer</option>
+                        <option value="technical_evaluator">
+                          Technical evaluator
+                        </option>
+                        <option value="internal_champion">
+                          Internal champion
+                        </option>
+                        <option value="decision_maker">Decision-maker</option>
+                        <option value="influencer">Influencer</option>
+                        <option value="user">End user</option>
+                      </select>
+                    </div>
+                    {reviewLead ? (
+                      <form
+                        className="lead-form task-quick-add"
+                        onSubmit={createLeadTask}
+                      >
+                        <h3>Add a commitment</h3>
+                        <div className="field-grid">
+                          <Input
+                            name="title"
+                            required
+                            placeholder="Next action"
+                            aria-label="New commitment"
+                          />
+                          <Input
+                            name="dueDate"
+                            type="date"
+                            aria-label="Commitment due date"
+                          />
+                        </div>
+                        <Button type="submit" variant="outline">
+                          Create task
+                        </Button>
+                      </form>
+                    ) : null}
+                    {reviewLead &&
+                    ['owner', 'admin'].includes(appContext?.role || '') ? (
+                      <button
+                        className="privacy-erase"
+                        type="button"
+                        onClick={eraseLead}
+                      >
+                        <Trash2 /> Erase personal data
+                      </button>
+                    ) : null}
+                    {!analysis ? (
+                      <div className="analysis-empty">
+                        <span className="analysis-mark">
+                          <Sparkles />
+                        </span>
+                        <h3>Turn this note into accountable sales data</h3>
+                        <p>
+                          Extract requirements, buying signals, commitments,
+                          deadlines, and supporting evidence.
+                        </p>
+                        {analysisError ? (
+                          <div className="ai-config-warning">
+                            <strong>AI analysis unavailable</strong>
+                            <span>{analysisError}</span>
+                          </div>
+                        ) : null}
+                        <Button
+                          onClick={analyzeConversation}
+                          disabled={analyzing || !reviewLead?.note}
+                        >
+                          {analyzing
+                            ? 'Analyzing evidence…'
+                            : 'Analyze conversation'}{' '}
+                          <Sparkles />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="analysis-result">
+                        <div className="analysis-summary">
+                          <span className="analysis-score">
+                            {analysis.score.value}
+                          </span>
+                          <div>
+                            <small>AI qualification score · explainable</small>
+                            <p>{analysis.summary}</p>
+                          </div>
+                        </div>
+                        <div className="intelligence-grid">
+                          {analysis.fields
+                            .filter((field) => field.value)
+                            .map((field) => (
+                              <article key={field.key}>
+                                <span>
+                                  {field.label}
+                                  <i>{Math.round(field.confidence * 100)}%</i>
+                                </span>
+                                <strong>{field.value}</strong>
+                                {field.evidence ? (
+                                  <q>{field.evidence}</q>
+                                ) : null}
+                              </article>
+                            ))}
+                        </div>
+                        {analysis.commitments.length ? (
+                          <div className="commitments">
+                            <h3>Proposed commitments</h3>
+                            {analysis.commitments.map((item, index) => (
+                              <article key={`${item.title}-${index}`}>
+                                <Clock3 />
+                                <span>
+                                  <strong>{item.title}</strong>
+                                  <label>
+                                    <small>
+                                      Confirmed deadline · {item.owner_party}
+                                    </small>
+                                    <Input
+                                      aria-label={`Deadline for ${item.title}`}
+                                      type="date"
+                                      value={item.due_date || ''}
+                                      onChange={(event) =>
+                                        setAnalysis((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                commitments:
+                                                  current.commitments.map(
+                                                    (commitment, position) =>
+                                                      position === index
+                                                        ? {
+                                                            ...commitment,
+                                                            due_date:
+                                                              event.target
+                                                                .value || null,
+                                                          }
+                                                        : commitment,
+                                                  ),
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                      required
+                                    />
+                                  </label>
+                                  <q>{item.evidence}</q>
+                                </span>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+                        {analysis.risks.length ? (
+                          <div className="risk-note">
+                            <strong>Needs attention</strong>
+                            {analysis.risks.join(' · ')}
+                          </div>
+                        ) : null}
+                        {analysisError ? (
+                          <p className="form-error" role="alert">
+                            {analysisError}
+                          </p>
+                        ) : null}
+                        <Button
+                          className="save-button"
+                          onClick={confirmAnalysis}
+                          disabled={
+                            confirmed ||
+                            analysis.commitments.some((item) => !item.due_date)
+                          }
+                        >
+                          {confirmed ? (
+                            <>
+                              <Check /> Confirmed and tasks created
+                            </>
+                          ) : analysis.commitments.some(
+                              (item) => !item.due_date,
+                            ) ? (
+                            'Confirm commitment dates first'
+                          ) : (
+                            'Confirm facts and create tasks'
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                    {confirmed || reviewLead?.reviewStatus === 'confirmed' ? (
+                      <section className="followup-composer">
+                        <div>
+                          <span>
+                            <h3>Personalized follow-up</h3>
+                            <p>
+                              AI drafts from confirmed facts only. Any edit
+                              resets approval. Approval never sends the message.
+                            </p>
+                          </span>
+                          <div className="followup-buttons">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => generateFollowup('email')}
+                              disabled={Boolean(drafting)}
+                            >
+                              {drafting === 'email'
+                                ? 'Drafting…'
+                                : 'Draft email'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => generateFollowup('whatsapp')}
+                              disabled={Boolean(drafting)}
+                            >
+                              {drafting === 'whatsapp'
+                                ? 'Drafting…'
+                                : 'Draft WhatsApp'}
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                setOpportunityLead(reviewLead);
+                                setReviewLead(null);
+                                setOpportunityOpen(true);
+                              }}
+                            >
+                              Create opportunity
+                            </Button>
+                          </div>
+                        </div>
+                        {analysisError ? (
+                          <p className="form-error" role="alert">
+                            {analysisError}
+                          </p>
+                        ) : null}
+                        {followups.map((draft) => (
+                          <article key={draft.id}>
+                            <span>
+                              <b>{draft.channel}</b>
+                              <small>
+                                To {draft.recipient} · {draft.status} · v
+                                {draft.version}
+                              </small>
+                            </span>
+                            <form
+                              className="lead-form"
+                              onSubmit={(event) => editFollowup(event, draft)}
+                            >
+                              {draft.channel === 'email' ? (
+                                <Input
+                                  name="subject"
+                                  defaultValue={draft.subject || ''}
+                                  aria-label="Follow-up subject"
+                                />
+                              ) : (
+                                <input type="hidden" name="subject" value="" />
+                              )}
+                              <Textarea
+                                name="message"
+                                defaultValue={draft.body}
+                                aria-label="Follow-up message"
+                                required
+                              />
+                              <div>
+                                <Button type="submit" variant="outline">
+                                  Save edits
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() =>
+                                    navigator.clipboard.writeText(draft.body)
+                                  }
+                                >
+                                  Copy
+                                </Button>
+                                {draft.status === 'approved' ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => openApprovedFollowup(draft)}
+                                  >
+                                    Open{' '}
+                                    {draft.channel === 'email'
+                                      ? 'email'
+                                      : 'WhatsApp'}
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  onClick={() => approveFollowup(draft)}
+                                  disabled={draft.status !== 'draft'}
+                                >
+                                  {draft.status === 'approved' ? (
+                                    <>
+                                      <Check /> Approved
+                                    </>
+                                  ) : (
+                                    'Approve draft'
+                                  )}
+                                </Button>
+                              </div>
+                            </form>
+                          </article>
+                        ))}
+                      </section>
+                    ) : null}
+                  </DialogContent>
+                </Dialog>
               </section>
-            </div> : null}
-            {activeView === 'roi' ? <div className="roi-grid"><article className="panel roi-card"><small>Event investment</small><strong>{money(eventInvestment, appContext?.workspace.currency)}</strong><span>{activeEvent ? activeEvent.name : 'Available events'}</span></article><article className="panel roi-card"><small>Pipeline created</small><strong>{money(metrics.pipelineValue, appContext?.workspace.currency)}</strong><span>{activeEventOpportunities.length} attributed opportunities</span></article><article className="panel roi-card"><small>Closed revenue</small><strong>{money(closedRevenue, appContext?.workspace.currency)}</strong><span>{closedRevenue ? 'Won opportunities' : 'No closed opportunities yet'}</span></article><article className="panel roi-card"><small>Realized event ROI</small><strong>{eventInvestment ? `${(((closedRevenue - eventInvestment) / eventInvestment) * 100).toFixed(1)}%` : 'Not available'}</strong><span>{eventInvestment ? 'Based on closed revenue' : 'Add the event investment first'}</span></article></div> : null}
-            {activeView === 'knowledge' ? <div className="knowledge-layout">
-              <article className="panel onboarding-progress"><div><span>{[knowledge.profile, knowledge.products.length, knowledge.icps.length, knowledge.sources.length].filter(Boolean).length}<small>/4</small></span><div><h2>Company intelligence setup</h2><p>{knowledge.profile ? 'Profile saved. Add products, target customers and evidence.' : 'Start by explaining what the company sells and whom it serves.'}</p></div></div><div className="progress-track"><i style={{ width: `${[knowledge.profile, knowledge.products.length, knowledge.icps.length, knowledge.sources.length].filter(Boolean).length * 25}%` }} /></div></article>
-              <article className="panel knowledge-card"><h2>Business profile</h2><form className="lead-form" onSubmit={submitKnowledge}><input type="hidden" name="action" value="save_profile" /><div className="field-grid"><div className="field-block"><label htmlFor="company-legal-name">Company name</label><Input id="company-legal-name" name="legalName" defaultValue={knowledge.profile?.legalName || appContext?.workspace.name} required /></div><div className="field-block"><label htmlFor="company-website">Website</label><Input id="company-website" name="websiteUrl" type="url" defaultValue={knowledge.profile?.websiteUrl} placeholder="https://company.com" /></div></div><div className="field-block"><label htmlFor="company-description">What do you sell?</label><Textarea id="company-description" name="description" defaultValue={knowledge.profile?.description} placeholder="Describe the products, services and customer outcomes." /></div><div className="field-grid"><div className="field-block"><label htmlFor="target-industries">Target industries</label><Input id="target-industries" name="targetIndustries" defaultValue={knowledge.profile?.targetIndustries.join(', ')} placeholder="Pharma, Automotive, Food processing" /></div><div className="field-block"><label htmlFor="target-regions">Target geographies</label><Input id="target-regions" name="targetGeographies" defaultValue={knowledge.profile?.targetGeographies.join(', ')} placeholder="India, GCC, Southeast Asia" /></div></div><div className="field-block"><label htmlFor="event-objective">Primary event objective</label><Input id="event-objective" name="eventObjective" defaultValue={knowledge.profile?.eventObjective} placeholder="Book qualified demos with plant operators" /></div><Button className="save-button" type="submit">Save business profile</Button></form></article>
-              <article className="panel knowledge-card"><h2>Products and services</h2><form className="lead-form compact-form" onSubmit={submitKnowledge}><input type="hidden" name="action" value="add_product" /><div className="field-grid"><Input name="name" required placeholder="Product or service name" /><select name="kind" defaultValue="product"><option value="product">Product</option><option value="service">Service</option></select></div><Textarea name="description" placeholder="What it does and the outcome it creates" /><Input name="buyerRoles" placeholder="Buyer roles, comma separated" /><Input name="painPoints" placeholder="Pain points solved, comma separated" /><Button type="submit">Add offering</Button></form><div className="knowledge-records">{knowledge.products.map((item) => <div key={item.id}><span><strong>{item.name}</strong><small>{item.kind} · {item.buyerRoles.join(', ') || 'Buyer roles not added'}</small></span><b>{item.kind}</b><button className="record-remove" type="button" aria-label={`Remove ${item.name}`} onClick={() => removeKnowledge('archive_product', item.id, item.name)}><Trash2 /></button></div>)}</div></article>
-              <article className="panel knowledge-card"><h2>Ideal customer profile</h2><form className="lead-form compact-form" onSubmit={submitKnowledge}><input type="hidden" name="action" value="add_icp" /><Input name="name" required placeholder="e.g. Multi-site pharmaceutical plants" /><Input name="industries" placeholder="Industries, comma separated" /><Input name="companySizes" placeholder="Company sizes, e.g. 200–5,000 employees" /><Input name="geographies" placeholder="Target regions" /><Input name="buyerRoles" placeholder="Decision-maker roles" /><Textarea name="mustHaveSignals" placeholder="High-value signals, comma separated" /><Textarea name="disqualifiers" placeholder="Disqualifiers, comma separated" /><Button type="submit">Add ideal customer profile</Button></form><div className="knowledge-records">{knowledge.icps.map((item) => <div key={item.id}><span><strong>{item.name}</strong><small>{item.industries.join(', ') || 'Any industry'} · {item.buyerRoles.join(', ') || 'Roles not set'}</small></span><b>ICP</b><button className="record-remove" type="button" aria-label={`Remove ${item.name}`} onClick={() => removeKnowledge('remove_icp', item.id, item.name)}><Trash2 /></button></div>)}</div></article>
-              <article className="panel knowledge-card"><h2>Qualification rules</h2><form className="lead-form compact-form" onSubmit={submitKnowledge}><input type="hidden" name="action" value="add_rule" /><Input name="label" required placeholder="Rule label, e.g. Budget within 6 months" /><div className="field-grid"><select name="field" defaultValue="budget_timing"><option value="budget_timing">Budget timing</option><option value="authority">Authority</option><option value="requirement">Requirement</option><option value="company_size">Company size</option><option value="product_interest">Product interest</option><option value="existing_technology">Existing technology</option><option value="industry">Industry</option><option value="location">Location or geography</option><option value="quantity">Quantity or scale</option><option value="purchase_timeline">Purchase timeline</option></select><Input name="expectedValue" required placeholder="Expected value" /></div><Input name="weight" type="number" min="-100" max="100" defaultValue="20" /><Button type="submit">Add scoring rule</Button></form><div className="knowledge-records">{knowledge.rules.map((item) => <div key={item.id}><span><strong>{item.label}</strong><small>{item.field.replaceAll('_', ' ')} contains “{item.expectedValue}”</small></span><b className={item.weight < 0 ? 'negative' : ''}>{item.weight > 0 ? '+' : ''}{item.weight}</b><button className="record-remove" type="button" aria-label={`Remove ${item.label}`} onClick={() => removeKnowledge('archive_rule', item.id, item.label)}><Trash2 /></button></div>)}</div></article>
-              <article className="panel knowledge-card knowledge-sources"><h2>Knowledge sources</h2><p>Store approved evidence used to ground future AI answers.</p><div className="source-actions"><label className="upload-control"><FileText />Upload document<input type="file" accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg" onInput={uploadKnowledge} /></label><form onSubmit={submitKnowledge}><input type="hidden" name="action" value="add_url" /><Input name="sourceUrl" type="url" required placeholder="https://company.com/products" /><Button type="submit">Add website</Button></form></div><div className="knowledge-records">{knowledge.sources.map((item) => <div key={item.id}><span><strong>{item.name}</strong><small>{item.sourceType} · {item.status}{item.sizeBytes ? ` · ${Math.ceil(item.sizeBytes / 1024)} KB` : ''}</small></span><b>{item.sourceType}</b><button className="record-remove" type="button" aria-label={`Remove ${item.name}`} onClick={() => removeKnowledge('remove_source', item.id, item.name)}><Trash2 /></button></div>)}</div></article>
-            </div> : null}
-            {activeView === 'settings' ? <div className="settings-layout">
-              {leadMerges.length ? <article className="panel settings-card"><div className="settings-heading"><Users/><div><h2>Reversible contact merges</h2><p>Undo a merge if two visitors were combined incorrectly.</p></div></div><div className="knowledge-records">{leadMerges.map((merge)=><div key={merge.id}><span><strong>{merge.sourceName} → {merge.targetName}</strong><small>{new Date(merge.mergedAt).toLocaleString()}</small></span><Button type="button" variant="outline" onClick={()=>revertLeadMerge(merge.id)}>Undo merge</Button></div>)}</div></article> : null}
-              <article className="panel settings-card workspace-manager"><div className="settings-heading"><Building2 /><div><h2>Your workspaces</h2><p>Switch tenant context or create another trial workspace.</p></div></div><div className="workspace-list">{availableWorkspaces.map((workspace) => <button key={workspace.id} className={workspace.id === appContext?.workspace.id ? 'selected' : ''} onClick={() => switchWorkspace(workspace.id)}><span><strong>{workspace.name}</strong><small>{workspace.role} · {workspace.plan}</small></span>{workspace.id === appContext?.workspace.id ? <Check /> : <ArrowRight />}</button>)}</div><form className="invite-form" onSubmit={createWorkspace}><Input name="name" placeholder="New company workspace" required /><Input name="timezone" value={appContext?.workspace.timezone || 'Asia/Kolkata'} readOnly /><Button type="submit">Create</Button></form></article>
-              <article className="panel settings-card"><div className="settings-heading"><ShieldCheck /><div><h2>Workspace identity</h2><p>Tenant-specific defaults used by dates, reports and revenue.</p></div></div><form className="lead-form" onSubmit={saveSettings}><div className="field-block"><label htmlFor="workspace-name">Workspace name</label><Input id="workspace-name" name="name" key={appContext?.workspace.id} defaultValue={appContext?.workspace.name} required /></div><div className="field-grid"><div className="field-block"><label htmlFor="workspace-timezone">Timezone</label><Input id="workspace-timezone" name="timezone" defaultValue={appContext?.workspace.timezone} required /></div><div className="field-block"><label htmlFor="workspace-currency">Currency</label><Input id="workspace-currency" name="currency" defaultValue={appContext?.workspace.currency} maxLength={3} required /></div></div><div className="settings-actions"><Button className="save-button" type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Save workspace</Button><Button type="button" variant="outline" onClick={exportWorkspace}>Export data</Button></div></form></article>
-              <article className="panel settings-card"><div className="settings-heading"><BarChart3 /><div><h2>Plan & usage</h2><p>Transparent workspace usage for subscription planning.</p></div></div><div className="usage-grid"><span><small>Plan</small><strong>{appContext?.workspace.plan || 'trial'}</strong></span><span><small>Contacts</small><strong>{workspaceUsage.leads}</strong></span><span><small>Active events</small><strong>{workspaceUsage.activeEvents}</strong></span><span><small>Members</small><strong>{workspaceUsage.activeMembers}{appContext?.workspace.plan === 'trial' ? ' / 3' : ''}</strong></span><span><small>Knowledge</small><strong>{workspaceUsage.knowledgeSources}</strong></span><span><small>Stored files</small><strong>{workspaceUsage.storageBytes < 1048576 ? `${Math.ceil(workspaceUsage.storageBytes / 1024)} KB` : `${(workspaceUsage.storageBytes / 1048576).toFixed(1)} MB`}</strong></span></div><p className="field-help">Billing checkout is intentionally not activated until a payment provider, pricing, taxes, and legal terms are approved.</p></article>
-              <article className={`panel settings-card capability-card ${capabilities.aiConfigured ? 'ready' : 'attention'}`}><div className="settings-heading"><Sparkles /><div><h2>AI capability</h2><p>{capabilities.aiConfigured ? 'OCR, transcription, conversation analysis, RFQ extraction and follow-up drafting are configured.' : 'Manual workflows are ready. AI workflows need a production API key before client testing.'}</p></div></div><span className="capability-state"><i />{capabilities.aiConfigured ? 'Configured' : 'Configuration required'}</span></article>
-              <article className="panel settings-card"><div className="settings-heading"><UserPlus /><div><h2>Invite a teammate</h2><p>Invitations expire after seven days. Trial limit: three active members.</p></div></div><form className="invite-form" onSubmit={inviteMember}><Input name="email" type="email" placeholder="teammate@company.com" required /><select name="role" defaultValue="salesperson"><option value="admin">Administrator</option><option value="manager">Manager</option><option value="salesperson">Salesperson</option><option value="marketing">Marketing</option><option value="viewer">Viewer</option></select><Button type="submit" disabled={!['owner','admin'].includes(appContext?.role || '')}>Invite</Button></form><div className="member-list"><h3>Members</h3>{members.map((member) => <div key={member.id}><span className="profile-avatar">{(member.email || member.displayName || 'TM').slice(0,2).toUpperCase()}</span><span><strong>{member.displayName || member.email || 'Team member'}</strong><small>{member.email || member.role}</small></span>{member.role === 'owner' || !['owner','admin'].includes(appContext?.role || '') ? <b>{member.role}</b> : <span className="member-controls"><select aria-label={`Role for ${member.email || member.displayName || 'member'}`} value={member.role} onChange={(event) => updateMember(member.id, event.target.value, member.status)}><option value="admin">Admin</option><option value="manager">Manager</option><option value="salesperson">Sales</option><option value="marketing">Marketing</option><option value="viewer">Viewer</option></select><button onClick={() => updateMember(member.id, member.role, member.status === 'active' ? 'inactive' : 'active')} type="button">{member.status === 'active' ? 'Deactivate' : 'Activate'}</button></span>}</div>)}{invitations.map((invite) => <div key={invite.id} className="pending-member"><span className="profile-avatar">?</span><span><strong>{invite.email}</strong><small>Invitation pending · {invite.role}</small></span><button type="button" onClick={() => revokeInvitation(invite.id)}>Revoke</button></div>)}</div></article>
-              {appContext?.role === 'owner' ? <article className="panel settings-card"><div className="settings-heading"><Trash2 /><div><h2>Workspace deletion</h2><p>{deletionRequest ? `Scheduled for ${new Date(deletionRequest.scheduledFor).toLocaleString()}. You can cancel until that time.` : 'Schedule permanent deletion with a seven-day recovery period.'}</p></div></div><form className="lead-form" onSubmit={submitWorkspaceDeletion}><div className="field-block"><label htmlFor="delete-workspace-name">Type the exact workspace name to confirm</label><Input id="delete-workspace-name" name="confirmName" required placeholder={appContext.workspace.name}/></div>{deletionRequest ? <div className="settings-actions"><Button type="submit" name="action" value="execute_deletion" disabled={settingsLoadedAt<deletionRequest.scheduledFor}>Permanently delete workspace</Button><Button type="button" variant="outline" onClick={cancelWorkspaceDeletion}>Cancel deletion</Button></div> : <Button type="submit" name="action" value="request_deletion" variant="outline">Schedule deletion</Button>}</form></article> : null}
-              <article className="panel settings-card audit-card"><div className="settings-heading"><FileText /><div><h2>Recent security activity</h2><p>Important workspace actions are permanently attributed.</p></div></div>{auditEvents.length ? auditEvents.map((item) => <div className="audit-row" key={item.id}><span>{item.action.replaceAll('.', ' ')}</span><small>{item.entityType} · {new Date(item.createdAt).toLocaleString()}</small></div>) : <div className="empty-state">No recorded workspace changes yet.</div>}</article>
-            </div> : null}
-          </section>}
+
+              <section className="signal-grid" aria-label="Event performance">
+                <article className="signal-card primary-signal">
+                  <div className="signal-head">
+                    <span>Captured leads</span>
+                    <span className="trend">Live</span>
+                  </div>
+                  <strong>{metrics.totalLeads}</strong>
+                  <small>
+                    {metrics.qualifiedLeads} confirmed conversations
+                  </small>
+                  <div className="spark-bars" aria-hidden="true">
+                    {[32, 44, 37, 58, 49, 70, 63, 82, 76, 91].map((h, i) => (
+                      <i key={i} style={{ height: `${h}%` }} />
+                    ))}
+                  </div>
+                </article>
+                <article className="signal-card">
+                  <div className="signal-head">
+                    <span>Open promises</span>
+                    <span className="mini-icon amber">
+                      <Clock3 />
+                    </span>
+                  </div>
+                  <strong>{metrics.openTasks}</strong>
+                  <small>
+                    Complete, remind or cancel with a recorded reason
+                  </small>
+                  <div className="progress-track">
+                    <i
+                      style={{
+                        width: `${Math.min(100, metrics.openTasks * 12)}%`,
+                      }}
+                    />
+                  </div>
+                </article>
+                <article className="signal-card">
+                  <div className="signal-head">
+                    <span>Event pipeline</span>
+                    <span className="mini-icon blue">
+                      <Target />
+                    </span>
+                  </div>
+                  <strong>
+                    {money(
+                      metrics.pipelineValue,
+                      appContext?.workspace.currency,
+                    )}
+                  </strong>
+                  <small>
+                    Across {activeEventOpportunities.length} opportunit
+                    {activeEventOpportunities.length === 1 ? 'y' : 'ies'}
+                  </small>
+                  <div className="pipeline-note">
+                    <span>{metrics.qualifiedLeads}</span> qualified leads
+                  </div>
+                </article>
+              </section>
+
+              <section className="main-grid">
+                <article className="panel action-panel">
+                  <div className="panel-head">
+                    <div>
+                      <p className="eyebrow">Next best action</p>
+                      <h2>What needs attention</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAllTasks((value) => !value)}
+                    >
+                      {showAllTasks ? 'Show priority' : 'View all'}{' '}
+                      <ArrowRight />
+                    </button>
+                  </div>
+                  <div className="action-list">
+                    {tasks.filter((task) => task.status === 'open').length ? (
+                      tasks
+                        .filter((task) => task.status === 'open')
+                        .slice(0, showAllTasks ? tasks.length : 5)
+                        .map((task) => {
+                          const due = dueStatus(
+                            task.dueDate,
+                            appContext?.workspace.timezone || 'UTC',
+                          );
+                          const reminderDue = Boolean(
+                            task.reminderAt && task.reminderAt <= clockNow,
+                          );
+                          return (
+                            <article
+                              className="action-row task-row"
+                              key={task.id}
+                            >
+                              <span className="initial-avatar">
+                                {task.fullName
+                                  .split(' ')
+                                  .map((word) => word[0])
+                                  .join('')
+                                  .slice(0, 2)}
+                              </span>
+                              <span className="action-copy">
+                                <strong>{task.title}</strong>
+                                <small>
+                                  {task.fullName} · {task.company}
+                                  {task.reminderAt
+                                    ? ` · ${reminderDue ? 'Reminder due' : `Reminder ${new Date(task.reminderAt).toLocaleString()}`}`
+                                    : ''}
+                                </small>
+                              </span>
+                              <span
+                                className={`due ${reminderDue ? 'urgent' : due.tone}`}
+                              >
+                                {reminderDue ? 'Reminder due' : due.label}
+                              </span>
+                              <span className="task-actions">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => updateTask(task, 'complete')}
+                                >
+                                  Complete
+                                </Button>
+                                {task.reminderAt ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      updateTask(task, 'clear_reminder')
+                                    }
+                                  >
+                                    Clear reminder
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      updateTask(task, 'schedule_reminder')
+                                    }
+                                  >
+                                    Remind tomorrow
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => updateTask(task, 'cancel')}
+                                >
+                                  Cancel
+                                </Button>
+                              </span>
+                            </article>
+                          );
+                        })
+                    ) : (
+                      <div className="empty-state">
+                        No open commitments. Capture a lead and add a next
+                        action.
+                      </div>
+                    )}
+                    {tasks.some((task) => task.status !== 'open') ? (
+                      <details className="closed-tasks">
+                        <summary>Recently closed commitments</summary>
+                        {tasks
+                          .filter((task) => task.status !== 'open')
+                          .slice(0, 5)
+                          .map((task) => (
+                            <article key={task.id}>
+                              <span>
+                                <strong>{task.title}</strong>
+                                <small>
+                                  {task.fullName} · {task.status}
+                                  {task.cancellationReason
+                                    ? ` · ${task.cancellationReason}`
+                                    : ''}
+                                </small>
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => updateTask(task, 'reopen')}
+                              >
+                                Reopen
+                              </Button>
+                            </article>
+                          ))}
+                      </details>
+                    ) : null}
+                  </div>
+                </article>
+                <article className="panel briefing-panel">
+                  <div className="ai-label">
+                    <Sparkles size={14} /> Workspace briefing
+                  </div>
+                  <h2>
+                    {metrics.totalLeads
+                      ? `${metrics.totalLeads} conversations captured, with ${metrics.qualifiedLeads} confirmed.`
+                      : 'Capture the first conversation to start the briefing.'}
+                  </h2>
+                  <p>
+                    {metrics.openTasks
+                      ? `${metrics.openTasks} customer commitment${metrics.openTasks === 1 ? '' : 's'} ${metrics.openTasks === 1 ? 'remains' : 'remain'} open. Prioritize dated tasks first.`
+                      : 'There are no open customer commitments. The briefing only reports current workspace data.'}
+                  </p>
+                  <button onClick={() => go('people')}>
+                    Review accounts <ArrowRight />
+                  </button>
+                  <div className="briefing-orb" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </article>
+              </section>
+
+              <section className="panel leads-panel">
+                <div className="panel-head">
+                  <div>
+                    <p className="eyebrow">Live from the booth</p>
+                    <h2>Recent conversations</h2>
+                  </div>
+                  <button>
+                    See all leads <ArrowRight />
+                  </button>
+                </div>
+                <div className="lead-table" aria-label="Recent conversations">
+                  <div className="lead-row lead-header">
+                    <span>Person</span>
+                    <span>Interest</span>
+                    <span>AI score</span>
+                    <span>Captured</span>
+                  </div>
+                  {capturedLeads.map((lead) => (
+                    <button
+                      className="lead-row new-lead"
+                      key={lead.id}
+                      onClick={() => openReview(lead)}
+                    >
+                      <span className="person-cell">
+                        <span className="initial-avatar small">
+                          {lead.fullName
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')
+                            .slice(0, 2)}
+                        </span>
+                        <span>
+                          <strong>{lead.fullName}</strong>
+                          <small>
+                            {lead.role || 'Role not added'} · {lead.company}
+                          </small>
+                        </span>
+                      </span>
+                      <span>{lead.nextAction || 'Needs review'}</span>
+                      <span>
+                        {typeof lead.score === 'number' ? (
+                          <b
+                            className={`score ${lead.score >= 70 ? 'hot' : ''}`}
+                            title={
+                              lead.scoreRationale ||
+                              'Confirmed qualification score'
+                            }
+                          >
+                            {lead.score}
+                          </b>
+                        ) : (
+                          <b
+                            className={`review-chip ${lead.reviewStatus === 'confirmed' ? 'confirmed' : ''}`}
+                          >
+                            {lead.reviewStatus === 'confirmed'
+                              ? 'Confirmed'
+                              : 'Review'}
+                          </b>
+                        )}
+                      </span>
+                      <span>
+                        {new Intl.DateTimeFormat('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          timeZone: appContext?.workspace.timezone || 'UTC',
+                        }).format(new Date(lead.createdAt))}
+                      </span>
+                    </button>
+                  ))}
+                  {!capturedLeads.length ? (
+                    <div className="empty-state">
+                      No conversations captured in this workspace yet.
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            </>
+          ) : (
+            <section className="section-view">
+              <div className="section-title">
+                <div>
+                  <p className="eyebrow">Revenue workspace</p>
+                  <h1>
+                    {activeView === 'people'
+                      ? 'People & accounts'
+                      : activeView === 'opportunities'
+                        ? 'Opportunities'
+                        : activeView === 'rfqs'
+                          ? 'RFQs & quotations'
+                          : activeView === 'meetings'
+                            ? 'Meetings'
+                            : activeView === 'events'
+                              ? 'Events'
+                              : activeView === 'roi'
+                                ? 'Revenue & ROI'
+                                : activeView === 'settings'
+                                  ? 'Workspace settings'
+                                  : 'Company knowledge'}
+                  </h1>
+                </div>
+                {activeView === 'opportunities' ? (
+                  <Button
+                    className="capture-button"
+                    onClick={() => {
+                      setOpportunityLead(null);
+                      setOpportunityOpen(true);
+                    }}
+                  >
+                    <Plus /> New opportunity
+                  </Button>
+                ) : null}
+              </div>
+              {activeView === 'people' ? (
+                <div className="records-grid">
+                  <article className="panel records-panel">
+                    <h2>Accounts</h2>
+                    {accounts.length ? (
+                      accounts.map((account) => (
+                        <button key={account.id} className="record-row">
+                          <span className="initial-avatar">
+                            {account.company
+                              .split(' ')
+                              .map((word) => word[0])
+                              .join('')
+                              .slice(0, 2)}
+                          </span>
+                          <span>
+                            <strong>{account.company}</strong>
+                            <small>
+                              {account.contacts} contact
+                              {account.contacts === 1 ? '' : 's'} ·{' '}
+                              {account.stakeholders || 0} classified
+                            </small>
+                          </span>
+                          <ArrowRight />
+                        </button>
+                      ))
+                    ) : (
+                      <div className="empty-state">
+                        Capture a lead to create the first account.
+                      </div>
+                    )}
+                  </article>
+                  <article className="panel records-panel">
+                    <h2>Contacts</h2>
+                    {capturedLeads.length ? (
+                      capturedLeads.map((lead) => (
+                        <button
+                          key={lead.id}
+                          className="record-row"
+                          onClick={() => openReview(lead)}
+                        >
+                          <span className="initial-avatar">
+                            {lead.fullName
+                              .split(' ')
+                              .map((word) => word[0])
+                              .join('')
+                              .slice(0, 2)}
+                          </span>
+                          <span>
+                            <strong>{lead.fullName}</strong>
+                            <small>
+                              {lead.role || 'Role not added'} · {lead.company}
+                            </small>
+                          </span>
+                          <b className="review-chip">
+                            {lead.buyingRole?.replaceAll('_', ' ') ||
+                              'Classify'}
+                          </b>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="empty-state">
+                        No captured contacts yet.
+                      </div>
+                    )}
+                  </article>
+                </div>
+              ) : null}
+              {activeView === 'opportunities' ? (
+                <article className="panel data-panel">
+                  {opportunities.length ? (
+                    <>
+                      <div className="data-header">
+                        <span>Opportunity</span>
+                        <span>Stage</span>
+                        <span>Value</span>
+                        <span>Probability</span>
+                      </div>
+                      {opportunities.map((item) => (
+                        <div className="data-row opportunity-row" key={item.id}>
+                          <span>
+                            <strong>{item.title}</strong>
+                            <small>{item.company}</small>
+                            <small>
+                              {item.contacts.length
+                                ? item.contacts
+                                    .map((contact) => contact.fullName)
+                                    .join(' · ')
+                                : 'No stakeholders linked'}
+                            </small>
+                            {item.lossReason ? (
+                              <small className="form-error">
+                                Lost: {item.lossReason}
+                              </small>
+                            ) : null}
+                            <span className="opportunity-contact-actions">
+                              {item.contacts.map((contact) => (
+                                <button
+                                  type="button"
+                                  key={contact.leadId}
+                                  onClick={() =>
+                                    changeOpportunityContact(
+                                      item,
+                                      contact.leadId,
+                                      'remove',
+                                    )
+                                  }
+                                  title={`Remove ${contact.fullName}`}
+                                >
+                                  {contact.fullName} ×
+                                </button>
+                              ))}
+                              <select
+                                aria-label={`Add stakeholder to ${item.title}`}
+                                defaultValue=""
+                                onChange={(event) => {
+                                  if (event.target.value) {
+                                    void changeOpportunityContact(
+                                      item,
+                                      event.target.value,
+                                      'add',
+                                    );
+                                    event.target.value = '';
+                                  }
+                                }}
+                              >
+                                <option value="">+ Add stakeholder</option>
+                                {capturedLeads
+                                  .filter(
+                                    (lead) =>
+                                      lead.company === item.company &&
+                                      !item.contacts.some(
+                                        (contact) => contact.leadId === lead.id,
+                                      ),
+                                  )
+                                  .map((lead) => (
+                                    <option key={lead.id} value={lead.id}>
+                                      {lead.fullName} ·{' '}
+                                      {lead.buyingRole ||
+                                        lead.role ||
+                                        'Contact'}
+                                    </option>
+                                  ))}
+                              </select>
+                            </span>
+                          </span>
+                          <select
+                            className="stage-select"
+                            aria-label={`Stage for ${item.title}`}
+                            value={item.stage}
+                            onChange={(event) =>
+                              updateOpportunityStage(item, event.target.value)
+                            }
+                          >
+                            <option value="qualified">Qualified</option>
+                            <option value="requirement">Requirement</option>
+                            <option value="sample">Sample</option>
+                            <option value="rfq">RFQ</option>
+                            <option value="quotation">Quotation</option>
+                            <option value="meeting">Meeting</option>
+                            <option value="negotiation">Negotiation</option>
+                            <option value="won">Won</option>
+                            <option value="lost">Lost</option>
+                          </select>
+                          <button
+                            className="value-button"
+                            type="button"
+                            onClick={() => changeOpportunityValue(item)}
+                            title="Update value with history"
+                          >
+                            {money(item.value, item.currency)}
+                          </button>
+                          <span>{item.probability}%</span>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="empty-state large">
+                      <Target />
+                      <h2>No opportunities yet</h2>
+                      <p>
+                        Convert a qualified conversation into your first
+                        pipeline record.
+                      </p>
+                      <Button onClick={() => setOpportunityOpen(true)}>
+                        Create opportunity
+                      </Button>
+                    </div>
+                  )}
+                </article>
+              ) : null}
+              {activeView === 'rfqs' ? (
+                <div className="rfq-layout">
+                  <article className="panel rfq-intake">
+                    <div className="settings-heading">
+                      <FileText />
+                      <div>
+                        <h2>Receive an RFQ</h2>
+                        <p>
+                          Store the original document and create accountable
+                          response deadlines.
+                        </p>
+                      </div>
+                    </div>
+                    <form className="lead-form" onSubmit={submitRfq}>
+                      <input type="hidden" name="action" value="create" />
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="rfq-title">RFQ title</label>
+                          <Input
+                            id="rfq-title"
+                            name="title"
+                            required
+                            placeholder="Machine monitoring rollout"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="rfq-reference">
+                            Customer reference
+                          </label>
+                          <Input
+                            id="rfq-reference"
+                            name="reference"
+                            placeholder="RFQ/2026/184"
+                          />
+                        </div>
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="rfq-company">Requester company</label>
+                          <Input
+                            id="rfq-company"
+                            name="requesterCompany"
+                            required
+                            placeholder="ABC Pharma"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="rfq-contact">Contact</label>
+                          <Input
+                            id="rfq-contact"
+                            name="contactName"
+                            placeholder="Rajesh Mehta"
+                          />
+                        </div>
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="rfq-location">
+                            Delivery location
+                          </label>
+                          <Input
+                            id="rfq-location"
+                            name="deliveryLocation"
+                            placeholder="Ahmedabad, Gujarat"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="rfq-deadline">
+                            Submission deadline
+                          </label>
+                          <Input
+                            id="rfq-deadline"
+                            name="submissionDeadline"
+                            type="date"
+                          />
+                        </div>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="rfq-items">Requested items</label>
+                        <Textarea
+                          id="rfq-items"
+                          name="items"
+                          placeholder={
+                            'One per line: Product | Quantity | Specification\nSensor gateway | 40 | IP65, SAP integration'
+                          }
+                        />
+                        <small className="field-help">
+                          Each line becomes a structured RFQ item with its
+                          original text retained as evidence.
+                        </small>
+                      </div>
+                      <label className="upload-control rfq-upload">
+                        <FileText />
+                        Attach original RFQ
+                        <input
+                          name="document"
+                          type="file"
+                          accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
+                        />
+                      </label>
+                      <Button className="save-button" type="submit">
+                        Create RFQ workflow
+                      </Button>
+                    </form>
+                  </article>
+                  <section className="rfq-list">
+                    <div className="event-list-heading">
+                      <div>
+                        <h2>RFQ pipeline</h2>
+                        <p>Earliest submission deadlines appear first.</p>
+                      </div>
+                      <b>{rfqs.length} total</b>
+                    </div>
+                    {rfqs.length ? (
+                      rfqs.map((item) => (
+                        <article className="panel rfq-record" key={item.id}>
+                          <div>
+                            <span>
+                              <strong>{item.title}</strong>
+                              <small>
+                                {item.requesterCompany}
+                                {item.reference ? ` · ${item.reference}` : ''}
+                              </small>
+                            </span>
+                            <b className="stage-chip">
+                              {item.status.replaceAll('_', ' ')}
+                            </b>
+                          </div>
+                          <div className="event-meta">
+                            <span>
+                              <small>Customer deadline</small>
+                              <strong>
+                                {item.submissionDeadline || 'Not set'}
+                              </strong>
+                            </span>
+                            <span>
+                              <small>Owner SLA</small>
+                              <strong>
+                                {item.ownerDueAt
+                                  ? new Date(item.ownerDueAt).toLocaleString()
+                                  : 'Not set'}
+                              </strong>
+                            </span>
+                            <span>
+                              <small>Owner</small>
+                              <strong>{item.ownerName || item.ownerId}</strong>
+                            </span>
+                            <span>
+                              <small>Submissions</small>
+                              <strong>{item.submissionCount || 0}</strong>
+                            </span>
+                          </div>
+                          <p>
+                            {item.clarificationNote
+                              ? `Clarification: ${item.clarificationNote}`
+                              : item.latestSubmissionNote
+                                ? `Latest submission: ${item.latestSubmissionNote}`
+                                : item.processingStatus ===
+                                    'stored_pending_extraction'
+                                  ? 'Original stored securely · AI extraction pending configuration'
+                                  : 'Manual structured intake'}
+                          </p>
+                          <select
+                            aria-label={`Status for ${item.title}`}
+                            value={item.status}
+                            onChange={(event) =>
+                              updateRfqStatus(item, event.target.value)
+                            }
+                          >
+                            <option value="received">Received</option>
+                            <option value="reviewing">Reviewing</option>
+                            <option value="clarification">
+                              Clarification needed
+                            </option>
+                            <option value="ready_to_quote">
+                              Ready to quote
+                            </option>
+                            <option value="quoted">Quoted</option>
+                            <option value="won">Won</option>
+                            <option value="lost">Lost</option>
+                          </select>
+                          {['ready_to_quote', 'quoted'].includes(
+                            item.status,
+                          ) ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => recordRfqSubmission(item)}
+                            >
+                              Record submission
+                            </Button>
+                          ) : null}
+                        </article>
+                      ))
+                    ) : (
+                      <article className="panel empty-state large">
+                        <FileText />
+                        <h2>No RFQs received</h2>
+                        <p>
+                          Upload the original request or enter structured
+                          requirements manually.
+                        </p>
+                      </article>
+                    )}
+                  </section>
+                </div>
+              ) : null}
+              {activeView === 'rfqs' ? (
+                <section className="quotation-section">
+                  <div className="event-list-heading">
+                    <div>
+                      <h2>Quotations</h2>
+                      <p>
+                        Track the commercial document from draft through
+                        customer acceptance.
+                      </p>
+                    </div>
+                    <b>{quotations.length} total</b>
+                  </div>
+                  <div className="quotation-layout">
+                    <article className="panel rfq-intake">
+                      <form className="lead-form" onSubmit={submitQuotation}>
+                        <input type="hidden" name="action" value="create" />
+                        <div className="field-grid">
+                          <div className="field-block">
+                            <label htmlFor="quote-number">
+                              Quotation number
+                            </label>
+                            <Input
+                              id="quote-number"
+                              name="quoteNumber"
+                              required
+                              placeholder="Q-2026-001"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="quote-customer">Customer</label>
+                            <Input
+                              id="quote-customer"
+                              name="customer"
+                              required
+                              placeholder="ABC Pharma"
+                            />
+                          </div>
+                        </div>
+                        <div className="field-grid">
+                          <div className="field-block">
+                            <label htmlFor="quote-amount">
+                              Amount ({appContext?.workspace.currency || 'INR'})
+                            </label>
+                            <Input
+                              id="quote-amount"
+                              name="amount"
+                              type="number"
+                              min="1"
+                              required
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="quote-valid">Valid until</label>
+                            <Input
+                              id="quote-valid"
+                              name="validUntil"
+                              type="date"
+                            />
+                          </div>
+                        </div>
+                        <div className="field-grid">
+                          <div className="field-block">
+                            <label htmlFor="quote-rfq">Related RFQ</label>
+                            <select id="quote-rfq" name="rfqId" defaultValue="">
+                              <option value="">No RFQ selected</option>
+                              {rfqs.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="quote-opportunity">
+                              Related opportunity
+                            </label>
+                            <select
+                              id="quote-opportunity"
+                              name="opportunityId"
+                              defaultValue=""
+                            >
+                              <option value="">No opportunity selected</option>
+                              {opportunities.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.title} · {item.company}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <label className="upload-control rfq-upload">
+                          <FileText />
+                          Attach PDF or DOCX
+                          <input
+                            name="document"
+                            type="file"
+                            accept=".pdf,.docx"
+                          />
+                        </label>
+                        <Button type="submit" className="save-button">
+                          Create quotation
+                        </Button>
+                      </form>
+                    </article>
+                    <div className="quotation-list">
+                      {quotations.length ? (
+                        quotations.map((item) => (
+                          <article className="panel quote-record" key={item.id}>
+                            <div>
+                              <span>
+                                <strong>{item.quoteNumber}</strong>
+                                <small>{item.customer}</small>
+                              </span>
+                              <strong>
+                                {money(item.amount, item.currency)}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>
+                                Valid until {item.validUntil || 'not set'}
+                              </span>
+                              {item.hasDocument ? (
+                                <button
+                                  type="button"
+                                  onClick={() => downloadQuotation(item)}
+                                >
+                                  Download {item.originalName || 'document'}
+                                </button>
+                              ) : (
+                                <span>No document attached</span>
+                              )}
+                            </div>
+                            <select
+                              aria-label={`Status for quotation ${item.quoteNumber}`}
+                              value={item.status}
+                              onChange={(event) =>
+                                updateQuotationStatus(
+                                  item.id,
+                                  event.target.value,
+                                )
+                              }
+                            >
+                              <option value="draft">Draft</option>
+                              <option value="approved">
+                                Approved internally
+                              </option>
+                              <option value="sent">Sent</option>
+                              <option value="accepted">Accepted</option>
+                              <option value="rejected">Rejected</option>
+                              <option value="expired">Expired</option>
+                            </select>
+                          </article>
+                        ))
+                      ) : (
+                        <article className="panel empty-state large">
+                          <FileText />
+                          <h2>No quotations yet</h2>
+                          <p>
+                            Create the first commercial response and link it to
+                            an RFQ or opportunity.
+                          </p>
+                        </article>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+              {activeView === 'rfqs' &&
+              rfqs.some((item) => item.documentCount) ? (
+                <section className="rfq-extraction-section">
+                  <div className="event-list-heading">
+                    <div>
+                      <h2>Document extraction</h2>
+                      <p>
+                        Review and correct every machine-read requirement before
+                        confirmation.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="rfq-extraction-list">
+                    {rfqs
+                      .filter((item) => item.documentCount)
+                      .map((item) => {
+                        const extracted = rfqExtraction(item.extractionJson);
+                        return (
+                          <article
+                            className="panel rfq-extraction"
+                            key={item.id}
+                          >
+                            <div>
+                              <span>
+                                <strong>{item.title}</strong>
+                                <small>{item.requesterCompany}</small>
+                              </span>
+                              <b>
+                                {item.extractionStatus?.replaceAll('_', ' ') ||
+                                  'not processed'}
+                              </b>
+                            </div>
+                            {item.extractionStatus === 'completed' &&
+                            extracted ? (
+                              <form
+                                className="rfq-review-form"
+                                onSubmit={(event) =>
+                                  confirmRfqExtraction(event, item)
+                                }
+                              >
+                                <p>{extracted.summary}</p>
+                                <div className="field-grid">
+                                  <div className="field-block">
+                                    <label htmlFor={`rfq-location-${item.id}`}>
+                                      Delivery location
+                                    </label>
+                                    <Input
+                                      id={`rfq-location-${item.id}`}
+                                      name="deliveryLocation"
+                                      defaultValue={
+                                        extracted.deliveryLocation || ''
+                                      }
+                                    />
+                                  </div>
+                                  <div className="field-block">
+                                    <label htmlFor={`rfq-deadline-${item.id}`}>
+                                      Submission deadline
+                                    </label>
+                                    <Input
+                                      id={`rfq-deadline-${item.id}`}
+                                      name="submissionDeadline"
+                                      type="date"
+                                      defaultValue={
+                                        extracted.submissionDeadline || ''
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                                {extracted.items.map((line, index) => (
+                                  <fieldset key={`${line.product}-${index}`}>
+                                    <legend>Requirement {index + 1}</legend>
+                                    <Input
+                                      name="product"
+                                      required
+                                      defaultValue={line.product}
+                                      aria-label={`Product ${index + 1}`}
+                                    />
+                                    <Input
+                                      name="quantity"
+                                      defaultValue={line.quantity || ''}
+                                      placeholder="Quantity"
+                                      aria-label={`Quantity ${index + 1}`}
+                                    />
+                                    <Textarea
+                                      name="specifications"
+                                      defaultValue={line.specifications || ''}
+                                      placeholder="Specifications"
+                                      aria-label={`Specifications ${index + 1}`}
+                                    />
+                                    <small>Evidence: {line.evidence}</small>
+                                  </fieldset>
+                                ))}
+                                {extracted.warnings.length ? (
+                                  <small>
+                                    {extracted.warnings.join(' · ')}
+                                  </small>
+                                ) : null}
+                                <Button
+                                  type="submit"
+                                  disabled={processingRfq === item.id}
+                                >
+                                  {processingRfq === item.id
+                                    ? 'Confirming…'
+                                    : 'Confirm reviewed requirements'}
+                                </Button>
+                              </form>
+                            ) : item.extractionStatus === 'confirmed' ? (
+                              <p>
+                                Human-reviewed requirements are now part of the
+                                RFQ workflow.
+                              </p>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => analyzeRfq(item.id)}
+                                disabled={processingRfq === item.id}
+                              >
+                                {processingRfq === item.id
+                                  ? 'Extracting…'
+                                  : 'Extract requirements'}
+                              </Button>
+                            )}
+                          </article>
+                        );
+                      })}
+                  </div>
+                </section>
+              ) : null}
+              {activeView === 'meetings' ? (
+                <div className="meetings-layout">
+                  <article className="panel meeting-intake">
+                    <div className="settings-heading">
+                      <CalendarDays />
+                      <div>
+                        <h2>Schedule a meeting</h2>
+                        <p>
+                          Create an accountable calendar record without sending
+                          anything automatically.
+                        </p>
+                      </div>
+                    </div>
+                    <form className="lead-form" onSubmit={createMeeting}>
+                      <div className="field-block">
+                        <label htmlFor="meeting-title">Meeting title</label>
+                        <Input
+                          id="meeting-title"
+                          name="title"
+                          required
+                          placeholder="Machine monitoring architecture review"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="meeting-lead">Primary contact</label>
+                        <select id="meeting-lead" name="leadId" defaultValue="">
+                          <option value="">No linked contact</option>
+                          {capturedLeads
+                            .filter((lead) => lead.reviewStatus !== 'erased')
+                            .map((lead) => (
+                              <option key={lead.id} value={lead.id}>
+                                {lead.fullName} · {lead.company}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="meeting-start">Starts</label>
+                          <Input
+                            id="meeting-start"
+                            name="startsAt"
+                            type="datetime-local"
+                            required
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="meeting-end">Ends</label>
+                          <Input
+                            id="meeting-end"
+                            name="endsAt"
+                            type="datetime-local"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="meeting-location">
+                          Location or call link
+                        </label>
+                        <Input
+                          id="meeting-location"
+                          name="location"
+                          placeholder="Google Meet, booth, customer office…"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="meeting-participants">
+                          Additional participant emails
+                        </label>
+                        <Input
+                          id="meeting-participants"
+                          name="participantEmails"
+                          placeholder="it@customer.com, operations@customer.com"
+                        />
+                        <small className="field-help">
+                          The primary contact is included automatically when an
+                          email is available. No invitation is sent.
+                        </small>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="meeting-agenda">Agenda</label>
+                        <Textarea
+                          id="meeting-agenda"
+                          name="agenda"
+                          placeholder="Topics, required documents and intended decision"
+                        />
+                      </div>
+                      <Button
+                        className="save-button"
+                        type="submit"
+                        disabled={!activeEventId}
+                      >
+                        Schedule meeting
+                      </Button>
+                      {!activeEventId ? (
+                        <p className="field-help">
+                          Select an active event before creating an unlinked
+                          meeting.
+                        </p>
+                      ) : null}
+                    </form>
+                  </article>
+                  <section className="meeting-list">
+                    <div className="event-list-heading">
+                      <div>
+                        <h2>Meeting schedule</h2>
+                        <p>
+                          Calendar files are generated on demand; the system
+                          does not claim an invitation was delivered.
+                        </p>
+                      </div>
+                      <b>{meetings.length} total</b>
+                    </div>
+                    {meetings.length ? (
+                      meetings.map((meeting) => (
+                        <article
+                          className="panel meeting-record"
+                          key={meeting.id}
+                        >
+                          <div>
+                            <span>
+                              <strong>{meeting.title}</strong>
+                              <small>
+                                {meeting.leadName
+                                  ? `${meeting.leadName}${meeting.company ? ` · ${meeting.company}` : ''}`
+                                  : 'No primary contact'}{' '}
+                                · {meeting.participantCount} participant
+                                {meeting.participantCount === 1 ? '' : 's'}
+                              </small>
+                            </span>
+                            <b className={`event-status ${meeting.status}`}>
+                              {meeting.status}
+                            </b>
+                          </div>
+                          <div className="event-meta">
+                            <span>
+                              <small>Starts</small>
+                              <strong>
+                                {new Date(meeting.startsAt).toLocaleString()}
+                              </strong>
+                            </span>
+                            <span>
+                              <small>Ends</small>
+                              <strong>
+                                {new Date(meeting.endsAt).toLocaleString()}
+                              </strong>
+                            </span>
+                          </div>
+                          {meeting.location ? <p>{meeting.location}</p> : null}
+                          {meeting.cancellationReason ? (
+                            <p className="form-error">
+                              Cancelled: {meeting.cancellationReason}
+                            </p>
+                          ) : null}
+                          <div className="event-actions">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => downloadMeeting(meeting)}
+                            >
+                              Download .ics
+                            </Button>
+                            {meeting.status === 'scheduled' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    transitionMeeting(meeting, 'complete')
+                                  }
+                                >
+                                  Mark complete
+                                </button>
+                                <button
+                                  className="danger-link"
+                                  type="button"
+                                  onClick={() =>
+                                    transitionMeeting(meeting, 'cancel')
+                                  }
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  transitionMeeting(meeting, 'reopen')
+                                }
+                              >
+                                Reopen
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="panel empty-state large">
+                        <CalendarDays />
+                        <h2>No meetings scheduled</h2>
+                        <p>
+                          Create a meeting linked to an event and optionally a
+                          customer contact.
+                        </p>
+                      </article>
+                    )}
+                  </section>
+                </div>
+              ) : null}
+              {activeView === 'events' ? (
+                <div className="events-layout">
+                  <article className="panel event-builder">
+                    <div className="settings-heading">
+                      <CalendarDays />
+                      <div>
+                        <h2>Prepare an event</h2>
+                        <p>
+                          Configure the booth goal, qualification playbook,
+                          routing and follow-up standard before the team
+                          arrives.
+                        </p>
+                      </div>
+                    </div>
+                    <form className="lead-form" onSubmit={submitEvent}>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="event-name">Event name</label>
+                          <Input
+                            id="event-name"
+                            name="name"
+                            required
+                            placeholder="IndustrialTech Expo 2027"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-venue">Venue</label>
+                          <Input
+                            id="event-venue"
+                            name="venue"
+                            placeholder="Bombay Exhibition Centre"
+                          />
+                        </div>
+                      </div>
+                      <div className="event-three">
+                        <div className="field-block">
+                          <label htmlFor="event-hall">Hall</label>
+                          <Input id="event-hall" name="hall" placeholder="2" />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-booth">Booth</label>
+                          <Input
+                            id="event-booth"
+                            name="booth"
+                            placeholder="B-18"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-zone">Timezone</label>
+                          <Input
+                            id="event-zone"
+                            name="timezone"
+                            defaultValue={
+                              appContext?.workspace.timezone || 'Asia/Kolkata'
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="event-start">Starts</label>
+                          <Input
+                            id="event-start"
+                            name="startsOn"
+                            type="date"
+                            required
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-end">Ends</label>
+                          <Input
+                            id="event-end"
+                            name="endsOn"
+                            type="date"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="event-objective-detail">
+                          Business objective
+                        </label>
+                        <Textarea
+                          id="event-objective-detail"
+                          name="objective"
+                          placeholder="Book 30 qualified demos and create a measurable sales pipeline."
+                        />
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="event-products">
+                            Products or services
+                          </label>
+                          <Input
+                            id="event-products"
+                            name="products"
+                            placeholder="MachineSight, Integration assessment"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-targets">Target accounts</label>
+                          <Input
+                            id="event-targets"
+                            name="targetAccounts"
+                            placeholder="ABC Pharma, Prime Polymers"
+                          />
+                        </div>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="event-questions">
+                          Qualification questions
+                        </label>
+                        <Textarea
+                          id="event-questions"
+                          name="qualificationQuestions"
+                          placeholder="How many machines?, Which ERP?, When does budget open? (comma separated)"
+                        />
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="event-budget">
+                            Event budget (
+                            {appContext?.workspace.currency || 'INR'})
+                          </label>
+                          <Input
+                            id="event-budget"
+                            name="budget"
+                            type="number"
+                            min="0"
+                            defaultValue="0"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-badge">
+                            Badge or QR provider
+                          </label>
+                          <Input
+                            id="event-badge"
+                            name="badgeProvider"
+                            placeholder="Manual / provider name"
+                          />
+                        </div>
+                      </div>
+                      <div className="event-three">
+                        <div className="field-block">
+                          <label htmlFor="event-route">Lead owner</label>
+                          <select
+                            id="event-route"
+                            name="leadRoutingRule"
+                            defaultValue="capturer"
+                          >
+                            <option value="capturer">
+                              Person who captures
+                            </option>
+                            <option value="round_robin">Round robin</option>
+                            <option value="manager_review">
+                              Manager assigns
+                            </option>
+                          </select>
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-sla">
+                            Follow-up SLA (hours)
+                          </label>
+                          <Input
+                            id="event-sla"
+                            name="followupSlaHours"
+                            type="number"
+                            min="1"
+                            max="720"
+                            defaultValue="24"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-target">
+                            Daily lead target
+                          </label>
+                          <Input
+                            id="event-target"
+                            name="dailyLeadTarget"
+                            type="number"
+                            min="1"
+                            defaultValue="25"
+                          />
+                        </div>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="event-team">
+                          Assigned team members
+                        </label>
+                        <select
+                          id="event-team"
+                          name="teamMemberIds"
+                          multiple
+                          size={Math.min(4, Math.max(2, members.length))}
+                        >
+                          {members
+                            .filter((member) => member.status === 'active')
+                            .map((member) => (
+                              <option key={member.id} value={member.userId}>
+                                {member.displayName ||
+                                  member.email ||
+                                  'Team member'}{' '}
+                                · {member.role}
+                              </option>
+                            ))}
+                        </select>
+                        <small className="field-help">
+                          Hold Ctrl or Command to select more than one person.
+                          The creator is assigned automatically; owners and
+                          admins retain workspace oversight.
+                        </small>
+                      </div>
+                      <Button
+                        className="save-button"
+                        type="submit"
+                        disabled={
+                          !['owner', 'admin', 'manager'].includes(
+                            appContext?.role || '',
+                          )
+                        }
+                      >
+                        Create event workspace
+                      </Button>
+                    </form>
+                  </article>
+                  <section
+                    className="event-list"
+                    aria-label="Configured events"
+                  >
+                    <div className="event-list-heading">
+                      <div>
+                        <h2>Configured events</h2>
+                        <p>Select the event used for new lead captures.</p>
+                      </div>
+                      <b>
+                        {
+                          events.filter((item) => item.status !== 'archived')
+                            .length
+                        }{' '}
+                        active
+                      </b>
+                    </div>
+                    {events.length ? (
+                      events.map((item) => (
+                        <article
+                          className={`panel event-record ${item.id === activeEventId ? 'selected' : ''} ${item.status === 'archived' ? 'archived' : ''}`}
+                          key={item.id}
+                        >
+                          <div className="event-record-head">
+                            <span className="calendar-tile">
+                              <b>
+                                {new Date(
+                                  `${item.startsOn}T00:00:00`,
+                                ).toLocaleDateString('en', { day: '2-digit' })}
+                              </b>
+                              <small>
+                                {new Date(
+                                  `${item.startsOn}T00:00:00`,
+                                ).toLocaleDateString('en', { month: 'short' })}
+                              </small>
+                            </span>
+                            <span>
+                              <strong>{item.name}</strong>
+                              <small>
+                                {item.venue || 'Venue pending'}
+                                {item.hall ? ` · Hall ${item.hall}` : ''}
+                                {item.booth ? ` · Booth ${item.booth}` : ''}
+                              </small>
+                            </span>
+                            <b className={`event-status ${item.status}`}>
+                              {item.status}
+                            </b>
+                          </div>
+                          <p>
+                            {item.objective ||
+                              'Business objective not added yet.'}
+                          </p>
+                          <div className="event-meta">
+                            <span>
+                              <small>Dates</small>
+                              <strong>
+                                {item.startsOn} → {item.endsOn}
+                              </strong>
+                            </span>
+                            <span>
+                              <small>Budget</small>
+                              <strong>
+                                {appContext?.workspace.currency || 'INR'}{' '}
+                                {item.budget.toLocaleString()}
+                              </strong>
+                            </span>
+                            <span>
+                              <small>Follow-up</small>
+                              <strong>{item.followupSlaHours}h SLA</strong>
+                            </span>
+                            <span>
+                              <small>QR campaign</small>
+                              <strong>
+                                {item.qrCampaignCode || 'Pending'}
+                              </strong>
+                            </span>
+                          </div>
+                          {item.products.length ? (
+                            <div className="event-tags">
+                              {item.products.map((product) => (
+                                <span key={product}>{product}</span>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="event-actions">
+                            {item.status !== 'archived' ? (
+                              <Button
+                                type="button"
+                                variant={
+                                  item.id === activeEventId
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                onClick={() => selectEvent(item.id)}
+                              >
+                                {item.id === activeEventId ? (
+                                  <>
+                                    <Check /> Active event
+                                  </>
+                                ) : (
+                                  'Use for capture'
+                                )}
+                              </Button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => eventAction('duplicate', item.id)}
+                            >
+                              Duplicate
+                            </button>
+                            {item.status !== 'archived' ? (
+                              <button
+                                className="danger-link"
+                                type="button"
+                                onClick={() => eventAction('archive', item.id)}
+                              >
+                                Archive
+                              </button>
+                            ) : null}
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="panel empty-state large">
+                        <CalendarDays />
+                        <h2>No event configured</h2>
+                        <p>
+                          Create the first event playbook. It stays in draft
+                          until selected for capture.
+                        </p>
+                      </article>
+                    )}
+                  </section>
+                </div>
+              ) : null}
+              {activeView === 'roi' ? (
+                <div className="roi-grid">
+                  <article className="panel roi-card">
+                    <small>Event investment</small>
+                    <strong>
+                      {money(eventInvestment, appContext?.workspace.currency)}
+                    </strong>
+                    <span>
+                      {activeEvent ? activeEvent.name : 'Available events'}
+                    </span>
+                  </article>
+                  <article className="panel roi-card">
+                    <small>Pipeline created</small>
+                    <strong>
+                      {money(
+                        metrics.pipelineValue,
+                        appContext?.workspace.currency,
+                      )}
+                    </strong>
+                    <span>
+                      {activeEventOpportunities.length} attributed opportunities
+                    </span>
+                  </article>
+                  <article className="panel roi-card">
+                    <small>Closed revenue</small>
+                    <strong>
+                      {money(closedRevenue, appContext?.workspace.currency)}
+                    </strong>
+                    <span>
+                      {closedRevenue
+                        ? 'Won opportunities'
+                        : 'No closed opportunities yet'}
+                    </span>
+                  </article>
+                  <article className="panel roi-card">
+                    <small>Realized event ROI</small>
+                    <strong>
+                      {eventInvestment
+                        ? `${(((closedRevenue - eventInvestment) / eventInvestment) * 100).toFixed(1)}%`
+                        : 'Not available'}
+                    </strong>
+                    <span>
+                      {eventInvestment
+                        ? 'Based on closed revenue'
+                        : 'Add the event investment first'}
+                    </span>
+                  </article>
+                </div>
+              ) : null}
+              {activeView === 'knowledge' ? (
+                <div className="knowledge-layout">
+                  <article className="panel onboarding-progress">
+                    <div>
+                      <span>
+                        {
+                          [
+                            knowledge.profile,
+                            knowledge.products.length,
+                            knowledge.icps.length,
+                            knowledge.sources.length,
+                          ].filter(Boolean).length
+                        }
+                        <small>/4</small>
+                      </span>
+                      <div>
+                        <h2>Company intelligence setup</h2>
+                        <p>
+                          {knowledge.profile
+                            ? 'Profile saved. Add products, target customers and evidence.'
+                            : 'Start by explaining what the company sells and whom it serves.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="progress-track">
+                      <i
+                        style={{
+                          width: `${[knowledge.profile, knowledge.products.length, knowledge.icps.length, knowledge.sources.length].filter(Boolean).length * 25}%`,
+                        }}
+                      />
+                    </div>
+                  </article>
+                  <article className="panel knowledge-card">
+                    <h2>Business profile</h2>
+                    <form className="lead-form" onSubmit={submitKnowledge}>
+                      <input type="hidden" name="action" value="save_profile" />
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="company-legal-name">
+                            Company name
+                          </label>
+                          <Input
+                            id="company-legal-name"
+                            name="legalName"
+                            defaultValue={
+                              knowledge.profile?.legalName ||
+                              appContext?.workspace.name
+                            }
+                            required
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="company-website">Website</label>
+                          <Input
+                            id="company-website"
+                            name="websiteUrl"
+                            type="url"
+                            defaultValue={knowledge.profile?.websiteUrl}
+                            placeholder="https://company.com"
+                          />
+                        </div>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="company-description">
+                          What do you sell?
+                        </label>
+                        <Textarea
+                          id="company-description"
+                          name="description"
+                          defaultValue={knowledge.profile?.description}
+                          placeholder="Describe the products, services and customer outcomes."
+                        />
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="target-industries">
+                            Target industries
+                          </label>
+                          <Input
+                            id="target-industries"
+                            name="targetIndustries"
+                            defaultValue={knowledge.profile?.targetIndustries.join(
+                              ', ',
+                            )}
+                            placeholder="Pharma, Automotive, Food processing"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="target-regions">
+                            Target geographies
+                          </label>
+                          <Input
+                            id="target-regions"
+                            name="targetGeographies"
+                            defaultValue={knowledge.profile?.targetGeographies.join(
+                              ', ',
+                            )}
+                            placeholder="India, GCC, Southeast Asia"
+                          />
+                        </div>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="event-objective">
+                          Primary event objective
+                        </label>
+                        <Input
+                          id="event-objective"
+                          name="eventObjective"
+                          defaultValue={knowledge.profile?.eventObjective}
+                          placeholder="Book qualified demos with plant operators"
+                        />
+                      </div>
+                      <Button className="save-button" type="submit">
+                        Save business profile
+                      </Button>
+                    </form>
+                  </article>
+                  <article className="panel knowledge-card">
+                    <h2>Products and services</h2>
+                    <form
+                      className="lead-form compact-form"
+                      onSubmit={submitKnowledge}
+                    >
+                      <input type="hidden" name="action" value="add_product" />
+                      <div className="field-grid">
+                        <Input
+                          name="name"
+                          required
+                          placeholder="Product or service name"
+                        />
+                        <select name="kind" defaultValue="product">
+                          <option value="product">Product</option>
+                          <option value="service">Service</option>
+                        </select>
+                      </div>
+                      <Textarea
+                        name="description"
+                        placeholder="What it does and the outcome it creates"
+                      />
+                      <Input
+                        name="buyerRoles"
+                        placeholder="Buyer roles, comma separated"
+                      />
+                      <Input
+                        name="painPoints"
+                        placeholder="Pain points solved, comma separated"
+                      />
+                      <Button type="submit">Add offering</Button>
+                    </form>
+                    <div className="knowledge-records">
+                      {knowledge.products.map((item) => (
+                        <div key={item.id}>
+                          <span>
+                            <strong>{item.name}</strong>
+                            <small>
+                              {item.kind} ·{' '}
+                              {item.buyerRoles.join(', ') ||
+                                'Buyer roles not added'}
+                            </small>
+                          </span>
+                          <b>{item.kind}</b>
+                          <button
+                            className="record-remove"
+                            type="button"
+                            aria-label={`Remove ${item.name}`}
+                            onClick={() =>
+                              removeKnowledge(
+                                'archive_product',
+                                item.id,
+                                item.name,
+                              )
+                            }
+                          >
+                            <Trash2 />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                  <article className="panel knowledge-card">
+                    <h2>Ideal customer profile</h2>
+                    <form
+                      className="lead-form compact-form"
+                      onSubmit={submitKnowledge}
+                    >
+                      <input type="hidden" name="action" value="add_icp" />
+                      <Input
+                        name="name"
+                        required
+                        placeholder="e.g. Multi-site pharmaceutical plants"
+                      />
+                      <Input
+                        name="industries"
+                        placeholder="Industries, comma separated"
+                      />
+                      <Input
+                        name="companySizes"
+                        placeholder="Company sizes, e.g. 200–5,000 employees"
+                      />
+                      <Input name="geographies" placeholder="Target regions" />
+                      <Input
+                        name="buyerRoles"
+                        placeholder="Decision-maker roles"
+                      />
+                      <Textarea
+                        name="mustHaveSignals"
+                        placeholder="High-value signals, comma separated"
+                      />
+                      <Textarea
+                        name="disqualifiers"
+                        placeholder="Disqualifiers, comma separated"
+                      />
+                      <Button type="submit">Add ideal customer profile</Button>
+                    </form>
+                    <div className="knowledge-records">
+                      {knowledge.icps.map((item) => (
+                        <div key={item.id}>
+                          <span>
+                            <strong>{item.name}</strong>
+                            <small>
+                              {item.industries.join(', ') || 'Any industry'} ·{' '}
+                              {item.buyerRoles.join(', ') || 'Roles not set'}
+                            </small>
+                          </span>
+                          <b>ICP</b>
+                          <button
+                            className="record-remove"
+                            type="button"
+                            aria-label={`Remove ${item.name}`}
+                            onClick={() =>
+                              removeKnowledge('remove_icp', item.id, item.name)
+                            }
+                          >
+                            <Trash2 />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                  <article className="panel knowledge-card">
+                    <h2>Qualification rules</h2>
+                    <form
+                      className="lead-form compact-form"
+                      onSubmit={submitKnowledge}
+                    >
+                      <input type="hidden" name="action" value="add_rule" />
+                      <Input
+                        name="label"
+                        required
+                        placeholder="Rule label, e.g. Budget within 6 months"
+                      />
+                      <div className="field-grid">
+                        <select name="field" defaultValue="budget_timing">
+                          <option value="budget_timing">Budget timing</option>
+                          <option value="authority">Authority</option>
+                          <option value="requirement">Requirement</option>
+                          <option value="company_size">Company size</option>
+                          <option value="product_interest">
+                            Product interest
+                          </option>
+                          <option value="existing_technology">
+                            Existing technology
+                          </option>
+                          <option value="industry">Industry</option>
+                          <option value="location">
+                            Location or geography
+                          </option>
+                          <option value="quantity">Quantity or scale</option>
+                          <option value="purchase_timeline">
+                            Purchase timeline
+                          </option>
+                        </select>
+                        <Input
+                          name="expectedValue"
+                          required
+                          placeholder="Expected value"
+                        />
+                      </div>
+                      <Input
+                        name="weight"
+                        type="number"
+                        min="-100"
+                        max="100"
+                        defaultValue="20"
+                      />
+                      <Button type="submit">Add scoring rule</Button>
+                    </form>
+                    <div className="knowledge-records">
+                      {knowledge.rules.map((item) => (
+                        <div key={item.id}>
+                          <span>
+                            <strong>{item.label}</strong>
+                            <small>
+                              {item.field.replaceAll('_', ' ')} contains “
+                              {item.expectedValue}”
+                            </small>
+                          </span>
+                          <b className={item.weight < 0 ? 'negative' : ''}>
+                            {item.weight > 0 ? '+' : ''}
+                            {item.weight}
+                          </b>
+                          <button
+                            className="record-remove"
+                            type="button"
+                            aria-label={`Remove ${item.label}`}
+                            onClick={() =>
+                              removeKnowledge(
+                                'archive_rule',
+                                item.id,
+                                item.label,
+                              )
+                            }
+                          >
+                            <Trash2 />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                  <article className="panel knowledge-card knowledge-sources">
+                    <h2>Knowledge sources</h2>
+                    <p>
+                      Store approved evidence used to ground future AI answers.
+                    </p>
+                    <div className="source-actions">
+                      <label className="upload-control">
+                        <FileText />
+                        Upload document
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
+                          onInput={uploadKnowledge}
+                        />
+                      </label>
+                      <form onSubmit={submitKnowledge}>
+                        <input type="hidden" name="action" value="add_url" />
+                        <Input
+                          name="sourceUrl"
+                          type="url"
+                          required
+                          placeholder="https://company.com/products"
+                        />
+                        <Button type="submit">Add website</Button>
+                      </form>
+                    </div>
+                    <div className="knowledge-records">
+                      {knowledge.sources.map((item) => (
+                        <div key={item.id}>
+                          <span>
+                            <strong>{item.name}</strong>
+                            <small>
+                              {item.sourceType} · {item.status}
+                              {item.sizeBytes
+                                ? ` · ${Math.ceil(item.sizeBytes / 1024)} KB`
+                                : ''}
+                            </small>
+                          </span>
+                          <b>{item.sourceType}</b>
+                          <button
+                            className="record-remove"
+                            type="button"
+                            aria-label={`Remove ${item.name}`}
+                            onClick={() =>
+                              removeKnowledge(
+                                'remove_source',
+                                item.id,
+                                item.name,
+                              )
+                            }
+                          >
+                            <Trash2 />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                </div>
+              ) : null}
+              {activeView === 'settings' ? (
+                <div className="settings-layout">
+                  {leadMerges.length ? (
+                    <article className="panel settings-card">
+                      <div className="settings-heading">
+                        <Users />
+                        <div>
+                          <h2>Reversible contact merges</h2>
+                          <p>
+                            Undo a merge if two visitors were combined
+                            incorrectly.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="knowledge-records">
+                        {leadMerges.map((merge) => (
+                          <div key={merge.id}>
+                            <span>
+                              <strong>
+                                {merge.sourceName} → {merge.targetName}
+                              </strong>
+                              <small>
+                                {new Date(merge.mergedAt).toLocaleString()}
+                              </small>
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => revertLeadMerge(merge.id)}
+                            >
+                              Undo merge
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ) : null}
+                  <article className="panel settings-card workspace-manager">
+                    <div className="settings-heading">
+                      <Building2 />
+                      <div>
+                        <h2>Your workspaces</h2>
+                        <p>
+                          Switch tenant context or create another trial
+                          workspace.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="workspace-list">
+                      {availableWorkspaces.map((workspace) => (
+                        <button
+                          key={workspace.id}
+                          className={
+                            workspace.id === appContext?.workspace.id
+                              ? 'selected'
+                              : ''
+                          }
+                          onClick={() => switchWorkspace(workspace.id)}
+                        >
+                          <span>
+                            <strong>{workspace.name}</strong>
+                            <small>
+                              {workspace.role} · {workspace.plan}
+                            </small>
+                          </span>
+                          {workspace.id === appContext?.workspace.id ? (
+                            <Check />
+                          ) : (
+                            <ArrowRight />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    <form className="invite-form" onSubmit={createWorkspace}>
+                      <Input
+                        name="name"
+                        placeholder="New company workspace"
+                        required
+                      />
+                      <Input
+                        name="timezone"
+                        value={appContext?.workspace.timezone || 'Asia/Kolkata'}
+                        readOnly
+                      />
+                      <Button type="submit">Create</Button>
+                    </form>
+                  </article>
+                  <article className="panel settings-card">
+                    <div className="settings-heading">
+                      <ShieldCheck />
+                      <div>
+                        <h2>Workspace identity</h2>
+                        <p>
+                          Tenant-specific defaults used by dates, reports and
+                          revenue.
+                        </p>
+                      </div>
+                    </div>
+                    <form className="lead-form" onSubmit={saveSettings}>
+                      <div className="field-block">
+                        <label htmlFor="workspace-name">Workspace name</label>
+                        <Input
+                          id="workspace-name"
+                          name="name"
+                          key={appContext?.workspace.id}
+                          defaultValue={appContext?.workspace.name}
+                          required
+                        />
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="workspace-timezone">Timezone</label>
+                          <Input
+                            id="workspace-timezone"
+                            name="timezone"
+                            defaultValue={appContext?.workspace.timezone}
+                            required
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="workspace-currency">Currency</label>
+                          <Input
+                            id="workspace-currency"
+                            name="currency"
+                            defaultValue={appContext?.workspace.currency}
+                            maxLength={3}
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="settings-actions">
+                        <Button
+                          className="save-button"
+                          type="submit"
+                          disabled={
+                            !['owner', 'admin'].includes(appContext?.role || '')
+                          }
+                        >
+                          Save workspace
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={exportWorkspace}
+                        >
+                          Export data
+                        </Button>
+                      </div>
+                    </form>
+                  </article>
+                  <article className="panel settings-card">
+                    <div className="settings-heading">
+                      <BarChart3 />
+                      <div>
+                        <h2>Plan & usage</h2>
+                        <p>
+                          Transparent workspace usage for subscription planning.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="usage-grid">
+                      <span>
+                        <small>Plan</small>
+                        <strong>{appContext?.workspace.plan || 'trial'}</strong>
+                      </span>
+                      <span>
+                        <small>Contacts</small>
+                        <strong>{workspaceUsage.leads}</strong>
+                      </span>
+                      <span>
+                        <small>Active events</small>
+                        <strong>{workspaceUsage.activeEvents}</strong>
+                      </span>
+                      <span>
+                        <small>Members</small>
+                        <strong>
+                          {workspaceUsage.activeMembers}
+                          {appContext?.workspace.plan === 'trial' ? ' / 3' : ''}
+                        </strong>
+                      </span>
+                      <span>
+                        <small>Knowledge</small>
+                        <strong>{workspaceUsage.knowledgeSources}</strong>
+                      </span>
+                      <span>
+                        <small>Stored files</small>
+                        <strong>
+                          {workspaceUsage.storageBytes < 1048576
+                            ? `${Math.ceil(workspaceUsage.storageBytes / 1024)} KB`
+                            : `${(workspaceUsage.storageBytes / 1048576).toFixed(1)} MB`}
+                        </strong>
+                      </span>
+                    </div>
+                    <p className="field-help">
+                      Billing checkout is intentionally not activated until a
+                      payment provider, pricing, taxes, and legal terms are
+                      approved.
+                    </p>
+                  </article>
+                  <article
+                    className={`panel settings-card capability-card ${capabilities.aiConfigured ? 'ready' : 'attention'}`}
+                  >
+                    <div className="settings-heading">
+                      <Sparkles />
+                      <div>
+                        <h2>AI capability</h2>
+                        <p>
+                          {capabilities.aiConfigured
+                            ? 'OCR, transcription, conversation analysis, RFQ extraction and follow-up drafting are configured.'
+                            : 'Manual workflows are ready. AI workflows need a production API key before client testing.'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="capability-state">
+                      <i />
+                      {capabilities.aiConfigured
+                        ? 'Configured'
+                        : 'Configuration required'}
+                    </span>
+                  </article>
+                  <article className="panel settings-card">
+                    <div className="settings-heading">
+                      <UserPlus />
+                      <div>
+                        <h2>Invite a teammate</h2>
+                        <p>
+                          Invitations expire after seven days. Trial limit:
+                          three active members.
+                        </p>
+                      </div>
+                    </div>
+                    <form className="invite-form" onSubmit={inviteMember}>
+                      <Input
+                        name="email"
+                        type="email"
+                        placeholder="teammate@company.com"
+                        required
+                      />
+                      <select name="role" defaultValue="salesperson">
+                        <option value="admin">Administrator</option>
+                        <option value="manager">Manager</option>
+                        <option value="salesperson">Salesperson</option>
+                        <option value="marketing">Marketing</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                      <Button
+                        type="submit"
+                        disabled={
+                          !['owner', 'admin'].includes(appContext?.role || '')
+                        }
+                      >
+                        Invite
+                      </Button>
+                    </form>
+                    <div className="member-list">
+                      <h3>Members</h3>
+                      {members.map((member) => (
+                        <div key={member.id}>
+                          <span className="profile-avatar">
+                            {(member.email || member.displayName || 'TM')
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </span>
+                          <span>
+                            <strong>
+                              {member.displayName ||
+                                member.email ||
+                                'Team member'}
+                            </strong>
+                            <small>{member.email || member.role}</small>
+                          </span>
+                          {member.role === 'owner' ||
+                          !['owner', 'admin'].includes(
+                            appContext?.role || '',
+                          ) ? (
+                            <b>{member.role}</b>
+                          ) : (
+                            <span className="member-controls">
+                              <select
+                                aria-label={`Role for ${member.email || member.displayName || 'member'}`}
+                                value={member.role}
+                                onChange={(event) =>
+                                  updateMember(
+                                    member.id,
+                                    event.target.value,
+                                    member.status,
+                                  )
+                                }
+                              >
+                                <option value="admin">Admin</option>
+                                <option value="manager">Manager</option>
+                                <option value="salesperson">Sales</option>
+                                <option value="marketing">Marketing</option>
+                                <option value="viewer">Viewer</option>
+                              </select>
+                              <button
+                                onClick={() =>
+                                  updateMember(
+                                    member.id,
+                                    member.role,
+                                    member.status === 'active'
+                                      ? 'inactive'
+                                      : 'active',
+                                  )
+                                }
+                                type="button"
+                              >
+                                {member.status === 'active'
+                                  ? 'Deactivate'
+                                  : 'Activate'}
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {invitations.map((invite) => (
+                        <div key={invite.id} className="pending-member">
+                          <span className="profile-avatar">?</span>
+                          <span>
+                            <strong>{invite.email}</strong>
+                            <small>Invitation pending · {invite.role}</small>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => revokeInvitation(invite.id)}
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                  {appContext?.role === 'owner' ? (
+                    <article className="panel settings-card">
+                      <div className="settings-heading">
+                        <Trash2 />
+                        <div>
+                          <h2>Workspace deletion</h2>
+                          <p>
+                            {deletionRequest
+                              ? `Scheduled for ${new Date(deletionRequest.scheduledFor).toLocaleString()}. You can cancel until that time.`
+                              : 'Schedule permanent deletion with a seven-day recovery period.'}
+                          </p>
+                        </div>
+                      </div>
+                      <form
+                        className="lead-form"
+                        onSubmit={submitWorkspaceDeletion}
+                      >
+                        <div className="field-block">
+                          <label htmlFor="delete-workspace-name">
+                            Type the exact workspace name to confirm
+                          </label>
+                          <Input
+                            id="delete-workspace-name"
+                            name="confirmName"
+                            required
+                            placeholder={appContext.workspace.name}
+                          />
+                        </div>
+                        {deletionRequest ? (
+                          <div className="settings-actions">
+                            <Button
+                              type="submit"
+                              name="action"
+                              value="execute_deletion"
+                              disabled={
+                                settingsLoadedAt < deletionRequest.scheduledFor
+                              }
+                            >
+                              Permanently delete workspace
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={cancelWorkspaceDeletion}
+                            >
+                              Cancel deletion
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            type="submit"
+                            name="action"
+                            value="request_deletion"
+                            variant="outline"
+                          >
+                            Schedule deletion
+                          </Button>
+                        )}
+                      </form>
+                    </article>
+                  ) : null}
+                  <article className="panel settings-card audit-card">
+                    <div className="settings-heading">
+                      <FileText />
+                      <div>
+                        <h2>Recent security activity</h2>
+                        <p>
+                          Important workspace actions are permanently
+                          attributed.
+                        </p>
+                      </div>
+                    </div>
+                    {auditEvents.length ? (
+                      auditEvents.map((item) => (
+                        <div className="audit-row" key={item.id}>
+                          <span>{item.action.replaceAll('.', ' ')}</span>
+                          <small>
+                            {item.entityType} ·{' '}
+                            {new Date(item.createdAt).toLocaleString()}
+                          </small>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state">
+                        No recorded workspace changes yet.
+                      </div>
+                    )}
+                  </article>
+                </div>
+              ) : null}
+            </section>
+          )}
         </div>
         {notice ? <output className="toast">{notice}</output> : null}
       </section>
-      <Dialog open={searchOpen} onOpenChange={setSearchOpen}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>Search workspace</DialogTitle><DialogDescription>Find a contact, account, task, or opportunity.</DialogDescription></DialogHeader><Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Type a name, company, or action…" /><div className="search-results">{searchTerm.trim() ? [...capturedLeads.map((lead) => ({ label: lead.fullName, meta: lead.company, action: () => { setSearchOpen(false); openReview(lead); } })), ...tasks.map((task) => ({ label: task.title, meta: `${task.fullName} · ${task.company}`, action: () => { setSearchOpen(false); go('today'); } })), ...opportunities.map((item) => ({ label: item.title, meta: item.company, action: () => { setSearchOpen(false); go('opportunities'); } }))].filter((item) => `${item.label} ${item.meta}`.toLowerCase().includes(searchTerm.toLowerCase())).slice(0,8).map((item) => <button key={`${item.label}-${item.meta}`} onClick={item.action}><Search /><span><strong>{item.label}</strong><small>{item.meta}</small></span></button>) : <div className="empty-state">Start typing to search the current workspace.</div>}</div></DialogContent></Dialog>
-      <Dialog open={opportunityOpen} onOpenChange={(open) => { setOpportunityOpen(open); if (!open) setOpportunityLead(null); }}><DialogContent className="capture-dialog"><DialogHeader><DialogTitle>Create opportunity</DialogTitle><DialogDescription>{opportunityLead ? `Convert ${opportunityLead.fullName}’s confirmed conversation into pipeline.` : 'Add a qualified deal to the active event pipeline.'}</DialogDescription></DialogHeader><form className="lead-form" onSubmit={createOpportunity}>{opportunityLead ? <input type="hidden" name="leadId" value={opportunityLead.id} /> : null}<div className="field-block"><label htmlFor="opp-company">Company</label><Input id="opp-company" name="company" required placeholder="ABC Pharma" defaultValue={opportunityLead?.company === 'Company pending' ? '' : opportunityLead?.company} /></div><div className="field-block"><label htmlFor="opp-title">Opportunity</label><Input id="opp-title" name="title" required placeholder="Machine monitoring rollout" /></div><div className="field-grid"><div className="field-block"><label htmlFor="opp-value">Estimated value ({appContext?.workspace.currency || 'INR'})</label><Input id="opp-value" name="value" type="number" min="0" placeholder="1200000" /></div><div className="field-block"><label htmlFor="opp-close">Expected close</label><Input id="opp-close" name="expectedCloseDate" type="date" /></div></div><div className="field-block"><label htmlFor="opp-contacts">Opportunity stakeholders</label><select id="opp-contacts" name="contactIds" multiple defaultValue={opportunityLead?[opportunityLead.id]:[]}><option value="" disabled>Select one or more contacts</option>{capturedLeads.filter((lead)=>(!activeEventId||lead.eventId===activeEventId)&&(!opportunityLead||lead.company===opportunityLead.company)).map((lead)=><option key={lead.id} value={lead.id}>{lead.fullName} · {lead.company} · {lead.buyingRole||lead.role||'Contact'}</option>)}</select><small className="field-help">Use Ctrl or Command to select multiple stakeholders. Contacts must belong to the same account and event.</small></div><Button className="save-button" type="submit">Create opportunity</Button></form></DialogContent></Dialog>
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="search-dialog">
+          <DialogHeader>
+            <DialogTitle>Search workspace</DialogTitle>
+            <DialogDescription>
+              Find a contact, account, task, or opportunity.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Type a name, company, or action…"
+          />
+          <div className="search-results">
+            {searchTerm.trim() ? (
+              [
+                ...capturedLeads.map((lead) => ({
+                  label: lead.fullName,
+                  meta: lead.company,
+                  action: () => {
+                    setSearchOpen(false);
+                    openReview(lead);
+                  },
+                })),
+                ...tasks.map((task) => ({
+                  label: task.title,
+                  meta: `${task.fullName} · ${task.company}`,
+                  action: () => {
+                    setSearchOpen(false);
+                    go('today');
+                  },
+                })),
+                ...opportunities.map((item) => ({
+                  label: item.title,
+                  meta: item.company,
+                  action: () => {
+                    setSearchOpen(false);
+                    go('opportunities');
+                  },
+                })),
+              ]
+                .filter((item) =>
+                  `${item.label} ${item.meta}`
+                    .toLowerCase()
+                    .includes(searchTerm.toLowerCase()),
+                )
+                .slice(0, 8)
+                .map((item) => (
+                  <button
+                    key={`${item.label}-${item.meta}`}
+                    onClick={item.action}
+                  >
+                    <Search />
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.meta}</small>
+                    </span>
+                  </button>
+                ))
+            ) : (
+              <div className="empty-state">
+                Start typing to search the current workspace.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={opportunityOpen}
+        onOpenChange={(open) => {
+          setOpportunityOpen(open);
+          if (!open) setOpportunityLead(null);
+        }}
+      >
+        <DialogContent className="capture-dialog">
+          <DialogHeader>
+            <DialogTitle>Create opportunity</DialogTitle>
+            <DialogDescription>
+              {opportunityLead
+                ? `Convert ${opportunityLead.fullName}’s confirmed conversation into pipeline.`
+                : 'Add a qualified deal to the active event pipeline.'}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="lead-form" onSubmit={createOpportunity}>
+            {opportunityLead ? (
+              <input type="hidden" name="leadId" value={opportunityLead.id} />
+            ) : null}
+            <div className="field-block">
+              <label htmlFor="opp-company">Company</label>
+              <Input
+                id="opp-company"
+                name="company"
+                required
+                placeholder="ABC Pharma"
+                defaultValue={
+                  opportunityLead?.company === 'Company pending'
+                    ? ''
+                    : opportunityLead?.company
+                }
+              />
+            </div>
+            <div className="field-block">
+              <label htmlFor="opp-title">Opportunity</label>
+              <Input
+                id="opp-title"
+                name="title"
+                required
+                placeholder="Machine monitoring rollout"
+              />
+            </div>
+            <div className="field-grid">
+              <div className="field-block">
+                <label htmlFor="opp-value">
+                  Estimated value ({appContext?.workspace.currency || 'INR'})
+                </label>
+                <Input
+                  id="opp-value"
+                  name="value"
+                  type="number"
+                  min="0"
+                  placeholder="1200000"
+                />
+              </div>
+              <div className="field-block">
+                <label htmlFor="opp-close">Expected close</label>
+                <Input id="opp-close" name="expectedCloseDate" type="date" />
+              </div>
+            </div>
+            <div className="field-block">
+              <label htmlFor="opp-contacts">Opportunity stakeholders</label>
+              <select
+                id="opp-contacts"
+                name="contactIds"
+                multiple
+                defaultValue={opportunityLead ? [opportunityLead.id] : []}
+              >
+                <option value="" disabled>
+                  Select one or more contacts
+                </option>
+                {capturedLeads
+                  .filter(
+                    (lead) =>
+                      (!activeEventId || lead.eventId === activeEventId) &&
+                      (!opportunityLead ||
+                        lead.company === opportunityLead.company),
+                  )
+                  .map((lead) => (
+                    <option key={lead.id} value={lead.id}>
+                      {lead.fullName} · {lead.company} ·{' '}
+                      {lead.buyingRole || lead.role || 'Contact'}
+                    </option>
+                  ))}
+              </select>
+              <small className="field-help">
+                Use Ctrl or Command to select multiple stakeholders. Contacts
+                must belong to the same account and event.
+              </small>
+            </div>
+            <Button className="save-button" type="submit">
+              Create opportunity
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
