@@ -67,6 +67,7 @@ export async function GET(request: Request) {
       'products',
       'ideal_customer_profiles',
       'qualification_rules',
+      'knowledge_ingestions',
       'knowledge_sources',
       'event_cost_history',
       'event_cost_lines',
@@ -528,6 +529,7 @@ export async function POST(request: Request) {
       'event_memberships',
       'events',
       'company_documents',
+      'knowledge_ingestions',
       'knowledge_sources',
       'qualification_rules',
       'ideal_customer_profiles',
@@ -589,7 +591,9 @@ export async function POST(request: Request) {
     const memberLimit = entitlementsFor(context.workspace.plan).activeMembers;
     if (Number(count?.count || 0) >= memberLimit)
       return Response.json(
-        { error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.` },
+        {
+          error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.`,
+        },
         { status: 402 },
       );
     const duplicate = await db
@@ -767,10 +771,7 @@ export async function POST(request: Request) {
         { error: 'Transfer ownership before changing the owner.' },
         { status: 409 },
       );
-    if (
-      status === 'active' &&
-      target.status !== 'active'
-    ) {
+    if (status === 'active' && target.status !== 'active') {
       const count = await db
         .prepare(
           `SELECT COUNT(*) AS count FROM memberships WHERE workspace_id=? AND status='active'`,
@@ -780,7 +781,9 @@ export async function POST(request: Request) {
       const memberLimit = entitlementsFor(context.workspace.plan).activeMembers;
       if (Number(count?.count || 0) >= memberLimit)
         return Response.json(
-          { error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.` },
+          {
+            error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.`,
+          },
           { status: 402 },
         );
     }
@@ -801,9 +804,13 @@ export async function POST(request: Request) {
       ]);
     } catch (error) {
       if (isEntitlementConstraint(error, 'ACTIVE_MEMBER_LIMIT')) {
-        const memberLimit = entitlementsFor(context.workspace.plan).activeMembers;
+        const memberLimit = entitlementsFor(
+          context.workspace.plan,
+        ).activeMembers;
         return Response.json(
-          { error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.` },
+          {
+            error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.`,
+          },
           { status: 402 },
         );
       }

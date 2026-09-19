@@ -1143,6 +1143,46 @@ export const knowledgeSources = sqliteTable(
   ],
 );
 
+export const knowledgeIngestions = sqliteTable(
+  'knowledge_ingestions',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => knowledgeSources.id),
+    status: text('status').notNull().default('ready_for_review'),
+    contentHash: text('content_hash').notNull(),
+    extractionMethod: text('extraction_method').notNull(),
+    extractedText: text('extracted_text'),
+    provenanceJson: text('provenance_json').notNull(),
+    attempts: integer('attempts').notNull().default(1),
+    lastError: text('last_error'),
+    reviewNote: text('review_note'),
+    reviewedBy: text('reviewed_by'),
+    reviewedAt: integer('reviewed_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_knowledge_ingestion_source').on(
+      table.workspaceId,
+      table.sourceId,
+    ),
+    index('idx_knowledge_ingestion_status').on(
+      table.workspaceId,
+      table.status,
+      table.updatedAt,
+    ),
+    index('idx_knowledge_ingestion_hash').on(
+      table.workspaceId,
+      table.contentHash,
+    ),
+  ],
+);
+
 export const events = sqliteTable(
   'events',
   {

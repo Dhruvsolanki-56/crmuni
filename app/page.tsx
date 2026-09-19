@@ -325,6 +325,14 @@ type KnowledgeData = {
     contentType?: string;
     sizeBytes?: number;
     status: string;
+    contentHash?: string;
+    extractionMethod?: string;
+    ingestionStatus?: string;
+    attempts?: number;
+    lastError?: string;
+    reviewNote?: string;
+    reviewedBy?: string;
+    reviewedAt?: number;
   }>;
   claims: Array<{
     id: string;
@@ -2197,7 +2205,12 @@ export default function Home() {
   }
 
   async function reviewKnowledge(
-    action: 'approve_source' | 'reject_source' | 'approve_claim' | 'retire_claim',
+    action:
+      | 'approve_source'
+      | 'reject_source'
+      | 'retry_source'
+      | 'approve_claim'
+      | 'retire_claim',
     id: string,
   ) {
     const response = await apiFetch('/api/company-intelligence', {
@@ -5744,7 +5757,9 @@ export default function Home() {
                         />
                       </div>
                       <div className="field-block">
-                        <label htmlFor="profile-change-reason">Change reason</label>
+                        <label htmlFor="profile-change-reason">
+                          Change reason
+                        </label>
                         <Input
                           id="profile-change-reason"
                           name="changeReason"
@@ -5775,9 +5790,13 @@ export default function Home() {
                   <article className="panel knowledge-card">
                     <h2>Approved claims</h2>
                     <p className="field-help">
-                      Only approved claims may be supplied to AI-generated follow-ups.
+                      Only approved claims may be supplied to AI-generated
+                      follow-ups.
                     </p>
-                    <form className="lead-form compact-form" onSubmit={submitKnowledge}>
+                    <form
+                      className="lead-form compact-form"
+                      onSubmit={submitKnowledge}
+                    >
                       <input type="hidden" name="action" value="add_claim" />
                       <Textarea
                         name="claimText"
@@ -5804,26 +5823,36 @@ export default function Home() {
                           <span>
                             <strong>{claim.claimText}</strong>
                             <small>
-                              {claim.sourceName || claim.evidenceNote || 'Evidence not linked'}
+                              {claim.sourceName ||
+                                claim.evidenceNote ||
+                                'Evidence not linked'}
                             </small>
                           </span>
                           <b>{claim.status}</b>
                           {claim.status === 'draft' &&
-                          ['owner', 'admin'].includes(appContext?.role || '') ? (
+                          ['owner', 'admin'].includes(
+                            appContext?.role || '',
+                          ) ? (
                             <Button
                               type="button"
                               variant="outline"
-                              onClick={() => reviewKnowledge('approve_claim', claim.id)}
+                              onClick={() =>
+                                reviewKnowledge('approve_claim', claim.id)
+                              }
                             >
                               Approve
                             </Button>
                           ) : null}
                           {claim.status !== 'retired' &&
-                          ['owner', 'admin'].includes(appContext?.role || '') ? (
+                          ['owner', 'admin'].includes(
+                            appContext?.role || '',
+                          ) ? (
                             <Button
                               type="button"
                               variant="outline"
-                              onClick={() => reviewKnowledge('retire_claim', claim.id)}
+                              onClick={() =>
+                                reviewKnowledge('retire_claim', claim.id)
+                              }
                             >
                               Retire
                             </Button>
@@ -6071,10 +6100,30 @@ export default function Home() {
                                 ? ` · ${Math.ceil(item.sizeBytes / 1024)} KB`
                                 : ''}
                             </small>
+                            {item.ingestionStatus ? (
+                              <small>
+                                Ingestion:{' '}
+                                {item.ingestionStatus.replaceAll('_', ' ')}
+                                {item.extractionMethod
+                                  ? ` · ${item.extractionMethod.replaceAll('_', ' ')}`
+                                  : ''}
+                                {item.contentHash
+                                  ? ` · SHA-256 ${item.contentHash.slice(0, 12)}…`
+                                  : ''}
+                              </small>
+                            ) : null}
+                            {item.lastError ? (
+                              <small className="negative">
+                                {item.lastError}
+                              </small>
+                            ) : null}
                           </span>
                           <b>{item.sourceType}</b>
-                          {['stored', 'pending_review'].includes(item.status) &&
-                          ['owner', 'admin'].includes(appContext?.role || '') ? (
+                          {item.ingestionStatus === 'ready_for_review' &&
+                          ['stored', 'pending_review'].includes(item.status) &&
+                          ['owner', 'admin'].includes(
+                            appContext?.role || '',
+                          ) ? (
                             <>
                               <Button
                                 type="button"
@@ -6095,6 +6144,20 @@ export default function Home() {
                                 Reject
                               </Button>
                             </>
+                          ) : null}
+                          {item.ingestionStatus === 'failed' &&
+                          ['owner', 'admin'].includes(
+                            appContext?.role || '',
+                          ) ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                reviewKnowledge('retry_source', item.id)
+                              }
+                            >
+                              Retry
+                            </Button>
                           ) : null}
                           <button
                             className="record-remove"
@@ -6529,8 +6592,8 @@ export default function Home() {
                       <div>
                         <h2>Invite a teammate</h2>
                         <p>
-                            Invitations expire after seven days. This plan allows{' '}
-                            {planEntitlements.activeMembers} active members.
+                          Invitations expire after seven days. This plan allows{' '}
+                          {planEntitlements.activeMembers} active members.
                         </p>
                       </div>
                     </div>

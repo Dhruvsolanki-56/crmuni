@@ -253,6 +253,13 @@
       "when": 1789861143918,
       "tag": "0035_govern_company_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1789861508108,
+      "tag": "0036_track_knowledge_ingestion",
+      "breakpoints": true
     }
   ]
 }

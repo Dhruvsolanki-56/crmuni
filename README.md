@@ -22,6 +22,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - Customer support access is read-only, owner-granted to a named authenticated identity, time-limited, audited, and immediately revocable.
 - Trial, Starter, Growth, and Scale limits for active members, aggregate file storage, and AI request rate are enforced in API code and by database concurrency guards. Unknown plans fail closed to Trial limits.
 - Uploaded file signatures are checked instead of trusting the browser-provided MIME type.
+- Knowledge files and normalized URL references are fingerprinted for duplicate detection, stored with provenance, and require attributed human approval before use. Plain text and CSV content is extracted locally; arbitrary URLs are not fetched server-side.
 - AI output is untrusted until a salesperson confirms it; source evidence remains retained.
 - Company profile changes are versioned, evidence sources require review, and sales claims remain draft until an owner/admin approves them; only approved claims are supplied to AI follow-up generation.
 - Follow-up approval does not silently send a message.
