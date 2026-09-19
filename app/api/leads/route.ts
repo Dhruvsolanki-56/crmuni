@@ -13,6 +13,9 @@ type NewLead = {
   dueDate?: unknown;
   clientCaptureId?: unknown;
   attachmentKind?: unknown;
+  emailConsent?: unknown;
+  whatsappConsent?: unknown;
+  consentSource?: unknown;
 };
 
 const allowedFiles = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg']);
@@ -57,6 +60,7 @@ export async function POST(request: Request) {
   const dueDate = clean(body.dueDate, 10);
   const clientCaptureId = clean(body.clientCaptureId, 80);
   const requestedAttachmentKind = clean(body.attachmentKind, 20);
+  const consentSource=clean(body.consentSource,80)||'salesperson_attestation'; const consentChannels=[...(body.emailConsent==='on'||body.emailConsent===true?['email']:[]),...(body.whatsappConsent==='on'||body.whatsappConsent===true?['whatsapp']:[])];
   if ((!suppliedFullName || !suppliedCompany) && !file) return Response.json({ error: 'Add a full name and company, or attach a card, badge, QR image, or recording.' }, { status: 400 });
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: 'Enter a valid email address.' }, { status: 400 });
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return Response.json({ error: 'Due date must use YYYY-MM-DD.' }, { status: 400 });
@@ -89,6 +93,7 @@ export async function POST(request: Request) {
     INSERT INTO leads (id, workspace_id, event_id, account_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'needs_review', ?, ?)
   `).bind(leadId, context.workspace.id, eventId, account?.id || null, clientCaptureId || null, context.user.id, fullName, company, role || null, email || null, phone || null, source, now, now)];
+  for(const channel of consentChannels)statements.push(database().prepare(`INSERT INTO lead_consents (id,workspace_id,lead_id,purpose,channel,status,source,captured_at,updated_by,updated_at) VALUES (?,?,?,'follow_up',?,'granted',?,?,?,?)`).bind(crypto.randomUUID(),context.workspace.id,leadId,channel,consentSource,now,context.user.id,now));
   if (account) statements.unshift(database().prepare(`INSERT INTO accounts (id, workspace_id, name, normalized_name, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?) ON CONFLICT(workspace_id, normalized_name) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`).bind(account.id, context.workspace.id, suppliedCompany, account.normalized, now, now));
 
   if (interactionId) statements.push(database().prepare(`
@@ -100,8 +105,8 @@ export async function POST(request: Request) {
     VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
   `).bind(taskId, context.workspace.id, leadId, context.user.id, nextAction, dueDate || null, interactionId, now, now));
   if (file && assetId && storageKey) statements.push(database().prepare(`INSERT INTO lead_capture_assets (id, workspace_id, lead_id, kind, original_name, storage_key, content_type, size_bytes, processing_status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'stored_pending_extraction', ?, ?)`).bind(assetId, context.workspace.id, leadId, attachmentKind, file.name.slice(0, 180), storageKey, file.type, file.size, context.user.id, now));
-  statements.push(auditStatement(context, 'lead.created', 'lead', leadId, { source }));
+  statements.push(auditStatement(context, 'lead.created', 'lead', leadId, { source, consentChannels }));
 
   try { await database().batch(statements); } catch (error) { if (storageKey) await revenueEnv().FILES.delete(storageKey); throw error; }
-  return Response.json({ lead: { id: leadId, fullName, company, role, email, phone, note, nextAction, dueDate, reviewStatus: 'needs_review', captureStatus: assetId ? 'stored_pending_extraction' : null, captureKind: assetId ? attachmentKind : null, createdAt: now }, asset: assetId ? { id: assetId, kind: attachmentKind, processingStatus: 'stored_pending_extraction' } : null }, { status: 201 });
+  return Response.json({ lead: { id: leadId, fullName, company, role, email, phone, note, nextAction, dueDate, reviewStatus: 'needs_review', emailConsentStatus: consentChannels.includes('email')?'granted':null, whatsappConsentStatus: consentChannels.includes('whatsapp')?'granted':null, captureStatus: assetId ? 'stored_pending_extraction' : null, captureKind: assetId ? attachmentKind : null, createdAt: now }, asset: assetId ? { id: assetId, kind: attachmentKind, processingStatus: 'stored_pending_extraction' } : null }, { status: 201 });
 }

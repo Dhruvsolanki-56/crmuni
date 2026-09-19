@@ -412,3 +412,36 @@ export const workspaceDeletionRequests = sqliteTable('workspace_deletion_request
   uniqueIndex('uidx_workspace_deletion_requests_workspace').on(table.workspaceId),
   index('idx_workspace_deletion_requests_status_due').on(table.status, table.scheduledFor),
 ]);
+
+export const leadConsents = sqliteTable('lead_consents', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  purpose: text('purpose').notNull(),
+  channel: text('channel').notNull(),
+  status: text('status').notNull(),
+  source: text('source').notNull(),
+  capturedAt: integer('captured_at'),
+  withdrawnAt: integer('withdrawn_at'),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_lead_consents_scope').on(table.workspaceId, table.leadId, table.purpose, table.channel),
+  index('idx_lead_consents_status').on(table.workspaceId, table.channel, table.status),
+]);
+
+export const suppressionEntries = sqliteTable('suppression_entries', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  channel: text('channel').notNull(),
+  identifierHash: text('identifier_hash').notNull(),
+  reason: text('reason').notNull(),
+  sourceLeadId: text('source_lead_id').references(() => leads.id),
+  status: text('status').notNull().default('active'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_suppression_workspace_channel_identifier').on(table.workspaceId, table.channel, table.identifierHash),
+  index('idx_suppression_workspace_status').on(table.workspaceId, table.status),
+]);

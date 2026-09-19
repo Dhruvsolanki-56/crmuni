@@ -46,7 +46,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | Offline outbox and stable capture ID | PARTIAL | IndexedDB outbox and server idempotency exist; automated reopen/retry/partial-upload tests are missing. |
 | OCR confidence and correction | PARTIAL | Extraction confidence and editable lead fields exist; explicit per-field review UI is limited. |
 | Duplicate detection and reversible merge | MISSING | Stable-capture deduplication exists, but person/company duplicate suggestions and merge provenance do not. |
-| Consent and withdrawal | MISSING | No consent/purpose/source/withdrawal model or suppression enforcement. |
+| Consent and withdrawal | PARTIAL | Per-channel follow-up permission, withdrawal, hashed suppression, audit and draft/open enforcement exist; jurisdiction-specific lawful-basis policy and route-level tests remain. |
 
 ## Phase 4 — Conversation intelligence and qualification
 
@@ -63,7 +63,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | --- | --- | --- |
 | Confirmed commitments to tasks | PARTIAL | Confirmation creates dated tasks; cancel/reopen/reminders and concurrency handling are missing. |
 | Editable communication drafts | BROKEN | Drafts can be approved but not edited; approval cannot be invalidated by an edit. |
-| Consent/suppression check | MISSING | No messaging eligibility boundary. |
+| Consent/suppression check | PARTIAL | Draft generation and external-client opening both recheck active permission and hashed suppression; provider-side send enforcement awaits a real connector. |
 | Meetings and calendar export | MISSING | No meeting model, states or `.ics` export. |
 
 ## Phase 6 — Revenue workflow
