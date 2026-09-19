@@ -78,6 +78,10 @@ export const leads = sqliteTable('leads', {
   source: text('source').notNull().default('manual'),
   reviewStatus: text('review_status').notNull().default('needs_review'),
   mergedIntoId: text('merged_into_id'),
+  qualificationState: text('qualification_state').notNull().default('unqualified'),
+  qualificationReason: text('qualification_reason'),
+  qualificationUpdatedBy: text('qualification_updated_by'),
+  qualificationUpdatedAt: integer('qualification_updated_at'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [
@@ -476,3 +480,27 @@ export const leadMergeEvents = sqliteTable('lead_merge_events', {
   revertedBy: text('reverted_by'),
   revertedAt: integer('reverted_at'),
 }, (table) => [index('idx_lead_merge_source_status').on(table.workspaceId, table.sourceLeadId, table.status)]);
+
+export const leadQualificationHistory = sqliteTable('lead_qualification_history', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  state: text('state').notNull(),
+  score: integer('score'),
+  reason: text('reason').notNull(),
+  source: text('source').notNull(),
+  previousState: text('previous_state'),
+  changedBy: text('changed_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_lead_qualification_history_lead').on(table.workspaceId, table.leadId, table.createdAt)]);
+
+export const leadAssignmentHistory = sqliteTable('lead_assignment_history', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  previousOwnerId: text('previous_owner_id'),
+  ownerId: text('owner_id').notNull(),
+  reason: text('reason').notNull(),
+  changedBy: text('changed_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [index('idx_lead_assignment_history_lead').on(table.workspaceId, table.leadId, table.createdAt)]);

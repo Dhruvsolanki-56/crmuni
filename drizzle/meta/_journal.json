@@ -141,6 +141,13 @@
       "when": 1789852674294,
       "tag": "0019_secret_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1789853135507,
+      "tag": "0020_acoustic_rattler",
+      "breakpoints": true
     }
   ]
 }

@@ -53,8 +53,8 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | Requirement | Status | Evidence / gap |
 | --- | --- | --- |
 | Evidence-grounded structured extraction | PARTIAL | Exact-span checks and human confirmation exist; evaluation and malformed-output tests are missing. |
-| Explicit qualification state | MISSING | Numeric score exists; Hot/Warm/Cold/Unqualified, reason and override history do not. |
-| Lead ownership | PARTIAL | `owner_id` exists and defaults to capturer; assignment/reassignment workflow and history are missing. |
+| Explicit qualification state | PARTIAL | Hot/Warm/Cold/Unqualified thresholds, reason, AI-confirmed history and manual override history exist; cohort calibration with pilot data remains. |
+| Lead ownership | PARTIAL | Capture ownership, event-team reassignment, reason and immutable history exist; round-robin and workload routing remain. |
 | Account stakeholders | PARTIAL | Buying roles exist; influence, duplicate account review and multi-contact opportunity association are incomplete. |
 
 ## Phase 5 — Follow-up, commitments and meetings

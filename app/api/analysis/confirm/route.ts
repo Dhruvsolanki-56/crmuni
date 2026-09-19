@@ -1,5 +1,6 @@
 import type { ConversationAnalysis } from '@/lib/analysis-schema';
 import { auditStatement, database, requireLeadAccess, requireRole, requireWorkspace } from '@/lib/db';
+import { qualificationStateForScore } from '@/lib/qualification';
 
 export async function POST(request: Request) {
   const context = await requireWorkspace(request);
@@ -24,9 +25,11 @@ export async function POST(request: Request) {
   }
   if (analysis.commitments.some((item) => !item.due_date)) return Response.json({ error: 'Confirm a date for every commitment before creating tasks.' }, { status: 409 });
   const now = Date.now();
+  const qualificationState=qualificationStateForScore(analysis.score.value);
   const statements = [
     database().prepare(`UPDATE ai_extractions SET status = 'confirmed', confirmed_at = ?, confirmed_by = ? WHERE id = ? AND workspace_id = ?`).bind(now, context.user.id, extractionId, context.workspace.id),
-    database().prepare(`UPDATE leads SET review_status = 'confirmed', updated_at = ? WHERE id = ? AND workspace_id = ?`).bind(now, extraction.leadId, context.workspace.id),
+    database().prepare(`INSERT INTO lead_qualification_history (id,workspace_id,lead_id,state,score,reason,source,previous_state,changed_by,created_at) SELECT ?,?,?,?,?,?,'ai_confirmed',qualification_state,?,? FROM leads WHERE id=? AND workspace_id=?`).bind(crypto.randomUUID(),context.workspace.id,extraction.leadId,qualificationState,analysis.score.value,analysis.score.rationale.slice(0,2000),context.user.id,now,extraction.leadId,context.workspace.id),
+    database().prepare(`UPDATE leads SET review_status='confirmed',qualification_state=?,qualification_reason=?,qualification_updated_by=?,qualification_updated_at=?,updated_at=? WHERE id=? AND workspace_id=?`).bind(qualificationState,analysis.score.rationale.slice(0,2000),context.user.id,now,now,extraction.leadId,context.workspace.id),
   ];
   for (const field of analysis.fields) {
     if (!field.value || !field.evidence) continue;
