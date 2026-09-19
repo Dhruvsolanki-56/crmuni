@@ -107,6 +107,36 @@ export const invitations = sqliteTable(
   ],
 );
 
+export const leadErasureRequests = sqliteTable(
+  'lead_erasure_requests',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    leadId: text('lead_id').notNull(),
+    status: text('status').notNull().default('queued'),
+    assetKeysJson: text('asset_keys_json').notNull().default('[]'),
+    requestedBy: text('requested_by').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    completedAt: integer('completed_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_lead_erasure_workspace_status').on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+    ),
+    uniqueIndex('uidx_lead_erasure_workspace_lead').on(
+      table.workspaceId,
+      table.leadId,
+    ),
+  ],
+);
+
 export const auditEvents = sqliteTable(
   'audit_events',
   {

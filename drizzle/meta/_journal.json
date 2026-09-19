@@ -239,6 +239,13 @@
       "when": 1789860213352,
       "tag": "0033_enforce_plan_entitlements",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1789860666653,
+      "tag": "0034_durable_contact_erasure",
+      "breakpoints": true
     }
   ]
 }

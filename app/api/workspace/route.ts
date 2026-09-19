@@ -7,10 +7,10 @@ import {
   requireOpportunityAccess,
   requireRole,
   requireWorkspace,
-  revenueEnv,
 } from '@/lib/db';
 import { accountIdentity, normalizeCompany } from '@/lib/accounts';
 import { suppressionIdentifier, type ContactChannel } from '@/lib/consent';
+import { runDueJobs } from '@/lib/jobs';
 
 function clean(value: unknown, max: number) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -543,102 +543,23 @@ export async function POST(request: Request) {
       .bind(id, context.workspace.id)
       .all<{ storageKey: string }>();
     const now = Date.now();
+    const existing = await db.prepare(`SELECT id,status FROM lead_erasure_requests WHERE workspace_id=? AND lead_id=?`)
+      .bind(context.workspace.id, id)
+      .first<{ id: string; status: string }>();
+    if (existing?.status === 'completed')
+      return Response.json({ ok: true, status: 'completed', duplicate: true });
+    const requestId = existing?.id || crypto.randomUUID();
+    const jobId = crypto.randomUUID();
     await db.batch([
-      db
-        .prepare(`DELETE FROM lead_facts WHERE lead_id=? AND workspace_id=?`)
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM qualification_scores WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM lead_qualification_history WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM communication_drafts WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(`DELETE FROM lead_consents WHERE lead_id=? AND workspace_id=?`)
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `UPDATE suppression_entries SET source_lead_id=NULL,updated_at=? WHERE source_lead_id=? AND workspace_id=?`,
-        )
-        .bind(now, id, context.workspace.id),
-      db
-        .prepare(
-          `UPDATE lead_duplicate_suggestions SET status='dismissed',resolved_by=?,resolved_at=?,updated_at=? WHERE workspace_id=? AND (source_lead_id=? OR target_lead_id=?) AND status='pending'`,
-        )
-        .bind(context.user.id, now, now, context.workspace.id, id, id),
-      db
-        .prepare(
-          `DELETE FROM ai_extractions WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM meeting_participants WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM opportunity_contacts WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `UPDATE meetings SET lead_id=NULL,updated_at=? WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(now, id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM task_history WHERE workspace_id=? AND task_id IN (SELECT id FROM tasks WHERE workspace_id=? AND lead_id=?)`,
-        )
-        .bind(context.workspace.id, context.workspace.id, id),
-      db
-        .prepare(`DELETE FROM tasks WHERE lead_id=? AND workspace_id=?`)
-        .bind(id, context.workspace.id),
-      db
-        .prepare(`DELETE FROM interactions WHERE lead_id=? AND workspace_id=?`)
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM account_stakeholders WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `DELETE FROM lead_capture_assets WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(id, context.workspace.id),
-      db
-        .prepare(
-          `UPDATE rfqs SET lead_id=NULL,updated_at=? WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(now, id, context.workspace.id),
-      db
-        .prepare(
-          `UPDATE opportunities SET lead_id=NULL,updated_at=? WHERE lead_id=? AND workspace_id=?`,
-        )
-        .bind(now, id, context.workspace.id),
-      db
-        .prepare(
-          `UPDATE leads SET full_name='Deleted contact',role=NULL,email=NULL,phone=NULL,source='privacy_erasure',review_status='erased',qualification_state='unqualified',qualification_reason=NULL,qualification_updated_by=NULL,qualification_updated_at=NULL,updated_at=? WHERE id=? AND workspace_id=?`,
-        )
-        .bind(now, id, context.workspace.id),
-      auditStatement(context, 'lead.erased', 'lead', id),
+      db.prepare(`UPDATE leads SET full_name='Deleted contact',role=NULL,email=NULL,phone=NULL,source='privacy_erasure_pending',review_status='erasure_pending',qualification_state='unqualified',qualification_reason=NULL,qualification_updated_by=NULL,qualification_updated_at=NULL,updated_at=? WHERE id=? AND workspace_id=?`).bind(now, id, context.workspace.id),
+      db.prepare(`INSERT INTO lead_erasure_requests (id,workspace_id,lead_id,status,asset_keys_json,requested_by,attempts,created_at,updated_at) VALUES (?,?,?,'queued',?,?,0,?,?) ON CONFLICT(workspace_id,lead_id) DO UPDATE SET status=CASE WHEN lead_erasure_requests.status='completed' THEN 'completed' ELSE 'queued' END,asset_keys_json=CASE WHEN lead_erasure_requests.status='completed' THEN lead_erasure_requests.asset_keys_json ELSE excluded.asset_keys_json END,requested_by=excluded.requested_by,attempts=CASE WHEN lead_erasure_requests.status='failed' THEN 0 ELSE lead_erasure_requests.attempts END,last_error=NULL,updated_at=excluded.updated_at`).bind(requestId, context.workspace.id, id, JSON.stringify(assets.results.map((asset) => asset.storageKey)), context.user.id, now, now),
+      db.prepare(`INSERT INTO background_jobs (id,workspace_id,kind,entity_type,entity_id,dedupe_key,payload_json,status,attempts,max_attempts,available_at,created_at,updated_at) VALUES (?,?,'lead_contact_erasure','lead_erasure_request',?,?,'{}','queued',0,8,?,?,?) ON CONFLICT(workspace_id,kind,dedupe_key) DO UPDATE SET status=CASE WHEN background_jobs.status='running' THEN 'running' ELSE 'queued' END,attempts=CASE WHEN background_jobs.status='running' THEN background_jobs.attempts ELSE 0 END,available_at=excluded.available_at,locked_at=CASE WHEN background_jobs.status='running' THEN background_jobs.locked_at ELSE NULL END,last_error=NULL,completed_at=NULL,updated_at=excluded.updated_at`).bind(jobId, context.workspace.id, requestId, id, now, now, now),
+      auditStatement(context, 'lead.erasure_requested', 'lead', id, { requestId, assetCount: assets.results.length }),
     ]);
-    await Promise.all(
-      assets.results.map((asset) =>
-        revenueEnv().FILES.delete(asset.storageKey),
-      ),
-    );
-    return Response.json({ ok: true });
+    const job = await db.prepare(`SELECT id FROM background_jobs WHERE workspace_id=? AND kind='lead_contact_erasure' AND dedupe_key=?`).bind(context.workspace.id, id).first<{ id: string }>();
+    const run = job ? await runDueJobs(context.workspace.id, job.id) : null;
+    const erasure = await db.prepare(`SELECT status,last_error AS lastError FROM lead_erasure_requests WHERE id=? AND workspace_id=?`).bind(requestId, context.workspace.id).first<{ status: string; lastError: string | null }>();
+    return Response.json({ ok: true, status: erasure?.status || 'queued', requestId, run });
   }
   if (action === 'create_opportunity') {
     requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);

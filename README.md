@@ -26,6 +26,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - Follow-up approval does not silently send a message.
 - Important changes are written to the workspace audit trail.
 - Due reminders use durable jobs with stale-lock recovery, exponential retry, dead-letter alerts, and an owner/admin operations console.
+- Contact erasure immediately masks direct identifiers, durably retries file/database cleanup, verifies personal derivatives are gone, and records completion before reporting success.
 - Revenue reporting separates open and weighted pipeline, revenue ROI, profit ROI, and conservative cost reconciliation.
 
 ## Local development

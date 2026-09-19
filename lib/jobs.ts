@@ -1,5 +1,6 @@
 import { database } from '@/lib/db';
 import { retryDelayMs } from '@/lib/job-policy';
+import { processLeadErasure } from '@/lib/privacy-erasure';
 
 const MAX_BATCH = 25;
 const LOCK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -13,7 +14,7 @@ type Job = {
   maxAttempts: number;
 };
 
-export async function runDueJobs(workspaceId?: string) {
+export async function runDueJobs(workspaceId?: string, onlyJobId?: string) {
   const db = database();
   const now = Date.now();
   const runId = crypto.randomUUID();
@@ -23,12 +24,17 @@ export async function runDueJobs(workspaceId?: string) {
     )
     .bind(runId, workspaceId || null, now)
     .run();
-  const filter = workspaceId ? ' AND workspace_id=?' : '';
+  const filter = `${workspaceId ? ' AND workspace_id=?' : ''}${onlyJobId ? ' AND id=?' : ''}`;
   const rows = await db
     .prepare(
       `SELECT id,workspace_id AS workspaceId,kind,entity_id AS entityId,attempts,max_attempts AS maxAttempts FROM background_jobs WHERE ((status IN ('queued','failed') AND available_at<=?) OR (status='running' AND locked_at<?))${filter} ORDER BY available_at ASC LIMIT ${MAX_BATCH}`,
     )
-    .bind(now, now - LOCK_TIMEOUT_MS, ...(workspaceId ? [workspaceId] : []))
+    .bind(
+      now,
+      now - LOCK_TIMEOUT_MS,
+      ...(workspaceId ? [workspaceId] : []),
+      ...(onlyJobId ? [onlyJobId] : []),
+    )
     .all<Job>();
   let completed = 0;
   let failed = 0;
@@ -160,6 +166,10 @@ async function processJob(job: Job, now: number) {
         now,
       )
       .run();
+    return;
+  }
+  if (job.kind === 'lead_contact_erasure') {
+    await processLeadErasure(job.workspaceId, job.entityId, now);
     return;
   }
   throw new Error(`Unsupported job kind: ${job.kind}`);

@@ -1138,7 +1138,7 @@ export default function Home() {
         version: draft.version,
       }),
     });
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as { error?: string; status?: string };
     if (response.ok)
       setFollowups((current) =>
         current.map((item) =>
@@ -1215,7 +1215,10 @@ export default function Home() {
         buyingRole,
       }),
     });
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as {
+      error?: string;
+      status?: string;
+    };
     if (!response.ok) {
       setAnalysisError(data.error || 'Could not update stakeholder role.');
       return;
@@ -1455,7 +1458,10 @@ export default function Home() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'erase_lead', id }),
     });
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as {
+      error?: string;
+      status?: string;
+    };
     if (!response.ok) {
       setAnalysisError(data.error || 'Could not erase this contact.');
       return;
@@ -1473,14 +1479,19 @@ export default function Home() {
               note: undefined,
               nextAction: undefined,
               dueDate: undefined,
-              reviewStatus: 'erased',
+              reviewStatus:
+                data.status === 'completed' ? 'erased' : 'erasure_pending',
               captureStatus: undefined,
               extractedJson: undefined,
             }
           : lead,
       ),
     );
-    setNotice('Personal data erased; company revenue history retained');
+    setNotice(
+      data.status === 'completed'
+        ? 'Personal data erased and verified; company revenue history retained'
+        : 'Personal data hidden; durable erasure is queued for automatic retry',
+    );
     void loadWorkspace();
   }
 

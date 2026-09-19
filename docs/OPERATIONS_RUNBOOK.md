@@ -26,6 +26,7 @@ The worker currently performs in-app task reminders and raises a protected delet
 3. Inspect critical alerts before retrying. Correct configuration or data first; blind retry can repeat the same failure.
 4. Verify the latest job run occurred within two scheduler intervals.
 5. Review storage and active-member usage for unexpected growth.
+6. Treat dead `lead_contact_erasure` jobs as privacy incidents: retry after correcting R2/D1 access, confirm the erasure request reaches `completed`, and retain the alert acknowledgement trail.
 
 ## Incident response
 
