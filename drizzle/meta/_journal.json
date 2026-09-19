@@ -190,6 +190,20 @@
       "when": 1789856500307,
       "tag": "0026_dear_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1789857021955,
+      "tag": "0027_great_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1789857057045,
+      "tag": "0028_majestic_sharon_carter",
+      "breakpoints": true
     }
   ]
 }

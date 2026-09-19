@@ -351,6 +351,11 @@ type Quotation = {
   currency: string;
   validUntil?: string;
   status: string;
+  version: number;
+  revisionCount: number;
+  approvedBy?: string;
+  approvedAt?: number;
+  sentAt?: number;
   hasDocument: boolean;
   originalName?: string;
   createdAt: number;
@@ -2159,11 +2164,13 @@ export default function Home() {
     setNotice('Quotation created');
     await loadQuotations();
   }
-  async function updateQuotationStatus(id: string, status: string) {
+  async function updateQuotationStatus(item: Quotation, status: string) {
+    const note=status==='rejected'?window.prompt('Why did the customer reject this quotation?')?.trim()||'':'';
+    if(status==='rejected'&&!note){setNotice('A rejection reason is required.');return;}
     const response = await apiFetch('/api/quotations', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'update_status', id, status }),
+      body: JSON.stringify({ action: 'update_status', id:item.id, status,version:item.version,note }),
     });
     const data = (await response.json()) as { error?: string };
     if (!response.ok) {
@@ -2172,6 +2179,9 @@ export default function Home() {
     }
     setNotice('Quotation status updated');
     await loadQuotations();
+  }
+  async function reviseQuotation(item:Quotation){
+    const amountValue=window.prompt(`New amount (${item.currency})`,String(item.amount));if(amountValue===null)return;const amount=Number(amountValue);if(!Number.isFinite(amount)||amount<=0){setNotice('Enter a positive quotation amount.');return;}const validUntil=window.prompt('New valid-until date (YYYY-MM-DD)',item.validUntil||'')?.trim()??'';if(validUntil&&!/^\d{4}-\d{2}-\d{2}$/.test(validUntil)){setNotice('Use YYYY-MM-DD for the valid-until date.');return;}const note=window.prompt('Why is this quotation being revised?')?.trim()||'';if(!note)return;const response=await apiFetch('/api/quotations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'revise',id:item.id,version:item.version,amount,validUntil,note})});const data=await response.json() as {error?:string};if(!response.ok){setNotice(data.error||'Could not revise quotation.');await loadQuotations();return;}setNotice(`Quotation v${item.version+1} created for internal approval`);await loadQuotations();
   }
   async function downloadQuotation(item: Quotation) {
     const response = await apiFetch(
@@ -4159,7 +4169,7 @@ export default function Home() {
                             <div>
                               <span>
                                 <strong>{item.quoteNumber}</strong>
-                                <small>{item.customer}</small>
+                                <small>{item.customer} · v{item.version}</small>
                               </span>
                               <strong>
                                 {money(item.amount, item.currency)}
@@ -4185,20 +4195,17 @@ export default function Home() {
                               value={item.status}
                               onChange={(event) =>
                                 updateQuotationStatus(
-                                  item.id,
+                                  item,
                                   event.target.value,
                                 )
                               }
                             >
-                              <option value="draft">Draft</option>
-                              <option value="approved">
-                                Approved internally
-                              </option>
-                              <option value="sent">Sent</option>
-                              <option value="accepted">Accepted</option>
-                              <option value="rejected">Rejected</option>
-                              <option value="expired">Expired</option>
+                              <option value={item.status}>{item.status.replaceAll('_',' ')}</option>
+                              {item.status==='draft'?<option value="approved">Approve internally</option>:null}
+                              {item.status==='approved'?<><option value="sent">Mark sent</option><option value="expired">Expire</option></>:null}
+                              {item.status==='sent'?<><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="expired">Expired</option></>:null}
                             </select>
+                            {item.status!=='accepted'?<Button type="button" variant="outline" onClick={()=>reviseQuotation(item)}>Create revision</Button>:null}
                           </article>
                         ))
                       ) : (

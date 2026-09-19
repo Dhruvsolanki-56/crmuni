@@ -72,7 +72,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | --- | --- | --- |
 | Opportunity lifecycle | COMPLETE | Version-safe stage and value changes, required loss/reopen reasons, closed-state timestamps, immutable history, tenant/event/account constraints and multi-contact links are implemented with migration regression coverage. |
 | RFQ intake and reviewed extraction | COMPLETE | Original files, editable human-confirmed extraction, creator ownership, event-configured owner SLA, version-safe status changes, clarification/loss reasons, immutable history and numbered submission records are implemented with database regression coverage. |
-| Quotations | PARTIAL | Files, amounts and status exist; versioning, approval policy and account/event integrity are incomplete. |
+| Quotations | COMPLETE | Numbered commercial revisions, optimistic version checks, manager/admin/owner approval, enforced draft→approved→sent→accepted/rejected transitions, approval invalidation on revision, immutable history and database-level workspace/event/account linkage are implemented with regression coverage. |
 
 ## Phase 7 — Reporting and export
 

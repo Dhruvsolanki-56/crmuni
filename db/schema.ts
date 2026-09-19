@@ -793,6 +793,7 @@ export const quotations = sqliteTable(
       .notNull()
       .references(() => workspaces.id),
     eventId: text('event_id'),
+    accountId: text('account_id').references(() => accounts.id),
     rfqId: text('rfq_id').references(() => rfqs.id),
     opportunityId: text('opportunity_id').references(() => opportunities.id),
     quoteNumber: text('quote_number').notNull(),
@@ -801,6 +802,11 @@ export const quotations = sqliteTable(
     currency: text('currency').notNull(),
     validUntil: text('valid_until'),
     status: text('status').notNull().default('draft'),
+    version: integer('version').notNull().default(1),
+    approvedBy: text('approved_by'),
+    approvedAt: integer('approved_at'),
+    sentAt: integer('sent_at'),
+    mutationToken: text('mutation_token'),
     originalName: text('original_name'),
     storageKey: text('storage_key'),
     contentType: text('content_type'),
@@ -823,6 +829,50 @@ export const quotations = sqliteTable(
       table.status,
       table.validUntil,
     ),
+  ],
+);
+
+export const quotationRevisions = sqliteTable(
+  'quotation_revisions',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+    quotationId: text('quotation_id').notNull().references(() => quotations.id),
+    version: integer('version').notNull(),
+    amount: integer('amount').notNull(),
+    validUntil: text('valid_until'),
+    note: text('note'),
+    originalName: text('original_name'),
+    storageKey: text('storage_key'),
+    contentType: text('content_type'),
+    sizeBytes: integer('size_bytes'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_quotation_revisions_version').on(table.workspaceId, table.quotationId, table.version),
+    index('idx_quotation_revisions_quote').on(table.workspaceId, table.quotationId, table.createdAt),
+  ],
+);
+
+export const quotationHistory = sqliteTable(
+  'quotation_history',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+    quotationId: text('quotation_id').notNull().references(() => quotations.id),
+    action: text('action').notNull(),
+    fromStatus: text('from_status'),
+    toStatus: text('to_status'),
+    note: text('note'),
+    version: integer('version').notNull(),
+    mutationToken: text('mutation_token').notNull(),
+    actorId: text('actor_id').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_quotation_history_mutation').on(table.workspaceId, table.mutationToken),
+    index('idx_quotation_history_quote').on(table.workspaceId, table.quotationId, table.createdAt),
   ],
 );
 
