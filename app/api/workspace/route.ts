@@ -363,6 +363,29 @@ export async function POST(request: Request) {
           mutationToken,
           nextVersion,
         ),
+      ...(command === 'schedule_reminder' && reminderAt
+        ? [
+            db
+              .prepare(
+                `INSERT INTO background_jobs (id,workspace_id,kind,entity_type,entity_id,dedupe_key,payload_json,status,attempts,max_attempts,available_at,created_at,updated_at) VALUES (?,?, 'task_reminder','task',?,?,'{}','queued',0,5,?,?,?) ON CONFLICT(workspace_id,kind,dedupe_key) DO UPDATE SET status='queued',attempts=0,available_at=excluded.available_at,locked_at=NULL,last_error=NULL,completed_at=NULL,updated_at=excluded.updated_at`,
+              )
+              .bind(
+                crypto.randomUUID(),
+                context.workspace.id,
+                id,
+                id,
+                reminderAt,
+                now,
+                now,
+              ),
+          ]
+        : [
+            db
+              .prepare(
+                `UPDATE background_jobs SET status='canceled',locked_at=NULL,updated_at=? WHERE workspace_id=? AND kind='task_reminder' AND dedupe_key=? AND status NOT IN ('completed','canceled')`,
+              )
+              .bind(now, context.workspace.id, id),
+          ]),
     ]);
     if (!results[0].meta.changes)
       return Response.json(

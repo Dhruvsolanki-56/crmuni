@@ -23,6 +23,8 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - AI output is untrusted until a salesperson confirms it; source evidence remains retained.
 - Follow-up approval does not silently send a message.
 - Important changes are written to the workspace audit trail.
+- Due reminders use durable jobs with stale-lock recovery, exponential retry, dead-letter alerts, and an owner/admin operations console.
+- Revenue reporting separates open and weighted pipeline, revenue ROI, profit ROI, and conservative cost reconciliation.
 
 ## Local development
 
@@ -38,13 +40,19 @@ Open `http://localhost:3000`. Local preview uses a development identity; deploye
 
 AI-backed extraction, transcription, conversation analysis, and follow-up drafting require `OPENAI_API_KEY`. The defaults can be overridden with `OPENAI_MODEL`, `OPENAI_VISION_MODEL`, and `OPENAI_TRANSCRIBE_MODEL`.
 
+Production background processing also requires a long random `AUTOMATION_SECRET` and an approved scheduler that calls the protected worker endpoint every minute. See `docs/OPERATIONS_RUNBOOK.md`.
+
 ## Validation
 
 ```bash
 npm run check
+npm run verify:migrations
+npm run load:smoke
 ```
 
 This runs TypeScript, strict lint over the application and runtime code, and the production build. GitHub Actions runs the same gate for every push and pull request.
+
+`verify:migrations` rebuilds an empty SQLite database from the complete migration history and checks integrity and foreign keys. `load:smoke` exercises the local read APIs; it is not a production capacity certification.
 
 ## Deployment
 

@@ -6,13 +6,13 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 
 ## Phase 0 — Commercial MVP
 
-| Requirement                                   | Status             | Evidence / gap                                                                                     |
-| --------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- |
-| Exhibitor-only first paid release             | COMPLETE           | README and product UI are exhibitor-focused; visitor modules are absent.                           |
-| No false delivery/read claims                 | COMPLETE           | Follow-ups remain drafts/approved and open external compose only.                                  |
-| Supported devices, browsers and badge formats | PARTIAL            | Browser capture exists; supported-device and badge-provider matrix is not documented or validated. |
-| Named pilot, event load and support owner     | NOT YET APPLICABLE | Requires a real customer and business decision.                                                    |
-| Initial pricing and manual invoicing          | NOT YET APPLICABLE | Billing provider and commercial terms are not selected.                                            |
+| Requirement                                   | Status             | Evidence / gap                                                                                                                                                      |
+| --------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exhibitor-only first paid release             | COMPLETE           | README and product UI are exhibitor-focused; visitor modules are absent.                                                                                            |
+| No false delivery/read claims                 | COMPLETE           | Follow-ups remain drafts/approved and open external compose only.                                                                                                   |
+| Supported devices, browsers and badge formats | PARTIAL            | Paid-pilot browser/device/capture matrix and event-day test protocol are documented; named hardware and proprietary badge providers still require pilot validation. |
+| Named pilot, event load and support owner     | NOT YET APPLICABLE | Requires a real customer and business decision.                                                                                                                     |
+| Initial pricing and manual invoicing          | NOT YET APPLICABLE | Billing provider and commercial terms are not selected.                                                                                                             |
 
 ## Phase 1 — Tenant security and SaaS foundation
 
@@ -59,12 +59,12 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 
 ## Phase 5 — Follow-up, commitments and meetings
 
-| Requirement                    | Status   | Evidence / gap                                                                                                                                                                                                                                                |
-| ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Confirmed commitments to tasks | PARTIAL  | AI confirmation creates idempotent dated tasks; complete/cancel/reopen transitions, optimistic concurrency, immutable history and scheduled in-app reminders are implemented. Automated reminder delivery/escalation still depends on the Phase 8 job worker. |
-| Editable communication drafts  | COMPLETE | Subject/body editing, version checks, approval invalidation, reapproval and audit are enforced server-side; approval never sends.                                                                                                                             |
-| Consent/suppression check      | PARTIAL  | Draft generation and external-client opening both recheck active permission and hashed suppression; provider-side send enforcement awaits a real connector.                                                                                                   |
-| Meetings and calendar export   | COMPLETE | Event-scoped meetings, participants, scheduled/completed/cancelled/reopened states, optimistic version checks, history and escaped `.ics` export are implemented and covered by database/calendar regression tests. Export never claims delivery.             |
+| Requirement                    | Status   | Evidence / gap                                                                                                                                                                                                                                    |
+| ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Confirmed commitments to tasks | PARTIAL  | AI confirmation creates idempotent dated tasks; lifecycle history and durable scheduled in-app reminder delivery are implemented. External email/SMS escalation still requires a selected provider.                                               |
+| Editable communication drafts  | COMPLETE | Subject/body editing, version checks, approval invalidation, reapproval and audit are enforced server-side; approval never sends.                                                                                                                 |
+| Consent/suppression check      | PARTIAL  | Draft generation and external-client opening both recheck active permission and hashed suppression; provider-side send enforcement awaits a real connector.                                                                                       |
+| Meetings and calendar export   | COMPLETE | Event-scoped meetings, participants, scheduled/completed/cancelled/reopened states, optimistic version checks, history and escaped `.ics` export are implemented and covered by database/calendar regression tests. Export never claims delivery. |
 
 ## Phase 6 — Revenue workflow
 
@@ -85,13 +85,13 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 
 ## Phase 8 — Production reliability and security
 
-| Requirement                             | Status                               | Evidence / gap                                                                      |
-| --------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
-| Production AI configuration             | READY — EXTERNAL VALIDATION REQUIRED | Manual fallbacks exist; hosted provider credential and evaluation are external.     |
-| Outbox/background workers/dead letters  | MISSING                              | Device outbox exists; server jobs, retry records and dead-letter visibility do not. |
-| Observability and alerts                | MISSING                              | Audit events are not operational monitoring.                                        |
-| Backup restore, load and recovery tests | MISSING                              | No evidenced runbooks or repeatable tests.                                          |
-| CI build gate                           | COMPLETE                             | GitHub Actions runs `npm ci` and `npm run check`.                                   |
+| Requirement                             | Status                               | Evidence / gap                                                                                                                                                                                                                  |
+| --------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production AI configuration             | READY — EXTERNAL VALIDATION REQUIRED | Manual fallbacks exist; hosted provider credential and evaluation are external.                                                                                                                                                 |
+| Outbox/background workers/dead letters  | PARTIAL                              | Durable reminder/deletion-due jobs, stale-lock recovery, exponential retry, dead letters, manual retry and in-app delivery exist. Production scheduler configuration and destructive deletion automation remain external gates. |
+| Observability and alerts                | PARTIAL                              | Owner/admin Operations health shows job state, last run, critical alerts and dead jobs. External log retention, uptime monitor and pager integration remain.                                                                    |
+| Backup restore, load and recovery tests | PARTIAL                              | The full 32-migration chain, integrity and foreign keys are repeatably verified; an operations runbook and load smoke exist. A hosted D1/R2 backup restore drill remains required.                                              |
+| CI build gate                           | COMPLETE                             | GitHub Actions runs `npm ci` and `npm run check`.                                                                                                                                                                               |
 
 ## Later phases
 

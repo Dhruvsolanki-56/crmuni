@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import {
+  Activity,
   ArrowRight,
   BarChart3,
   Building2,
@@ -228,6 +229,43 @@ type DeletionRequest = {
   status: string;
   scheduledFor: number;
   createdAt: number;
+};
+type OperationsData = {
+  health: {
+    status: string;
+    jobsByStatus: Record<string, number>;
+    lastRun?: {
+      startedAt: number;
+      finishedAt?: number;
+      completedCount: number;
+      failedCount: number;
+      deadCount: number;
+    };
+  };
+  jobs: Array<{
+    id: string;
+    kind: string;
+    status: string;
+    attempts: number;
+    maxAttempts: number;
+    availableAt: number;
+    lastError?: string;
+  }>;
+  alerts: Array<{
+    id: string;
+    severity: string;
+    code: string;
+    message: string;
+    status: string;
+    createdAt: number;
+  }>;
+  notifications: Array<{
+    id: string;
+    title: string;
+    body: string;
+    readAt?: number;
+    createdAt: number;
+  }>;
 };
 type KnowledgeData = {
   profile: null | {
@@ -574,6 +612,7 @@ export default function Home() {
   const [capabilities, setCapabilities] = useState({ aiConfigured: false });
   const [deletionRequest, setDeletionRequest] =
     useState<DeletionRequest | null>(null);
+  const [operations, setOperations] = useState<OperationsData | null>(null);
   const [settingsLoadedAt, setSettingsLoadedAt] = useState(0);
   const [knowledge, setKnowledge] = useState<KnowledgeData>({
     profile: null,
@@ -738,6 +777,11 @@ export default function Home() {
     setCapabilities(data.capabilities || { aiConfigured: false });
     setAvailableWorkspaces(data.workspaces || []);
   }
+  async function loadOperations() {
+    const response = await apiFetch('/api/operations');
+    if (response.ok) setOperations((await response.json()) as OperationsData);
+    else setOperations(null);
+  }
   async function loadKnowledge() {
     const response = await apiFetch('/api/company-intelligence');
     if (response.ok) setKnowledge((await response.json()) as KnowledgeData);
@@ -849,7 +893,10 @@ export default function Home() {
   function go(view: View) {
     setActiveView(view);
     setMobileNav(false);
-    if (view === 'settings') void loadSettings();
+    if (view === 'settings') {
+      void loadSettings();
+      void loadOperations();
+    }
     if (view === 'knowledge') void loadKnowledge();
     if (view === 'rfqs') {
       void loadRfqs();
@@ -1965,6 +2012,31 @@ export default function Home() {
     }
     setDeletionRequest(null);
     setNotice('Workspace deletion canceled');
+  }
+
+  async function operationsAction(
+    action: 'run_workspace_jobs' | 'retry_job' | 'acknowledge_alert',
+    id?: string,
+  ) {
+    const response = await apiFetch('/api/operations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action, id }),
+    });
+    const data = (await response.json()) as {
+      error?: string;
+      claimed?: number;
+    };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update operations.');
+      return;
+    }
+    setNotice(
+      action === 'run_workspace_jobs'
+        ? `${data.claimed || 0} due background jobs processed`
+        : 'Operations record updated',
+    );
+    await loadOperations();
   }
 
   async function submitKnowledge(event: SyntheticEvent<HTMLFormElement>) {
@@ -6041,6 +6113,82 @@ export default function Home() {
                         : 'Configuration required'}
                     </span>
                   </article>
+                  {operations ? (
+                    <article className="panel settings-card">
+                      <div className="settings-heading">
+                        <Activity />
+                        <div>
+                          <h2>Operations health</h2>
+                          <p>
+                            Durable reminders, retries, dead letters and
+                            operator alerts for this workspace.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="usage-grid">
+                        <span>
+                          <small>Status</small>
+                          <strong>{operations.health.status}</strong>
+                        </span>
+                        {['queued', 'failed', 'dead', 'completed'].map(
+                          (status) => (
+                            <span key={status}>
+                              <small>{status}</small>
+                              <strong>
+                                {operations.health.jobsByStatus[status] || 0}
+                              </strong>
+                            </span>
+                          ),
+                        )}
+                      </div>
+                      <div className="settings-actions">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => operationsAction('run_workspace_jobs')}
+                        >
+                          Run due jobs now
+                        </Button>
+                      </div>
+                      {operations.alerts.map((alert) => (
+                        <div className="audit-row" key={alert.id}>
+                          <span>
+                            {alert.severity} · {alert.message}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              operationsAction('acknowledge_alert', alert.id)
+                            }
+                          >
+                            Acknowledge
+                          </Button>
+                        </div>
+                      ))}
+                      {operations.jobs
+                        .filter((job) =>
+                          ['failed', 'dead'].includes(job.status),
+                        )
+                        .map((job) => (
+                          <div className="audit-row" key={job.id}>
+                            <span>
+                              {job.kind} · {job.status} · attempt {job.attempts}
+                              /{job.maxAttempts}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                operationsAction('retry_job', job.id)
+                              }
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        ))}
+                    </article>
+                  ) : null}
                   <article className="panel settings-card">
                     <div className="settings-heading">
                       <UserPlus />

@@ -1189,6 +1189,116 @@ export const requestRateLimits = sqliteTable(
   ],
 );
 
+export const backgroundJobs = sqliteTable(
+  'background_jobs',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    kind: text('kind').notNull(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    dedupeKey: text('dedupe_key').notNull(),
+    payloadJson: text('payload_json').notNull().default('{}'),
+    status: text('status').notNull().default('queued'),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(5),
+    availableAt: integer('available_at').notNull(),
+    lockedAt: integer('locked_at'),
+    lastError: text('last_error'),
+    completedAt: integer('completed_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_background_jobs_dedupe').on(
+      table.workspaceId,
+      table.kind,
+      table.dedupeKey,
+    ),
+    index('idx_background_jobs_due').on(table.status, table.availableAt),
+  ],
+);
+
+export const jobRuns = sqliteTable(
+  'job_runs',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').references(() => workspaces.id),
+    status: text('status').notNull(),
+    claimedCount: integer('claimed_count').notNull().default(0),
+    completedCount: integer('completed_count').notNull().default(0),
+    failedCount: integer('failed_count').notNull().default(0),
+    deadCount: integer('dead_count').notNull().default(0),
+    error: text('error'),
+    startedAt: integer('started_at').notNull(),
+    finishedAt: integer('finished_at'),
+  },
+  (table) => [index('idx_job_runs_started').on(table.startedAt)],
+);
+
+export const inAppNotifications = sqliteTable(
+  'in_app_notifications',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    recipientUserId: text('recipient_user_id'),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    dedupeKey: text('dedupe_key').notNull(),
+    readAt: integer('read_at'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_in_app_notifications_dedupe').on(
+      table.workspaceId,
+      table.dedupeKey,
+    ),
+    index('idx_in_app_notifications_unread').on(
+      table.workspaceId,
+      table.readAt,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const operationalAlerts = sqliteTable(
+  'operational_alerts',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    severity: text('severity').notNull(),
+    code: text('code').notNull(),
+    message: text('message').notNull(),
+    dedupeKey: text('dedupe_key').notNull(),
+    status: text('status').notNull().default('open'),
+    acknowledgedBy: text('acknowledged_by'),
+    acknowledgedAt: integer('acknowledged_at'),
+    resolvedAt: integer('resolved_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_operational_alerts_dedupe').on(
+      table.workspaceId,
+      table.dedupeKey,
+    ),
+    index('idx_operational_alerts_status').on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const workspaceDeletionRequests = sqliteTable(
   'workspace_deletion_requests',
   {

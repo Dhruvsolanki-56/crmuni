@@ -211,6 +211,20 @@
       "when": 1789857576519,
       "tag": "0029_fine_ultron",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1789858605442,
+      "tag": "0030_perfect_texas_twister",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1789859353008,
+      "tag": "0031_wet_franklin_storm",
+      "breakpoints": true
     }
   ]
 }

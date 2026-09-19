@@ -1,0 +1,1 @@
+ALTER TABLE `job_runs` ADD `workspace_id` text REFERENCES workspaces(id);

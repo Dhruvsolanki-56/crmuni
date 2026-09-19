@@ -65,6 +65,9 @@ export async function GET(request: Request) {
       'knowledge_sources',
       'event_cost_history',
       'event_cost_lines',
+      'background_jobs',
+      'in_app_notifications',
+      'operational_alerts',
       'events',
       'event_memberships',
     ] as const;
@@ -274,6 +277,19 @@ export async function POST(request: Request) {
         context.workspace.id,
         { scheduledFor },
       ),
+      db
+        .prepare(
+          `INSERT INTO background_jobs (id,workspace_id,kind,entity_type,entity_id,dedupe_key,payload_json,status,attempts,max_attempts,available_at,created_at,updated_at) VALUES (?,?, 'workspace_deletion_due','workspace',?,?,'{}','queued',0,5,?,?,?) ON CONFLICT(workspace_id,kind,dedupe_key) DO UPDATE SET status='queued',attempts=0,available_at=excluded.available_at,locked_at=NULL,last_error=NULL,completed_at=NULL,updated_at=excluded.updated_at`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          context.workspace.id,
+          context.workspace.id,
+          context.workspace.id,
+          scheduledFor,
+          now,
+          now,
+        ),
     ]);
     return Response.json({
       deletionRequest: {
@@ -303,6 +319,12 @@ export async function POST(request: Request) {
       'workspace',
       context.workspace.id,
     ).run();
+    await db
+      .prepare(
+        `UPDATE background_jobs SET status='canceled',locked_at=NULL,updated_at=? WHERE workspace_id=? AND kind='workspace_deletion_due' AND dedupe_key=? AND status NOT IN ('completed','canceled')`,
+      )
+      .bind(now, context.workspace.id, context.workspace.id)
+      .run();
     return Response.json({ ok: true });
   }
   if (action === 'execute_deletion') {
@@ -367,6 +389,9 @@ export async function POST(request: Request) {
       'accounts',
       'event_cost_history',
       'event_cost_lines',
+      'in_app_notifications',
+      'operational_alerts',
+      'background_jobs',
       'event_memberships',
       'events',
       'company_documents',
