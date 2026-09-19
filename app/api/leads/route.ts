@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     FROM leads l
     LEFT JOIN interactions i ON i.lead_id = l.id
     LEFT JOIN tasks t ON t.lead_id = l.id AND t.status = 'open'
-    WHERE l.workspace_id = ?${access.sql}
+    WHERE l.workspace_id = ? AND l.review_status!='merged'${access.sql}
     ORDER BY l.created_at DESC
     LIMIT 25
   `).bind(context.workspace.id, ...access.bindings).all();
@@ -81,6 +81,7 @@ export async function POST(request: Request) {
   const fullName = suppliedFullName || 'Unidentified visitor';
   const company = suppliedCompany || 'Company pending';
   const account = suppliedCompany ? await accountIdentity(context.workspace.id, suppliedCompany) : null;
+  const duplicate=await database().prepare(`SELECT id,full_name AS fullName,company,email,phone FROM leads WHERE workspace_id=? AND event_id=? AND review_status NOT IN ('erased','merged') AND ((?!='' AND email=?) OR (?!='' AND phone=?) OR (? IS NOT NULL AND account_id=? AND LOWER(full_name)=LOWER(?))) ORDER BY CASE WHEN ?!='' AND email=? THEN 0 WHEN ?!='' AND phone=? THEN 1 ELSE 2 END,created_at ASC LIMIT 1`).bind(context.workspace.id,eventId,email,email,phone,phone,account?.id||null,account?.id||null,fullName,email,email,phone,phone).first<{id:string;fullName:string;company:string;email:string|null;phone:string|null}>();
   const interactionId = note ? crypto.randomUUID() : null;
   const taskId = nextAction ? crypto.randomUUID() : null;
   const attachmentKind = ['card', 'badge', 'qr', 'audio'].includes(requestedAttachmentKind) ? requestedAttachmentKind : 'document';
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
     INSERT INTO leads (id, workspace_id, event_id, account_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'needs_review', ?, ?)
   `).bind(leadId, context.workspace.id, eventId, account?.id || null, clientCaptureId || null, context.user.id, fullName, company, role || null, email || null, phone || null, source, now, now)];
+  if(duplicate){const reasons=[...(email&&duplicate.email===email?['same_email']:[]),...(phone&&duplicate.phone===phone?['same_phone']:[]),...(duplicate.fullName.toLowerCase()===fullName.toLowerCase()&&duplicate.company.toLowerCase()===company.toLowerCase()?['same_name_company']:[])];statements.push(database().prepare(`INSERT INTO lead_duplicate_suggestions (id,workspace_id,source_lead_id,target_lead_id,status,confidence_basis_points,reasons_json,created_at,updated_at) VALUES (?,?,?,?,'pending',?,?,?,?)`).bind(crypto.randomUUID(),context.workspace.id,leadId,duplicate.id,reasons.includes('same_email')?9800:reasons.includes('same_phone')?9500:8000,JSON.stringify(reasons),now,now));}
   for(const channel of consentChannels)statements.push(database().prepare(`INSERT INTO lead_consents (id,workspace_id,lead_id,purpose,channel,status,source,captured_at,updated_by,updated_at) VALUES (?,?,?,'follow_up',?,'granted',?,?,?,?)`).bind(crypto.randomUUID(),context.workspace.id,leadId,channel,consentSource,now,context.user.id,now));
   if (account) statements.unshift(database().prepare(`INSERT INTO accounts (id, workspace_id, name, normalized_name, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?) ON CONFLICT(workspace_id, normalized_name) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`).bind(account.id, context.workspace.id, suppliedCompany, account.normalized, now, now));
 
@@ -108,5 +110,5 @@ export async function POST(request: Request) {
   statements.push(auditStatement(context, 'lead.created', 'lead', leadId, { source, consentChannels }));
 
   try { await database().batch(statements); } catch (error) { if (storageKey) await revenueEnv().FILES.delete(storageKey); throw error; }
-  return Response.json({ lead: { id: leadId, fullName, company, role, email, phone, note, nextAction, dueDate, reviewStatus: 'needs_review', emailConsentStatus: consentChannels.includes('email')?'granted':null, whatsappConsentStatus: consentChannels.includes('whatsapp')?'granted':null, captureStatus: assetId ? 'stored_pending_extraction' : null, captureKind: assetId ? attachmentKind : null, createdAt: now }, asset: assetId ? { id: assetId, kind: attachmentKind, processingStatus: 'stored_pending_extraction' } : null }, { status: 201 });
+  return Response.json({ lead: { id: leadId, fullName, company, role, email, phone, note, nextAction, dueDate, reviewStatus: 'needs_review', emailConsentStatus: consentChannels.includes('email')?'granted':null, whatsappConsentStatus: consentChannels.includes('whatsapp')?'granted':null, duplicateLeadId:duplicate?.id||null,duplicateLeadName:duplicate?.fullName||null, captureStatus: assetId ? 'stored_pending_extraction' : null, captureKind: assetId ? attachmentKind : null, createdAt: now }, asset: assetId ? { id: assetId, kind: attachmentKind, processingStatus: 'stored_pending_extraction' } : null }, { status: 201 });
 }

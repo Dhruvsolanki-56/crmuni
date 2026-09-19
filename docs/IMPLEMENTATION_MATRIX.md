@@ -45,7 +45,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | Manual/card/badge/QR/audio capture | PARTIAL | Capture and upload paths exist; provider accuracy and badge compatibility require external validation. |
 | Offline outbox and stable capture ID | PARTIAL | IndexedDB outbox and server idempotency exist; automated reopen/retry/partial-upload tests are missing. |
 | OCR confidence and correction | PARTIAL | Extraction confidence and editable lead fields exist; explicit per-field review UI is limited. |
-| Duplicate detection and reversible merge | MISSING | Stable-capture deduplication exists, but person/company duplicate suggestions and merge provenance do not. |
+| Duplicate detection and reversible merge | PARTIAL | Same-event email/phone/name-account suggestions, reviewed merge provenance and an undo path exist; fuzzy matching and broader integration tests remain. |
 | Consent and withdrawal | PARTIAL | Per-channel follow-up permission, withdrawal, hashed suppression, audit and draft/open enforcement exist; jurisdiction-specific lawful-basis policy and route-level tests remain. |
 
 ## Phase 4 — Conversation intelligence and qualification

@@ -77,6 +77,7 @@ export const leads = sqliteTable('leads', {
   phone: text('phone'),
   source: text('source').notNull().default('manual'),
   reviewStatus: text('review_status').notNull().default('needs_review'),
+  mergedIntoId: text('merged_into_id'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [
@@ -445,3 +446,33 @@ export const suppressionEntries = sqliteTable('suppression_entries', {
   uniqueIndex('uidx_suppression_workspace_channel_identifier').on(table.workspaceId, table.channel, table.identifierHash),
   index('idx_suppression_workspace_status').on(table.workspaceId, table.status),
 ]);
+
+export const leadDuplicateSuggestions = sqliteTable('lead_duplicate_suggestions', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  sourceLeadId: text('source_lead_id').notNull().references(() => leads.id),
+  targetLeadId: text('target_lead_id').notNull().references(() => leads.id),
+  status: text('status').notNull().default('pending'),
+  confidenceBasisPoints: integer('confidence_basis_points').notNull(),
+  reasonsJson: text('reasons_json').notNull(),
+  resolvedBy: text('resolved_by'),
+  resolvedAt: integer('resolved_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_lead_duplicate_pair').on(table.workspaceId, table.sourceLeadId, table.targetLeadId),
+  index('idx_lead_duplicate_source_status').on(table.workspaceId, table.sourceLeadId, table.status),
+]);
+
+export const leadMergeEvents = sqliteTable('lead_merge_events', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  sourceLeadId: text('source_lead_id').notNull().references(() => leads.id),
+  targetLeadId: text('target_lead_id').notNull().references(() => leads.id),
+  status: text('status').notNull().default('merged'),
+  snapshotJson: text('snapshot_json').notNull(),
+  mergedBy: text('merged_by').notNull(),
+  mergedAt: integer('merged_at').notNull(),
+  revertedBy: text('reverted_by'),
+  revertedAt: integer('reverted_at'),
+}, (table) => [index('idx_lead_merge_source_status').on(table.workspaceId, table.sourceLeadId, table.status)]);
