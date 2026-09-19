@@ -198,6 +198,9 @@ export const communicationDrafts = sqliteTable('communication_drafts', {
   approvedBy: text('approved_by'),
   createdAt: integer('created_at').notNull(),
   approvedAt: integer('approved_at'),
+  version: integer('version').notNull().default(1),
+  editedBy: text('edited_by'),
+  updatedAt: integer('updated_at').notNull().default(0),
 }, (table) => [index('idx_communication_drafts_lead').on(table.workspaceId, table.leadId, table.createdAt)]);
 
 export const rfqs = sqliteTable('rfqs', {

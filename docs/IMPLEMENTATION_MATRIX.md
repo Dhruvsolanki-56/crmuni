@@ -62,7 +62,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | Requirement | Status | Evidence / gap |
 | --- | --- | --- |
 | Confirmed commitments to tasks | PARTIAL | Confirmation creates dated tasks; cancel/reopen/reminders and concurrency handling are missing. |
-| Editable communication drafts | BROKEN | Drafts can be approved but not edited; approval cannot be invalidated by an edit. |
+| Editable communication drafts | COMPLETE | Subject/body editing, version checks, approval invalidation, reapproval and audit are enforced server-side; approval never sends. |
 | Consent/suppression check | PARTIAL | Draft generation and external-client opening both recheck active permission and hashed suppression; provider-side send enforcement awaits a real connector. |
 | Meetings and calendar export | MISSING | No meeting model, states or `.ics` export. |
 
