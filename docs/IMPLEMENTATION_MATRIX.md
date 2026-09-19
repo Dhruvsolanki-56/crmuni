@@ -55,7 +55,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | Evidence-grounded structured extraction | PARTIAL | Exact-span checks and human confirmation exist; evaluation and malformed-output tests are missing. |
 | Explicit qualification state | PARTIAL | Hot/Warm/Cold/Unqualified thresholds, reason, AI-confirmed history and manual override history exist; cohort calibration with pilot data remains. |
 | Lead ownership | PARTIAL | Capture ownership, event-team reassignment, reason and immutable history exist; round-robin and workload routing remain. |
-| Account stakeholders | PARTIAL | Buying roles exist; influence, duplicate account review and multi-contact opportunity association are incomplete. |
+| Account stakeholders | PARTIAL | Buying roles and same-account, same-event multi-contact opportunity associations now exist and survive reversible lead merges; influence controls and duplicate-account review remain. |
 
 ## Phase 5 — Follow-up, commitments and meetings
 
@@ -70,7 +70,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 
 | Requirement | Status | Evidence / gap |
 | --- | --- | --- |
-| Opportunity lifecycle | PARTIAL | Stages/value/probability exist; loss reason, reopen history, amount history and multi-contact links are missing. |
+| Opportunity lifecycle | COMPLETE | Version-safe stage and value changes, required loss/reopen reasons, closed-state timestamps, immutable history, tenant/event/account constraints and multi-contact links are implemented with migration regression coverage. |
 | RFQ intake and reviewed extraction | PARTIAL | Original files and editable extraction confirmation exist; owner SLA, clarification history and submission versions are missing. |
 | Quotations | PARTIAL | Files, amounts and status exist; versioning, approval policy and account/event integrity are incomplete. |
 

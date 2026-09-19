@@ -326,11 +326,47 @@ export const opportunities = sqliteTable('opportunities', {
   currency: text('currency').notNull().default('INR'),
   probability: integer('probability').notNull().default(20),
   expectedCloseDate: text('expected_close_date'),
+  lossReason: text('loss_reason'),
+  closedAt: integer('closed_at'),
+  version: integer('version').notNull().default(1),
+  mutationToken: text('mutation_token'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [
   index('idx_opportunities_workspace_stage').on(table.workspaceId, table.stage),
   index('idx_opportunities_workspace_company').on(table.workspaceId, table.company),
+]);
+
+export const opportunityContacts = sqliteTable('opportunity_contacts', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  opportunityId: text('opportunity_id').notNull().references(() => opportunities.id),
+  leadId: text('lead_id').notNull().references(() => leads.id),
+  contactRole: text('contact_role'),
+  isPrimary: integer('is_primary', { mode: 'boolean' }).notNull().default(false),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_opportunity_contacts_lead').on(table.workspaceId, table.opportunityId, table.leadId),
+  index('idx_opportunity_contacts_opportunity').on(table.workspaceId, table.opportunityId),
+]);
+
+export const opportunityHistory = sqliteTable('opportunity_history', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  opportunityId: text('opportunity_id').notNull().references(() => opportunities.id),
+  changeType: text('change_type').notNull(),
+  fromStage: text('from_stage'),
+  toStage: text('to_stage'),
+  fromValue: integer('from_value'),
+  toValue: integer('to_value'),
+  reason: text('reason'),
+  mutationToken: text('mutation_token').notNull(),
+  changedBy: text('changed_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_opportunity_history_mutation').on(table.workspaceId, table.mutationToken),
+  index('idx_opportunity_history_opportunity').on(table.workspaceId, table.opportunityId, table.createdAt),
 ]);
 
 export const quotations = sqliteTable('quotations', {

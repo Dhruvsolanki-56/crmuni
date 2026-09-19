@@ -176,6 +176,13 @@
       "when": 1789854967053,
       "tag": "0024_flippant_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1789855778164,
+      "tag": "0025_dazzling_kylun",
+      "breakpoints": true
     }
   ]
 }
