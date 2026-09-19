@@ -27,7 +27,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | Support access | MISSING | No time-limited, explicitly granted support role/session. |
 | Export | PARTIAL | Owner/admin full JSON export exists; selected CSV export and reconciliation tests are missing. |
 | Contact erasure | PARTIAL | Personal rows and capture files are removed; failure/retry state and derivative verification need coverage. |
-| Tenant deletion and retention | MISSING | No retention configuration, deletion workflow or deletion job. |
+| Tenant deletion and retention | PARTIAL | Owners can schedule, cancel and execute full database/R2 deletion after a seven-day recovery period; automated due-job execution and configurable retention remain. |
 | Automated authorization tests | PARTIAL | `npm test` verifies role policy, unsafe SQL-expression rejection, migration backfill and cross-tenant trigger failures; route-level fixtures remain. |
 
 ## Phase 2 — Company intelligence and readiness

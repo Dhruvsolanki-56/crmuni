@@ -27,5 +27,13 @@ test('event access migration backfills assignments and enforces tenant relations
   assert.equal((db.prepare(`SELECT event_id AS eventId FROM quotations WHERE id='q1'`).get() as { eventId: string }).eventId, 'e1');
   assert.throws(() => db.prepare(`INSERT INTO event_memberships (id,workspace_id,event_id,membership_id,status,created_by,created_at,updated_at) VALUES ('bad','w1','e1','m3','active','owner-user',1,1)`).run(), /membership workspace mismatch/);
   assert.throws(() => db.prepare(`INSERT INTO quotations (id,workspace_id,event_id) VALUES ('bad-quote','w1','e2')`).run(), /quotation event workspace mismatch/);
+  for (const file of ['0016_opposite_maximus.sql','0017_glamorous_gamma_corps.sql']) {
+    const sql=readFileSync(new URL(`../drizzle/${file}`,import.meta.url),'utf8');
+    for(const statement of sql.split('--> statement-breakpoint').map((part)=>part.trim()).filter(Boolean))db.exec(statement);
+  }
+  db.prepare(`INSERT INTO request_rate_limits (id,workspace_id,rate_key,window_start,request_count,updated_at) VALUES ('limit-1','w1','user:mutation',1,1,1)`).run();
+  assert.throws(()=>db.prepare(`INSERT INTO request_rate_limits (id,workspace_id,rate_key,window_start,request_count,updated_at) VALUES ('limit-2','w1','user:mutation',1,1,1)`).run(),/UNIQUE/);
+  db.prepare(`INSERT INTO workspace_deletion_requests (id,workspace_id,status,requested_by,scheduled_for,created_at,updated_at) VALUES ('delete-1','w1','scheduled','owner-user',10,1,1)`).run();
+  assert.throws(()=>db.prepare(`INSERT INTO workspace_deletion_requests (id,workspace_id,status,requested_by,scheduled_for,created_at,updated_at) VALUES ('delete-2','w1','scheduled','owner-user',10,1,1)`).run(),/UNIQUE/);
   db.close();
 });

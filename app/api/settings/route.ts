@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     return new Response(JSON.stringify({ exportedAt: new Date().toISOString(), workspace: context.workspace, note: 'Stored file metadata is included; binary file contents remain in protected storage.', data }, null, 2), { headers: { 'content-type': 'application/json', 'content-disposition': `attachment; filename="${context.workspace.slug}-export.json"`, 'cache-control': 'private, no-store' } });
   }
   const privileged = context.role === 'owner' || context.role === 'admin'; const canAssignTeam = privileged || context.role === 'manager';
-  const [members, invitations, audit, workspaces, leadUsage, eventUsage, sourceUsage, captureUsage, rfqUsage, quotationUsage] = await Promise.all([
+  const [members, invitations, audit, workspaces, leadUsage, eventUsage, sourceUsage, captureUsage, rfqUsage, quotationUsage, deletionRequest] = await Promise.all([
     db.prepare(`SELECT id, user_id AS userId, email, display_name AS displayName, role, status, created_at AS createdAt FROM memberships WHERE workspace_id = ? ORDER BY created_at ASC`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, email, role, status, expires_at AS expiresAt, created_at AS createdAt FROM invitations WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 30`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, actor_id AS actorId, action, entity_type AS entityType, entity_id AS entityId, created_at AS createdAt FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 30`).bind(context.workspace.id).all(),
@@ -26,10 +26,11 @@ export async function GET(request: Request) {
     db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM lead_capture_assets WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
     db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM rfq_documents WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
     db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM quotations WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
+    privileged ? db.prepare(`SELECT id,status,scheduled_for AS scheduledFor,created_at AS createdAt FROM workspace_deletion_requests WHERE workspace_id=? AND status='scheduled'`).bind(context.workspace.id).first() : Promise.resolve(null),
   ]);
   const usage = privileged ? { leads: Number(leadUsage?.count || 0), activeEvents: Number(eventUsage?.count || 0), knowledgeSources: Number(sourceUsage?.count || 0), storageBytes: Number(sourceUsage?.bytes || 0) + Number(captureUsage?.bytes || 0) + Number(rfqUsage?.bytes || 0) + Number(quotationUsage?.bytes || 0), activeMembers: members.results.filter((item) => item.status === 'active').length } : null;
   const visibleMembers = canAssignTeam ? members.results.map((item) => privileged ? item : { id: item.id, userId: item.userId, displayName: item.displayName, role: item.role, status: item.status }) : [];
-  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: visibleMembers, invitations: privileged ? invitations.results : [], audit: privileged ? audit.results : [], usage, capabilities: { aiConfigured: Boolean(revenueEnv().OPENAI_API_KEY) } });
+  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, serverTime: Date.now(), workspaces: workspaces.results, members: visibleMembers, invitations: privileged ? invitations.results : [], audit: privileged ? audit.results : [], usage, deletionRequest, capabilities: { aiConfigured: Boolean(revenueEnv().OPENAI_API_KEY) } });
 }
 
 export async function POST(request: Request) {
@@ -37,6 +38,21 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return Response.json({ error: 'Invalid request body.' }, { status: 400 });
   const action = clean(body.action, 30); const db = database(); const now = Date.now();
+  if (action === 'request_deletion') {
+    requireRole(context, ['owner']); const confirmName=clean(body.confirmName,120); if(confirmName!==context.workspace.name)return Response.json({error:'Enter the exact workspace name to schedule deletion.'},{status:400}); const id=crypto.randomUUID(); const scheduledFor=now+7*86400000;
+    await db.batch([db.prepare(`INSERT INTO workspace_deletion_requests (id,workspace_id,status,requested_by,scheduled_for,created_at,updated_at) VALUES (?,?,'scheduled',?,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET status='scheduled',requested_by=excluded.requested_by,scheduled_for=excluded.scheduled_for,canceled_by=NULL,canceled_at=NULL,updated_at=excluded.updated_at`).bind(id,context.workspace.id,context.user.id,scheduledFor,now,now),auditStatement(context,'workspace.deletion_scheduled','workspace',context.workspace.id,{scheduledFor})]);
+    return Response.json({deletionRequest:{id,status:'scheduled',scheduledFor,createdAt:now}});
+  }
+  if (action === 'cancel_deletion') {
+    requireRole(context,['owner']); const result=await db.prepare(`UPDATE workspace_deletion_requests SET status='canceled',canceled_by=?,canceled_at=?,updated_at=? WHERE workspace_id=? AND status='scheduled'`).bind(context.user.id,now,now,context.workspace.id).run(); if(!result.meta.changes)return Response.json({error:'No scheduled deletion was found.'},{status:404}); await auditStatement(context,'workspace.deletion_canceled','workspace',context.workspace.id).run(); return Response.json({ok:true});
+  }
+  if (action === 'execute_deletion') {
+    requireRole(context,['owner']); const confirmName=clean(body.confirmName,120); if(confirmName!==context.workspace.name)return Response.json({error:'Enter the exact workspace name to permanently delete it.'},{status:400}); const pending=await db.prepare(`SELECT scheduled_for AS scheduledFor FROM workspace_deletion_requests WHERE workspace_id=? AND status='scheduled'`).bind(context.workspace.id).first<{scheduledFor:number}>(); if(!pending)return Response.json({error:'No scheduled deletion was found.'},{status:404}); if(pending.scheduledFor>now)return Response.json({error:'The seven-day recovery period has not ended.',scheduledFor:pending.scheduledFor},{status:409});
+    const deleteOrder=['lead_facts','qualification_scores','communication_drafts','ai_extractions','tasks','interactions','account_stakeholders','lead_capture_assets','quotations','rfq_ai_extractions','rfq_items','rfq_documents','rfqs','opportunities','leads','accounts','event_memberships','events','company_documents','knowledge_sources','qualification_rules','ideal_customer_profiles','products','company_profiles','request_rate_limits','invitations','audit_events','workspace_deletion_requests','memberships'] as const;
+    await db.batch([...deleteOrder.map((table)=>db.prepare(`DELETE FROM ${table} WHERE workspace_id=?`).bind(context.workspace.id)),db.prepare(`DELETE FROM workspaces WHERE id=?`).bind(context.workspace.id)]);
+    let cursor:string|undefined; do {const page=await revenueEnv().FILES.list({prefix:`${context.workspace.id}/`,cursor,limit:1000}); if(page.objects.length)await revenueEnv().FILES.delete(page.objects.map((item)=>item.key)); cursor=page.truncated?page.cursor:undefined;} while(cursor);
+    return Response.json({ok:true,deletedWorkspaceId:context.workspace.id});
+  }
   if (action === 'invite') {
     const email = clean(body.email, 254).toLowerCase(); const role = clean(body.role, 30);
     if (!/^\S+@\S+\.\S+$/.test(email) || !ROLES.includes(role) || role === 'owner') return Response.json({ error: 'Enter a valid email and assignable role.' }, { status: 400 });

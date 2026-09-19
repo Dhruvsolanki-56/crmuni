@@ -39,14 +39,13 @@ export async function requireWorkspace(request: Request): Promise<WorkspaceConte
     WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ${requested ? 'AND w.id = ?' : ''}
     ORDER BY m.created_at ASC LIMIT 1`).bind(...(requested ? [user.id, requested] : [user.id])).first<Record<string, string>>();
   if (!membership) {
-    const anyWorkspace = await db.prepare(`SELECT id FROM workspaces LIMIT 1`).first<{ id: string }>();
-    if (anyWorkspace) throw new Response('You do not have access to this workspace.', { status: 403 });
-    const now = Date.now(); const workspaceId = DEFAULT_WORKSPACE; const membershipId = crypto.randomUUID();
+    if (requested) throw new Response('You do not have access to this workspace.', { status: 403 });
+    const now = Date.now(); const workspaceId = crypto.randomUUID(); const membershipId = crypto.randomUUID(); const label=user.email.split('@')[0].replace(/[._-]+/g,' ').trim().slice(0,60) || 'My company'; const workspaceName=`${label}'s workspace`; const slug=`workspace-${workspaceId.slice(0,8)}`;
     await db.batch([
-      db.prepare(`INSERT INTO workspaces (id, name, slug, timezone, currency, plan, status, created_by, created_at, updated_at) VALUES (?, 'Nova Automation', 'nova-automation', 'Asia/Kolkata', 'INR', 'trial', 'active', ?, ?, ?)`).bind(workspaceId, user.id, now, now),
-      db.prepare(`INSERT INTO memberships (id, workspace_id, user_id, email, display_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Arjun Singh', 'owner', 'active', ?, ?)`).bind(membershipId, workspaceId, user.id, user.email, now, now),
+      db.prepare(`INSERT INTO workspaces (id, name, slug, timezone, currency, plan, status, created_by, created_at, updated_at) VALUES (?, ?, ?, 'UTC', 'USD', 'trial', 'active', ?, ?, ?)`).bind(workspaceId,workspaceName,slug,user.id,now,now),
+      db.prepare(`INSERT INTO memberships (id, workspace_id, user_id, email, display_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'owner', 'active', ?, ?)`).bind(membershipId, workspaceId, user.id, user.email, label, now, now),
     ]);
-    membership = { membershipId, role: 'owner', id: workspaceId, name: 'Nova Automation', slug: 'nova-automation', timezone: 'Asia/Kolkata', currency: 'INR', plan: 'trial', status: 'active' };
+    membership = { membershipId, role: 'owner', id: workspaceId, name: workspaceName, slug, timezone: 'UTC', currency: 'USD', plan: 'trial', status: 'active' };
   }
   const context = { user, membershipId: membership.membershipId, role: membership.role, workspace: { id: membership.id, name: membership.name, slug: membership.slug, timezone: membership.timezone, currency: membership.currency, plan: membership.plan, status: membership.status } };
   if (!['GET','HEAD','OPTIONS'].includes(request.method)) await enforceRateLimit(context, 'mutation', 120, 60_000);
@@ -109,6 +108,3 @@ export function auditStatement(context: WorkspaceContext, action: string, entity
   return database().prepare(`INSERT INTO audit_events (id, workspace_id, actor_id, action, entity_type, entity_id, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), context.workspace.id, context.user.id, action, entityType, entityId || null, detail ? JSON.stringify(detail).slice(0, 4000) : null, Date.now());
 }
-
-export const DEFAULT_WORKSPACE = 'nova-automation';
-export const DEFAULT_EVENT = 'industrialtech-expo-2026';

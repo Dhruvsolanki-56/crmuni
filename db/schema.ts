@@ -397,3 +397,18 @@ export const requestRateLimits = sqliteTable('request_rate_limits', {
   uniqueIndex('uidx_request_rate_limits_workspace_key').on(table.workspaceId, table.rateKey),
   index('idx_request_rate_limits_updated').on(table.updatedAt),
 ]);
+
+export const workspaceDeletionRequests = sqliteTable('workspace_deletion_requests', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  status: text('status').notNull().default('scheduled'),
+  requestedBy: text('requested_by').notNull(),
+  scheduledFor: integer('scheduled_for').notNull(),
+  canceledBy: text('canceled_by'),
+  canceledAt: integer('canceled_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_workspace_deletion_requests_workspace').on(table.workspaceId),
+  index('idx_workspace_deletion_requests_status_due').on(table.status, table.scheduledFor),
+]);
