@@ -326,6 +326,26 @@ type KnowledgeData = {
     sizeBytes?: number;
     status: string;
   }>;
+  claims: Array<{
+    id: string;
+    claimText: string;
+    evidenceNote?: string;
+    sourceId?: string;
+    sourceName?: string;
+    status: string;
+    version: number;
+    approvedBy?: string;
+    approvedAt?: number;
+    createdAt: number;
+  }>;
+  profileVersions: Array<{
+    id: string;
+    version: number;
+    snapshot: Record<string, unknown>;
+    changeReason: string;
+    createdBy: string;
+    createdAt: number;
+  }>;
 };
 type EventItem = {
   id: string;
@@ -644,6 +664,8 @@ export default function Home() {
     icps: [],
     rules: [],
     sources: [],
+    claims: [],
+    profileVersions: [],
   });
   const [events, setEvents] = useState<EventItem[]>([]);
   const [revenueReport, setRevenueReport] = useState<RevenueReport | null>(
@@ -2170,6 +2192,24 @@ export default function Home() {
       response.ok
         ? `${label} removed`
         : data.error || `Could not remove ${label}`,
+    );
+    if (response.ok) await loadKnowledge();
+  }
+
+  async function reviewKnowledge(
+    action: 'approve_source' | 'reject_source' | 'approve_claim' | 'retire_claim',
+    id: string,
+  ) {
+    const response = await apiFetch('/api/company-intelligence', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action, id }),
+    });
+    const data = (await response.json()) as { error?: string; status?: string };
+    setNotice(
+      response.ok
+        ? `Review recorded: ${data.status || 'updated'}`
+        : data.error || 'Could not record the review',
     );
     if (response.ok) await loadKnowledge();
   }
@@ -5703,10 +5743,94 @@ export default function Home() {
                           placeholder="Book qualified demos with plant operators"
                         />
                       </div>
+                      <div className="field-block">
+                        <label htmlFor="profile-change-reason">Change reason</label>
+                        <Input
+                          id="profile-change-reason"
+                          name="changeReason"
+                          placeholder="Why this profile changed"
+                        />
+                      </div>
                       <Button className="save-button" type="submit">
                         Save business profile
                       </Button>
                     </form>
+                    {knowledge.profileVersions.length ? (
+                      <div className="knowledge-records">
+                        {knowledge.profileVersions.slice(0, 3).map((item) => (
+                          <div key={item.id}>
+                            <span>
+                              <strong>Profile version {item.version}</strong>
+                              <small>
+                                {item.changeReason} ·{' '}
+                                {new Date(item.createdAt).toLocaleString()}
+                              </small>
+                            </span>
+                            <b>v{item.version}</b>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                  <article className="panel knowledge-card">
+                    <h2>Approved claims</h2>
+                    <p className="field-help">
+                      Only approved claims may be supplied to AI-generated follow-ups.
+                    </p>
+                    <form className="lead-form compact-form" onSubmit={submitKnowledge}>
+                      <input type="hidden" name="action" value="add_claim" />
+                      <Textarea
+                        name="claimText"
+                        required
+                        placeholder="Specific factual claim salespeople may use"
+                      />
+                      <select name="sourceId" defaultValue="">
+                        <option value="">No linked source</option>
+                        {knowledge.sources.map((source) => (
+                          <option key={source.id} value={source.id}>
+                            {source.name} · {source.status}
+                          </option>
+                        ))}
+                      </select>
+                      <Textarea
+                        name="evidenceNote"
+                        placeholder="Evidence note or verification context"
+                      />
+                      <Button type="submit">Add claim for review</Button>
+                    </form>
+                    <div className="knowledge-records">
+                      {knowledge.claims.map((claim) => (
+                        <div key={claim.id}>
+                          <span>
+                            <strong>{claim.claimText}</strong>
+                            <small>
+                              {claim.sourceName || claim.evidenceNote || 'Evidence not linked'}
+                            </small>
+                          </span>
+                          <b>{claim.status}</b>
+                          {claim.status === 'draft' &&
+                          ['owner', 'admin'].includes(appContext?.role || '') ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => reviewKnowledge('approve_claim', claim.id)}
+                            >
+                              Approve
+                            </Button>
+                          ) : null}
+                          {claim.status !== 'retired' &&
+                          ['owner', 'admin'].includes(appContext?.role || '') ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => reviewKnowledge('retire_claim', claim.id)}
+                            >
+                              Retire
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
                   </article>
                   <article className="panel knowledge-card">
                     <h2>Products and services</h2>
@@ -5949,6 +6073,29 @@ export default function Home() {
                             </small>
                           </span>
                           <b>{item.sourceType}</b>
+                          {['stored', 'pending_review'].includes(item.status) &&
+                          ['owner', 'admin'].includes(appContext?.role || '') ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  reviewKnowledge('approve_source', item.id)
+                                }
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  reviewKnowledge('reject_source', item.id)
+                                }
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          ) : null}
                           <button
                             className="record-remove"
                             type="button"

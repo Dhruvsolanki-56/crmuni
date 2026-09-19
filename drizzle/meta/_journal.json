@@ -246,6 +246,13 @@
       "when": 1789860666653,
       "tag": "0034_durable_contact_erasure",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1789861143918,
+      "tag": "0035_govern_company_claims",
+      "breakpoints": true
     }
   ]
 }

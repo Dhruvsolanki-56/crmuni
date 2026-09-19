@@ -8,18 +8,21 @@ const allowedFiles = new Set(['application/pdf', 'text/plain', 'text/csv', 'appl
 
 export async function GET(request: Request) {
   const context = await requireWorkspace(request); const db = database();
-  const [profile, products, icps, rules, sources] = await Promise.all([
+  const [profile, products, icps, rules, sources, claims, profileVersions] = await Promise.all([
     db.prepare(`SELECT legal_name AS legalName, website_url AS websiteUrl, description, target_industries_json AS targetIndustries, target_geographies_json AS targetGeographies, event_objective AS eventObjective, onboarding_step AS onboardingStep FROM company_profiles WHERE workspace_id = ?`).bind(context.workspace.id).first(),
     db.prepare(`SELECT id, name, kind, description, buyer_roles_json AS buyerRoles, pain_points_json AS painPoints, status FROM products WHERE workspace_id = ? AND status = 'active' ORDER BY created_at DESC`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, name, industries_json AS industries, company_sizes_json AS companySizes, geographies_json AS geographies, buyer_roles_json AS buyerRoles, must_have_signals_json AS mustHaveSignals, disqualifiers_json AS disqualifiers FROM ideal_customer_profiles WHERE workspace_id = ? ORDER BY created_at DESC`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, label, field, operator, expected_value AS expectedValue, weight, rule_type AS ruleType, status FROM qualification_rules WHERE workspace_id = ? AND status = 'active' ORDER BY created_at DESC`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, name, source_type AS sourceType, source_url AS sourceUrl, content_type AS contentType, size_bytes AS sizeBytes, status, created_at AS createdAt FROM knowledge_sources WHERE workspace_id = ? ORDER BY created_at DESC`).bind(context.workspace.id).all(),
+    db.prepare(`SELECT c.id,c.claim_text AS claimText,c.evidence_note AS evidenceNote,c.source_id AS sourceId,c.status,c.version,c.created_by AS createdBy,c.approved_by AS approvedBy,c.approved_at AS approvedAt,c.created_at AS createdAt,s.name AS sourceName FROM approved_claims c LEFT JOIN knowledge_sources s ON s.id=c.source_id AND s.workspace_id=c.workspace_id WHERE c.workspace_id=? ORDER BY CASE c.status WHEN 'draft' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,c.updated_at DESC`).bind(context.workspace.id).all(),
+    db.prepare(`SELECT id,version,snapshot_json AS snapshotJson,change_reason AS changeReason,created_by AS createdBy,created_at AS createdAt FROM company_profile_versions WHERE workspace_id=? ORDER BY version DESC LIMIT 20`).bind(context.workspace.id).all(),
   ]);
   const parse = (value: unknown) => { if (typeof value !== 'string') return []; try { return JSON.parse(value); } catch { return []; } };
   return Response.json({ profile: profile ? { ...profile, targetIndustries: parse(profile.targetIndustries), targetGeographies: parse(profile.targetGeographies) } : null,
     products: products.results.map((item) => ({ ...item, buyerRoles: parse(item.buyerRoles), painPoints: parse(item.painPoints) })),
     icps: icps.results.map((item) => ({ ...item, industries: parse(item.industries), companySizes: parse(item.companySizes), geographies: parse(item.geographies), buyerRoles: parse(item.buyerRoles), mustHaveSignals: parse(item.mustHaveSignals), disqualifiers: parse(item.disqualifiers) })),
-    rules: rules.results, sources: sources.results });
+    rules: rules.results, sources: sources.results, claims: claims.results,
+    profileVersions: profileVersions.results.map((item) => ({ ...item, snapshot: parse(item.snapshotJson) })) });
 }
 
 export async function POST(request: Request) {
@@ -51,7 +54,9 @@ export async function POST(request: Request) {
   if (action === 'remove_source') {
     const id = clean(body.id, 80); const source = await db.prepare(`SELECT storage_key AS storageKey FROM knowledge_sources WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id).first<{ storageKey: string | null }>();
     if (!source) return Response.json({ error: 'Knowledge source not found.' }, { status: 404 });
-    await db.batch([db.prepare(`DELETE FROM knowledge_sources WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id), auditStatement(context, 'knowledge.removed', 'knowledge_source', id)]);
+    const activeClaim = await db.prepare(`SELECT id FROM approved_claims WHERE workspace_id=? AND source_id=? AND status IN ('draft','approved') LIMIT 1`).bind(context.workspace.id, id).first();
+    if (activeClaim) return Response.json({ error: 'Retire claims linked to this source before removing it.' }, { status: 409 });
+    await db.batch([db.prepare(`UPDATE knowledge_sources SET storage_key=NULL,content_type=NULL,size_bytes=0,status='removed' WHERE id=? AND workspace_id=?`).bind(id, context.workspace.id), auditStatement(context, 'knowledge.removed', 'knowledge_source', id)]);
     if (source.storageKey) await revenueEnv().FILES.delete(source.storageKey);
     return Response.json({ ok: true });
   }
@@ -70,13 +75,59 @@ export async function POST(request: Request) {
     if (!result.meta.changes) return Response.json({ error: 'Active qualification rule not found.' }, { status: 404 });
     await auditStatement(context, 'qualification_rule.archived', 'qualification_rule', id).run(); return Response.json({ ok: true });
   }
+  if (action === 'approve_source' || action === 'reject_source') {
+    requireRole(context, ['owner', 'admin']);
+    const id = clean(body.id, 80); const nextStatus = action === 'approve_source' ? 'approved' : 'rejected';
+    const result = await db.prepare(`UPDATE knowledge_sources SET status=? WHERE id=? AND workspace_id=? AND status IN ('stored','pending_review')`).bind(nextStatus, id, context.workspace.id).run();
+    if (!result.meta.changes) return Response.json({ error: 'Reviewable knowledge source not found.' }, { status: 404 });
+    await auditStatement(context, `knowledge.${nextStatus}`, 'knowledge_source', id).run();
+    return Response.json({ ok: true, status: nextStatus });
+  }
+  if (action === 'add_claim') {
+    const claimText = clean(body.claimText, 1000); const evidenceNote = clean(body.evidenceNote, 2000); const sourceId = clean(body.sourceId, 80);
+    if (claimText.length < 5 || (!evidenceNote && !sourceId)) return Response.json({ error: 'Add a specific claim and either an evidence source or evidence note.' }, { status: 400 });
+    if (sourceId) {
+      const source = await db.prepare(`SELECT id FROM knowledge_sources WHERE id=? AND workspace_id=?`).bind(sourceId, context.workspace.id).first();
+      if (!source) return Response.json({ error: 'Evidence source not found.' }, { status: 404 });
+    }
+    const id = crypto.randomUUID();
+    await db.batch([
+      db.prepare(`INSERT INTO approved_claims (id,workspace_id,claim_text,evidence_note,source_id,status,version,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'draft',1,?,?,?)`).bind(id, context.workspace.id, claimText, evidenceNote || null, sourceId || null, context.user.id, now, now),
+      auditStatement(context, 'claim.created', 'approved_claim', id, { sourceId: sourceId || null }),
+    ]);
+    return Response.json({ ok: true, id, status: 'draft' }, { status: 201 });
+  }
+  if (action === 'approve_claim') {
+    requireRole(context, ['owner', 'admin']);
+    const id = clean(body.id, 80);
+    const claim = await db.prepare(`SELECT c.source_id AS sourceId,s.status AS sourceStatus FROM approved_claims c LEFT JOIN knowledge_sources s ON s.id=c.source_id AND s.workspace_id=c.workspace_id WHERE c.id=? AND c.workspace_id=? AND c.status='draft'`).bind(id, context.workspace.id).first<{ sourceId: string | null; sourceStatus: string | null }>();
+    if (!claim) return Response.json({ error: 'Draft claim not found.' }, { status: 404 });
+    if (claim.sourceId && claim.sourceStatus !== 'approved') return Response.json({ error: 'Review and approve the linked evidence source before approving this claim.' }, { status: 409 });
+    await db.batch([
+      db.prepare(`UPDATE approved_claims SET status='approved',approved_by=?,approved_at=?,updated_at=? WHERE id=? AND workspace_id=? AND status='draft'`).bind(context.user.id, now, now, id, context.workspace.id),
+      auditStatement(context, 'claim.approved', 'approved_claim', id),
+    ]);
+    return Response.json({ ok: true, status: 'approved' });
+  }
+  if (action === 'retire_claim') {
+    requireRole(context, ['owner', 'admin']);
+    const id = clean(body.id, 80);
+    const result = await db.prepare(`UPDATE approved_claims SET status='retired',retired_by=?,retired_at=?,updated_at=? WHERE id=? AND workspace_id=? AND status IN ('draft','approved')`).bind(context.user.id, now, now, id, context.workspace.id).run();
+    if (!result.meta.changes) return Response.json({ error: 'Active claim not found.' }, { status: 404 });
+    await auditStatement(context, 'claim.retired', 'approved_claim', id).run();
+    return Response.json({ ok: true, status: 'retired' });
+  }
   if (action === 'save_profile') {
     const legalName = clean(body.legalName, 160); if (!legalName) return Response.json({ error: 'Company name is required.' }, { status: 400 });
     const websiteUrl = clean(body.websiteUrl, 500); if (websiteUrl) { try { const url = new URL(websiteUrl); if (!['http:', 'https:'].includes(url.protocol)) throw new Error(); } catch { return Response.json({ error: 'Enter a valid HTTP or HTTPS website URL.' }, { status: 400 }); } }
+    const snapshot = { legalName, websiteUrl: websiteUrl || null, description: clean(body.description, 3000) || null, targetIndustries: list(body.targetIndustries), targetGeographies: list(body.targetGeographies), eventObjective: clean(body.eventObjective, 1000) || null };
+    const latest = await db.prepare(`SELECT COALESCE(MAX(version),0) AS version FROM company_profile_versions WHERE workspace_id=?`).bind(context.workspace.id).first<{ version: number }>();
+    const version = Number(latest?.version || 0) + 1;
     await db.batch([
       db.prepare(`INSERT INTO company_profiles (workspace_id, legal_name, website_url, description, target_industries_json, target_geographies_json, event_objective, onboarding_step, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 2, ?, ?) ON CONFLICT(workspace_id) DO UPDATE SET legal_name=excluded.legal_name, website_url=excluded.website_url, description=excluded.description, target_industries_json=excluded.target_industries_json, target_geographies_json=excluded.target_geographies_json, event_objective=excluded.event_objective, onboarding_step=MAX(company_profiles.onboarding_step,2), updated_by=excluded.updated_by, updated_at=excluded.updated_at`).bind(context.workspace.id, legalName, websiteUrl || null, clean(body.description, 3000) || null, JSON.stringify(list(body.targetIndustries)), JSON.stringify(list(body.targetGeographies)), clean(body.eventObjective, 1000) || null, context.user.id, now),
-      auditStatement(context, 'company_profile.updated', 'company_profile', context.workspace.id),
-    ]); return Response.json({ ok: true });
+      db.prepare(`INSERT INTO company_profile_versions (id,workspace_id,version,snapshot_json,change_reason,created_by,created_at) VALUES (?,?,?,?,?,?,?)`).bind(crypto.randomUUID(), context.workspace.id, version, JSON.stringify(snapshot), clean(body.changeReason, 500) || (version === 1 ? 'Initial company profile' : 'Company profile updated'), context.user.id, now),
+      auditStatement(context, 'company_profile.updated', 'company_profile', context.workspace.id, { version }),
+    ]); return Response.json({ ok: true, version });
   }
   if (action === 'add_product') {
     const name = clean(body.name, 160); const kind = clean(body.kind, 20); if (!name || !['product', 'service'].includes(kind)) return Response.json({ error: 'Product/service name and type are required.' }, { status: 400 });

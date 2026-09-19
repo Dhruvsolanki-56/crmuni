@@ -997,6 +997,60 @@ export const companyProfiles = sqliteTable('company_profiles', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+export const companyProfileVersions = sqliteTable(
+  'company_profile_versions',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    version: integer('version').notNull(),
+    snapshotJson: text('snapshot_json').notNull(),
+    changeReason: text('change_reason').notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_company_profile_version').on(
+      table.workspaceId,
+      table.version,
+    ),
+    index('idx_company_profile_versions_created').on(
+      table.workspaceId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const approvedClaims = sqliteTable(
+  'approved_claims',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    claimText: text('claim_text').notNull(),
+    evidenceNote: text('evidence_note'),
+    sourceId: text('source_id'),
+    status: text('status').notNull().default('draft'),
+    version: integer('version').notNull().default(1),
+    createdBy: text('created_by').notNull(),
+    approvedBy: text('approved_by'),
+    approvedAt: integer('approved_at'),
+    retiredBy: text('retired_by'),
+    retiredAt: integer('retired_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_approved_claims_workspace_status').on(
+      table.workspaceId,
+      table.status,
+      table.updatedAt,
+    ),
+  ],
+);
+
 export const products = sqliteTable(
   'products',
   {

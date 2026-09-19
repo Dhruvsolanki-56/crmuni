@@ -34,7 +34,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 
 | Requirement                      | Status  | Evidence / gap                                                                                          |
 | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| Company, products, ICP and rules | PARTIAL | CRUD paths exist; approved claims and profile version history are missing.                              |
+| Company, products, ICP and rules | COMPLETE | Profile saves create immutable numbered snapshots; products, ICPs and qualification rules are governed CRUD records; evidence-linked claims require owner/admin approval, have final retirement, and only approved claims enter AI context. |
 | Knowledge files and URLs         | PARTIAL | Uploads and source records exist; ingestion, provenance, review and processing recovery are incomplete. |
 | Event setup and readiness        | PARTIAL | Event configuration exists; readiness state and verified cached device configuration are missing.       |
 
@@ -90,7 +90,7 @@ Status meanings: **COMPLETE** is backed by implementation and repeatable verific
 | Production AI configuration             | READY — EXTERNAL VALIDATION REQUIRED | Manual fallbacks exist; hosted provider credential and evaluation are external.                                                                                                                                                 |
 | Outbox/background workers/dead letters  | PARTIAL                              | Durable reminder, verified contact-erasure and deletion-due jobs, stale-lock recovery, exponential retry, dead letters, manual retry and in-app delivery exist. Production scheduler configuration and destructive tenant-deletion automation remain external gates. |
 | Observability and alerts                | PARTIAL                              | Owner/admin Operations health shows job state, last run, critical alerts and dead jobs. External log retention, uptime monitor and pager integration remain.                                                                    |
-| Backup restore, load and recovery tests | PARTIAL                              | The full 35-migration chain, integrity and foreign keys are repeatably verified; an operations runbook and load smoke exist. A hosted D1/R2 backup restore drill remains required.                                              |
+| Backup restore, load and recovery tests | PARTIAL                              | The full 36-migration chain, integrity and foreign keys are repeatably verified; an operations runbook and load smoke exist. A hosted D1/R2 backup restore drill remains required.                                              |
 | CI build gate                           | COMPLETE                             | GitHub Actions runs `npm ci` and `npm run check`.                                                                                                                                                                               |
 
 ## Later phases
