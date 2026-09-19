@@ -1,10 +1,10 @@
-import { auditStatement, database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
+import { auditStatement, database, enforceRateLimit, requireLeadAccess, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 function outputText(payload: { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }) { return payload.output?.flatMap((item) => item.content || []).find((part) => part.type === 'output_text')?.text; }
 
 export async function GET(request: Request) {
-  const context = await requireWorkspace(request); const leadId = clean(new URL(request.url).searchParams.get('leadId'), 80); if (!leadId) return Response.json({ error: 'Lead ID is required.' }, { status: 400 });
+  const context = await requireWorkspace(request); const leadId = clean(new URL(request.url).searchParams.get('leadId'), 80); if (!leadId) return Response.json({ error: 'Lead ID is required.' }, { status: 400 }); await requireLeadAccess(context,leadId);
   const drafts = await database().prepare(`SELECT id, channel, recipient, subject, body, status, model, created_at AS createdAt, approved_at AS approvedAt FROM communication_drafts WHERE workspace_id = ? AND lead_id = ? ORDER BY created_at DESC`).bind(context.workspace.id, leadId).all(); return Response.json({ drafts: drafts.results });
 }
 
@@ -12,10 +12,11 @@ export async function POST(request: Request) {
   const context = await requireWorkspace(request); requireRole(context, ['owner', 'admin', 'manager', 'salesperson']); const body = await request.json().catch(() => null) as Record<string, unknown> | null; if (!body) return Response.json({ error: 'Invalid request body.' }, { status: 400 });
   const action = clean(body.action, 30); const db = database(); const now = Date.now();
   if (action === 'approve') {
-    const id = clean(body.id, 80); const result = await db.prepare(`UPDATE communication_drafts SET status='approved', approved_by=?, approved_at=? WHERE id=? AND workspace_id=? AND status='draft'`).bind(context.user.id, now, id, context.workspace.id).run(); if (!result.meta.changes) return Response.json({ error: 'Draft is unavailable or already approved.' }, { status: 409 }); await auditStatement(context, 'followup.approved', 'communication_draft', id).run(); return Response.json({ ok: true });
+    const id = clean(body.id, 80); const draft=await db.prepare(`SELECT lead_id AS leadId FROM communication_drafts WHERE id=? AND workspace_id=?`).bind(id,context.workspace.id).first<{leadId:string}>(); if(!draft)return Response.json({error:'Draft is unavailable.'},{status:404}); await requireLeadAccess(context,draft.leadId); const result = await db.prepare(`UPDATE communication_drafts SET status='approved', approved_by=?, approved_at=? WHERE id=? AND workspace_id=? AND status='draft'`).bind(context.user.id, now, id, context.workspace.id).run(); if (!result.meta.changes) return Response.json({ error: 'Draft is unavailable or already approved.' }, { status: 409 }); await auditStatement(context, 'followup.approved', 'communication_draft', id).run(); return Response.json({ ok: true });
   }
   if (action !== 'generate') return Response.json({ error: 'Unknown action.' }, { status: 400 });
-  const leadId = clean(body.leadId, 80); const channel = clean(body.channel, 20); if (!['email', 'whatsapp'].includes(channel)) return Response.json({ error: 'Choose email or WhatsApp.' }, { status: 400 });
+  await enforceRateLimit(context,'ai',20,60_000);
+  const leadId = clean(body.leadId, 80); const channel = clean(body.channel, 20); if (!['email', 'whatsapp'].includes(channel)) return Response.json({ error: 'Choose email or WhatsApp.' }, { status: 400 }); await requireLeadAccess(context,leadId);
   const lead = await db.prepare(`SELECT id, full_name AS fullName, company, role, email, phone FROM leads WHERE id=? AND workspace_id=? AND review_status='confirmed'`).bind(leadId, context.workspace.id).first<Record<string, string | null>>(); if (!lead) return Response.json({ error: 'Confirm the conversation facts before drafting a follow-up.' }, { status: 409 });
   const recipient = channel === 'email' ? lead.email : lead.phone; if (!recipient) return Response.json({ error: `Add a ${channel === 'email' ? 'work email' : 'phone number'} before creating this draft.` }, { status: 409 });
   const [facts, tasks, extraction, profile] = await Promise.all([

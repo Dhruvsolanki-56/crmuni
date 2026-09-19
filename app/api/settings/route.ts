@@ -8,12 +8,13 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get('export') === '1') {
     requireRole(context, ['owner', 'admin']);
-    const tables = ['memberships','invitations','accounts','leads','account_stakeholders','lead_capture_assets','interactions','tasks','ai_extractions','lead_facts','qualification_scores','communication_drafts','rfqs','rfq_items','rfq_documents','rfq_ai_extractions','opportunities','quotations','company_profiles','products','ideal_customer_profiles','qualification_rules','knowledge_sources','events'] as const;
+    const tables = ['memberships','invitations','accounts','leads','account_stakeholders','lead_capture_assets','interactions','tasks','ai_extractions','lead_facts','qualification_scores','communication_drafts','rfqs','rfq_items','rfq_documents','rfq_ai_extractions','opportunities','quotations','company_profiles','products','ideal_customer_profiles','qualification_rules','knowledge_sources','events','event_memberships'] as const;
     const results = await Promise.all(tables.map((table) => db.prepare(`SELECT * FROM ${table} WHERE workspace_id=?`).bind(context.workspace.id).all()));
     const data = Object.fromEntries(tables.map((table, index) => [table, results[index].results]));
     await auditStatement(context, 'workspace.exported', 'workspace', context.workspace.id).run();
     return new Response(JSON.stringify({ exportedAt: new Date().toISOString(), workspace: context.workspace, note: 'Stored file metadata is included; binary file contents remain in protected storage.', data }, null, 2), { headers: { 'content-type': 'application/json', 'content-disposition': `attachment; filename="${context.workspace.slug}-export.json"`, 'cache-control': 'private, no-store' } });
   }
+  const privileged = context.role === 'owner' || context.role === 'admin'; const canAssignTeam = privileged || context.role === 'manager';
   const [members, invitations, audit, workspaces, leadUsage, eventUsage, sourceUsage, captureUsage, rfqUsage, quotationUsage] = await Promise.all([
     db.prepare(`SELECT id, user_id AS userId, email, display_name AS displayName, role, status, created_at AS createdAt FROM memberships WHERE workspace_id = ? ORDER BY created_at ASC`).bind(context.workspace.id).all(),
     db.prepare(`SELECT id, email, role, status, expires_at AS expiresAt, created_at AS createdAt FROM invitations WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 30`).bind(context.workspace.id).all(),
@@ -26,8 +27,9 @@ export async function GET(request: Request) {
     db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM rfq_documents WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
     db.prepare(`SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM quotations WHERE workspace_id=?`).bind(context.workspace.id).first<{ bytes: number }>(),
   ]);
-  const usage = { leads: Number(leadUsage?.count || 0), activeEvents: Number(eventUsage?.count || 0), knowledgeSources: Number(sourceUsage?.count || 0), storageBytes: Number(sourceUsage?.bytes || 0) + Number(captureUsage?.bytes || 0) + Number(rfqUsage?.bytes || 0) + Number(quotationUsage?.bytes || 0), activeMembers: members.results.filter((item) => item.status === 'active').length };
-  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: members.results, invitations: invitations.results, audit: audit.results, usage, capabilities: { aiConfigured: Boolean(revenueEnv().OPENAI_API_KEY) } });
+  const usage = privileged ? { leads: Number(leadUsage?.count || 0), activeEvents: Number(eventUsage?.count || 0), knowledgeSources: Number(sourceUsage?.count || 0), storageBytes: Number(sourceUsage?.bytes || 0) + Number(captureUsage?.bytes || 0) + Number(rfqUsage?.bytes || 0) + Number(quotationUsage?.bytes || 0), activeMembers: members.results.filter((item) => item.status === 'active').length } : null;
+  const visibleMembers = canAssignTeam ? members.results.map((item) => privileged ? item : { id: item.id, userId: item.userId, displayName: item.displayName, role: item.role, status: item.status }) : [];
+  return Response.json({ context: { workspace: context.workspace, role: context.role, user: context.user }, workspaces: workspaces.results, members: visibleMembers, invitations: privileged ? invitations.results : [], audit: privileged ? audit.results : [], usage, capabilities: { aiConfigured: Boolean(revenueEnv().OPENAI_API_KEY) } });
 }
 
 export async function POST(request: Request) {

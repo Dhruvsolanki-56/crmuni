@@ -1,4 +1,4 @@
-import { auditStatement, database, DEFAULT_EVENT, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
+import { auditStatement, database, eventAccessClause, requireEventAccess, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
 import { accountIdentity } from '@/lib/accounts';
 
@@ -23,16 +23,17 @@ function clean(value: unknown, max: number) {
 
 export async function GET(request: Request) {
   const context = await requireWorkspace(request);
+  const access = eventAccessClause(context, 'l.event_id');
   const result = await database().prepare(`
     SELECT l.id, l.full_name AS fullName, l.company, l.role, l.email, l.phone, l.review_status AS reviewStatus,
            l.created_at AS createdAt, i.note, t.title AS nextAction, t.due_date AS dueDate
     FROM leads l
     LEFT JOIN interactions i ON i.lead_id = l.id
     LEFT JOIN tasks t ON t.lead_id = l.id AND t.status = 'open'
-    WHERE l.workspace_id = ? AND l.owner_id = ?
+    WHERE l.workspace_id = ?${access.sql}
     ORDER BY l.created_at DESC
     LIMIT 25
-  `).bind(context.workspace.id, context.user.id).all();
+  `).bind(context.workspace.id, ...access.bindings).all();
   return Response.json({ leads: result.results });
 }
 
@@ -63,18 +64,14 @@ export async function POST(request: Request) {
   if (file && ['card', 'badge', 'qr'].includes(requestedAttachmentKind) && !file.type.startsWith('image/')) return Response.json({ error: 'Card, badge and QR captures must be image files.' }, { status: 400 });
   if (file && requestedAttachmentKind === 'audio' && !file.type.startsWith('audio/')) return Response.json({ error: 'Conversation recordings must be audio files.' }, { status: 400 });
 
-  if (clientCaptureId) {
-    const existing = await database().prepare(`SELECT id, full_name AS fullName, company, role, review_status AS reviewStatus, created_at AS createdAt FROM leads WHERE workspace_id = ? AND client_capture_id = ?`).bind(context.workspace.id, clientCaptureId).first();
-    if (existing) return Response.json({ lead: existing, duplicate: true });
-  }
-
   const now = Date.now();
   const requestedEventId = clean(request.headers.get('x-revenue-event-id'), 80);
-  let eventId = DEFAULT_EVENT;
-  if (requestedEventId) {
-    const selectedEvent = await database().prepare(`SELECT id FROM events WHERE id = ? AND workspace_id = ? AND status != 'archived'`).bind(requestedEventId, context.workspace.id).first<{ id: string }>();
-    if (!selectedEvent) return Response.json({ error: 'The selected event is unavailable. Choose another event before capturing.' }, { status: 409 });
-    eventId = selectedEvent.id;
+  if (!requestedEventId) return Response.json({ error: 'Select an event before capturing a lead.' }, { status: 409 });
+  const selectedEvent = await requireEventAccess(context, requestedEventId);
+  const eventId = selectedEvent.id;
+  if (clientCaptureId) {
+    const existing = await database().prepare(`SELECT id, full_name AS fullName, company, role, review_status AS reviewStatus, created_at AS createdAt FROM leads WHERE workspace_id=? AND event_id=? AND client_capture_id=?`).bind(context.workspace.id, eventId, clientCaptureId).first();
+    if (existing) return Response.json({ lead: existing, duplicate: true });
   }
   const leadId = crypto.randomUUID();
   const fullName = suppliedFullName || 'Unidentified visitor';

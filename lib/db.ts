@@ -1,4 +1,6 @@
 import { env } from 'cloudflare:workers';
+import { eventAccessClause } from '@/lib/authorization';
+export { canAccessAllEvents, eventAccessClause } from '@/lib/authorization';
 
 export type RevenueEnv = { DB: D1Database; FILES: R2Bucket; OPENAI_API_KEY?: string; OPENAI_MODEL?: string; OPENAI_VISION_MODEL?: string; OPENAI_TRANSCRIBE_MODEL?: string };
 
@@ -21,7 +23,7 @@ export function requestUser(request: Request) {
   };
 }
 
-export type WorkspaceContext = { user: { id: string; email: string }; workspace: { id: string; name: string; slug: string; timezone: string; currency: string; plan: string; status: string }; role: string };
+export type WorkspaceContext = { user: { id: string; email: string }; membershipId: string; workspace: { id: string; name: string; slug: string; timezone: string; currency: string; plan: string; status: string }; role: string };
 
 export function enforceSameOrigin(request: Request) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
@@ -32,43 +34,75 @@ export function enforceSameOrigin(request: Request) {
 export async function requireWorkspace(request: Request): Promise<WorkspaceContext> {
   enforceSameOrigin(request);
   const user = requestUser(request); const db = database(); const requested = request.headers.get('x-revenue-workspace-id');
-  let membership = await db.prepare(`SELECT m.role, w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status
+  let membership = await db.prepare(`SELECT m.id AS membershipId, m.role, w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status
     FROM memberships m JOIN workspaces w ON w.id = m.workspace_id
     WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ${requested ? 'AND w.id = ?' : ''}
     ORDER BY m.created_at ASC LIMIT 1`).bind(...(requested ? [user.id, requested] : [user.id])).first<Record<string, string>>();
   if (!membership) {
-    const invitation = await db.prepare(`SELECT i.id, i.workspace_id AS workspaceId, i.role
-      FROM invitations i JOIN workspaces w ON w.id=i.workspace_id
-      WHERE LOWER(i.email)=LOWER(?) AND i.status='pending' AND i.expires_at>? AND w.status='active' ${requested ? 'AND i.workspace_id=?' : ''}
-      ORDER BY i.created_at ASC LIMIT 1`).bind(...(requested ? [user.email, Date.now(), requested] : [user.email, Date.now()])).first<{ id: string; workspaceId: string; role: string }>();
-    if (invitation) {
-      const activeMembers = await db.prepare(`SELECT COUNT(*) AS count FROM memberships WHERE workspace_id=? AND status='active'`).bind(invitation.workspaceId).first<{ count: number }>();
-      const targetWorkspace = await db.prepare(`SELECT plan FROM workspaces WHERE id=?`).bind(invitation.workspaceId).first<{ plan: string }>();
-      if (targetWorkspace?.plan === 'trial' && Number(activeMembers?.count || 0) >= 3) throw new Response('This trial workspace has reached its member limit.', { status: 402 });
-      const now = Date.now(); const membershipId = crypto.randomUUID();
-      await db.batch([
-        db.prepare(`INSERT INTO memberships (id,workspace_id,user_id,email,display_name,role,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET email=excluded.email,role=excluded.role,status='active',updated_at=excluded.updated_at`).bind(membershipId, invitation.workspaceId, user.id, user.email, user.email.split('@')[0], invitation.role, now, now),
-        db.prepare(`UPDATE invitations SET status='accepted' WHERE id=? AND status='pending'`).bind(invitation.id),
-        db.prepare(`INSERT INTO audit_events (id,workspace_id,actor_id,action,entity_type,entity_id,created_at) VALUES (?,?,?,'invitation.accepted','invitation',?,?)`).bind(crypto.randomUUID(), invitation.workspaceId, user.id, invitation.id, now),
-      ]);
-      membership = await db.prepare(`SELECT m.role, w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status FROM memberships m JOIN workspaces w ON w.id=m.workspace_id WHERE m.user_id=? AND m.workspace_id=? AND m.status='active' AND w.status='active' LIMIT 1`).bind(user.id, invitation.workspaceId).first<Record<string, string>>();
-    }
-  }
-  if (!membership) {
     const anyWorkspace = await db.prepare(`SELECT id FROM workspaces LIMIT 1`).first<{ id: string }>();
     if (anyWorkspace) throw new Response('You do not have access to this workspace.', { status: 403 });
-    const now = Date.now(); const workspaceId = DEFAULT_WORKSPACE;
+    const now = Date.now(); const workspaceId = DEFAULT_WORKSPACE; const membershipId = crypto.randomUUID();
     await db.batch([
       db.prepare(`INSERT INTO workspaces (id, name, slug, timezone, currency, plan, status, created_by, created_at, updated_at) VALUES (?, 'Nova Automation', 'nova-automation', 'Asia/Kolkata', 'INR', 'trial', 'active', ?, ?, ?)`).bind(workspaceId, user.id, now, now),
-      db.prepare(`INSERT INTO memberships (id, workspace_id, user_id, email, display_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Arjun Singh', 'owner', 'active', ?, ?)`).bind(crypto.randomUUID(), workspaceId, user.id, user.email, now, now),
+      db.prepare(`INSERT INTO memberships (id, workspace_id, user_id, email, display_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'Arjun Singh', 'owner', 'active', ?, ?)`).bind(membershipId, workspaceId, user.id, user.email, now, now),
     ]);
-    membership = { role: 'owner', id: workspaceId, name: 'Nova Automation', slug: 'nova-automation', timezone: 'Asia/Kolkata', currency: 'INR', plan: 'trial', status: 'active' };
+    membership = { membershipId, role: 'owner', id: workspaceId, name: 'Nova Automation', slug: 'nova-automation', timezone: 'Asia/Kolkata', currency: 'INR', plan: 'trial', status: 'active' };
   }
-  return { user, role: membership.role, workspace: { id: membership.id, name: membership.name, slug: membership.slug, timezone: membership.timezone, currency: membership.currency, plan: membership.plan, status: membership.status } };
+  const context = { user, membershipId: membership.membershipId, role: membership.role, workspace: { id: membership.id, name: membership.name, slug: membership.slug, timezone: membership.timezone, currency: membership.currency, plan: membership.plan, status: membership.status } };
+  if (!['GET','HEAD','OPTIONS'].includes(request.method)) await enforceRateLimit(context, 'mutation', 120, 60_000);
+  return context;
+}
+
+export async function enforceRateLimit(context: WorkspaceContext, bucket: string, limit: number, windowMs: number) {
+  const now=Date.now(); const windowStart=Math.floor(now/windowMs)*windowMs; const rateKey=`${context.user.id}:${bucket}`.slice(0,180); const db=database();
+  await db.prepare(`INSERT INTO request_rate_limits (id,workspace_id,rate_key,window_start,request_count,updated_at) VALUES (?,?,?,?,1,?) ON CONFLICT(workspace_id,rate_key) DO UPDATE SET window_start=CASE WHEN request_rate_limits.window_start=? THEN request_rate_limits.window_start ELSE excluded.window_start END,request_count=CASE WHEN request_rate_limits.window_start=? THEN request_rate_limits.request_count+1 ELSE 1 END,updated_at=excluded.updated_at`).bind(crypto.randomUUID(),context.workspace.id,rateKey,windowStart,now,windowStart,windowStart).run();
+  const row=await db.prepare(`SELECT request_count AS requestCount FROM request_rate_limits WHERE workspace_id=? AND rate_key=?`).bind(context.workspace.id,rateKey).first<{requestCount:number}>();
+  if(Number(row?.requestCount||0)>limit) throw new Response('Too many requests. Try again shortly.',{status:429,headers:{'retry-after':String(Math.max(1,Math.ceil((windowStart+windowMs-now)/1000)))}});
 }
 
 export function requireRole(context: WorkspaceContext, allowed: string[]) {
   if (!allowed.includes(context.role)) throw new Response('Insufficient workspace permission.', { status: 403 });
+}
+
+export async function requireEventAccess(context: WorkspaceContext, eventId: string, includeArchived = false) {
+  if (!eventId) throw new Response('Select an event before continuing.', { status: 409 });
+  const access = eventAccessClause(context, 'e.id');
+  const event = await database().prepare(`SELECT e.id, e.status FROM events e WHERE e.id = ? AND e.workspace_id = ? ${includeArchived ? '' : "AND e.status != 'archived'"}${access.sql}`)
+    .bind(eventId, context.workspace.id, ...access.bindings).first<{ id: string; status: string }>();
+  if (!event) throw new Response('You do not have access to this event.', { status: 403 });
+  return event;
+}
+
+export async function requireLeadAccess(context: WorkspaceContext, leadId: string) {
+  const access = eventAccessClause(context, 'l.event_id');
+  const lead = await database().prepare(`SELECT l.id, l.event_id AS eventId FROM leads l WHERE l.id = ? AND l.workspace_id = ?${access.sql}`)
+    .bind(leadId, context.workspace.id, ...access.bindings).first<{ id: string; eventId: string }>();
+  if (!lead) throw new Response('Lead not found or unavailable.', { status: 404 });
+  return lead;
+}
+
+export async function requireRfqAccess(context: WorkspaceContext, rfqId: string) {
+  const access = eventAccessClause(context, 'r.event_id');
+  const rfq = await database().prepare(`SELECT r.id, r.event_id AS eventId FROM rfqs r WHERE r.id = ? AND r.workspace_id = ?${access.sql}`)
+    .bind(rfqId, context.workspace.id, ...access.bindings).first<{ id: string; eventId: string | null }>();
+  if (!rfq) throw new Response('RFQ not found or unavailable.', { status: 404 });
+  return rfq;
+}
+
+export async function requireOpportunityAccess(context: WorkspaceContext, opportunityId: string) {
+  const access = eventAccessClause(context, 'o.event_id');
+  const opportunity = await database().prepare(`SELECT o.id, o.event_id AS eventId FROM opportunities o WHERE o.id = ? AND o.workspace_id = ?${access.sql}`)
+    .bind(opportunityId, context.workspace.id, ...access.bindings).first<{ id: string; eventId: string | null }>();
+  if (!opportunity) throw new Response('Opportunity not found or unavailable.', { status: 404 });
+  return opportunity;
+}
+
+export async function requireQuotationAccess(context: WorkspaceContext, quotationId: string) {
+  const access = eventAccessClause(context, 'q.event_id');
+  const quotation = await database().prepare(`SELECT q.id,q.event_id AS eventId FROM quotations q WHERE q.id=? AND q.workspace_id=?${access.sql}`)
+    .bind(quotationId, context.workspace.id, ...access.bindings).first<{ id: string; eventId: string | null }>();
+  if (!quotation) throw new Response('Quotation not found or unavailable.', { status: 404 });
+  return quotation;
 }
 
 export function auditStatement(context: WorkspaceContext, action: string, entityType: string, entityId?: string, detail?: unknown) {

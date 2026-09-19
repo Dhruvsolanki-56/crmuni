@@ -1,5 +1,5 @@
 import { accountIdentity } from '@/lib/accounts';
-import { auditStatement, database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
+import { auditStatement, database, enforceRateLimit, requireLeadAccess, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 
 type CaptureExtraction = {
   fullName: string | null;
@@ -46,8 +46,10 @@ async function structuredExtraction(input: Array<Record<string, unknown>> | stri
 
 export async function POST(request: Request) {
   const context = await requireWorkspace(request); requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
+  await enforceRateLimit(context,'ai',20,60_000);
   const body = await request.json().catch(() => null) as { leadId?: unknown } | null; const leadId = clean(body?.leadId, 80);
   if (!leadId) return Response.json({ error: 'Lead ID is required.' }, { status: 400 });
+  await requireLeadAccess(context,leadId);
   const db = database();
   const asset = await db.prepare(`SELECT a.id, a.kind, a.original_name AS originalName, a.storage_key AS storageKey, a.content_type AS contentType, a.size_bytes AS sizeBytes, a.processing_status AS processingStatus, l.full_name AS fullName, l.company, l.role, l.email, l.phone FROM lead_capture_assets a JOIN leads l ON l.id=a.lead_id WHERE a.lead_id=? AND a.workspace_id=? ORDER BY a.created_at DESC LIMIT 1`).bind(leadId, context.workspace.id).first<Record<string, string | number | null>>();
   if (!asset) return Response.json({ error: 'No capture file is available for this lead.' }, { status: 404 });

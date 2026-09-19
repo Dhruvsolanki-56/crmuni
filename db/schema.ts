@@ -245,6 +245,7 @@ export const opportunities = sqliteTable('opportunities', {
 export const quotations = sqliteTable('quotations', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  eventId: text('event_id'),
   rfqId: text('rfq_id').references(() => rfqs.id),
   opportunityId: text('opportunity_id').references(() => opportunities.id),
   quoteNumber: text('quote_number').notNull(),
@@ -262,6 +263,7 @@ export const quotations = sqliteTable('quotations', {
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [
   uniqueIndex('uidx_quotations_workspace_number').on(table.workspaceId, table.quoteNumber),
+  index('idx_quotations_workspace_event').on(table.workspaceId, table.eventId),
   index('idx_quotations_workspace_status_valid').on(table.workspaceId, table.status, table.validUntil),
 ]);
 
@@ -368,3 +370,30 @@ export const events = sqliteTable('events', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [index('idx_events_workspace_status_dates').on(table.workspaceId, table.status, table.startsOn)]);
+
+export const eventMemberships = sqliteTable('event_memberships', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  eventId: text('event_id').notNull().references(() => events.id),
+  membershipId: text('membership_id').notNull().references(() => memberships.id),
+  status: text('status').notNull().default('active'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_event_memberships_event_member').on(table.eventId, table.membershipId),
+  index('idx_event_memberships_member_status').on(table.workspaceId, table.membershipId, table.status),
+  index('idx_event_memberships_event_status').on(table.workspaceId, table.eventId, table.status),
+]);
+
+export const requestRateLimits = sqliteTable('request_rate_limits', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
+  rateKey: text('rate_key').notNull(),
+  windowStart: integer('window_start').notNull(),
+  requestCount: integer('request_count').notNull().default(0),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uidx_request_rate_limits_workspace_key').on(table.workspaceId, table.rateKey),
+  index('idx_request_rate_limits_updated').on(table.updatedAt),
+]);

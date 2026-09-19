@@ -1,5 +1,5 @@
 import type { ConversationAnalysis } from '@/lib/analysis-schema';
-import { auditStatement, database, requireRole, requireWorkspace } from '@/lib/db';
+import { auditStatement, database, requireLeadAccess, requireRole, requireWorkspace } from '@/lib/db';
 
 export async function POST(request: Request) {
   const context = await requireWorkspace(request);
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     WHERE a.id = ? AND a.workspace_id = ?
   `).bind(extractionId, context.workspace.id).first<{ id: string; leadId: string; interactionId: string; status: string; resultJson: string | null }>();
   if (!extraction || !extraction.resultJson) return Response.json({ error: 'Completed analysis not found.' }, { status: 404 });
+  await requireLeadAccess(context,extraction.leadId);
   if (extraction.status === 'confirmed') return Response.json({ status: 'confirmed', tasksCreated: 0 });
 
   const analysis = JSON.parse(extraction.resultJson) as ConversationAnalysis & { ruleResults?: unknown[] };

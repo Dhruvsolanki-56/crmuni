@@ -1,5 +1,5 @@
 import { conversationAnalysisSchema, type ConversationAnalysis } from '@/lib/analysis-schema';
-import { database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
+import { database, enforceRateLimit, requireLeadAccess, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 
 function outputText(payload: { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }) {
   return payload.output?.flatMap((item) => item.content || []).find((part) => part.type === 'output_text')?.text;
@@ -8,9 +8,11 @@ function outputText(payload: { output?: Array<{ content?: Array<{ type?: string;
 export async function POST(request: Request) {
   const context = await requireWorkspace(request);
   requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
+  await enforceRateLimit(context,'ai',20,60_000);
   const body = await request.json().catch(() => null) as { leadId?: unknown } | null;
   const leadId = typeof body?.leadId === 'string' ? body.leadId : '';
   if (!leadId) return Response.json({ error: 'Lead ID is required.' }, { status: 400 });
+  await requireLeadAccess(context,leadId);
 
   const source = await database().prepare(`
     SELECT l.id, l.full_name AS fullName, l.company, l.role, i.id AS interactionId, i.note
