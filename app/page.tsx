@@ -227,6 +227,12 @@ type WorkspaceUsage = {
   storageBytes: number;
   activeMembers: number;
 };
+type PlanEntitlements = {
+  plan: string;
+  activeMembers: number;
+  storageBytes: number;
+  aiRequestsPerMinute: number;
+};
 type LeadMerge = {
   id: string;
   sourceLeadId: string;
@@ -621,6 +627,12 @@ export default function Home() {
     storageBytes: 0,
     activeMembers: 0,
   });
+  const [planEntitlements, setPlanEntitlements] = useState<PlanEntitlements>({
+    plan: 'trial',
+    activeMembers: 3,
+    storageBytes: 100 * 1024 * 1024,
+    aiRequestsPerMinute: 20,
+  });
   const [capabilities, setCapabilities] = useState({ aiConfigured: false });
   const [deletionRequest, setDeletionRequest] =
     useState<DeletionRequest | null>(null);
@@ -768,6 +780,7 @@ export default function Home() {
       supportGrants?: SupportGrant[];
       audit: AuditEvent[];
       usage?: WorkspaceUsage;
+      entitlements?: PlanEntitlements | null;
       deletionRequest?: DeletionRequest | null;
       capabilities?: { aiConfigured: boolean };
       workspaces?: Array<AppContext['workspace'] & { role: string }>;
@@ -786,6 +799,7 @@ export default function Home() {
         activeMembers: 0,
       },
     );
+    if (data.entitlements) setPlanEntitlements(data.entitlements);
     setDeletionRequest(data.deletionRequest || null);
     setSettingsLoadedAt(data.serverTime);
     setCapabilities(data.capabilities || { aiConfigured: false });
@@ -6120,8 +6134,8 @@ export default function Home() {
                       <span>
                         <small>Members</small>
                         <strong>
-                          {workspaceUsage.activeMembers}
-                          {appContext?.workspace.plan === 'trial' ? ' / 3' : ''}
+                          {workspaceUsage.activeMembers} /{' '}
+                          {planEntitlements.activeMembers}
                         </strong>
                       </span>
                       <span>
@@ -6133,7 +6147,17 @@ export default function Home() {
                         <strong>
                           {workspaceUsage.storageBytes < 1048576
                             ? `${Math.ceil(workspaceUsage.storageBytes / 1024)} KB`
-                            : `${(workspaceUsage.storageBytes / 1048576).toFixed(1)} MB`}
+                            : `${(workspaceUsage.storageBytes / 1048576).toFixed(1)} MB`}{' '}
+                          /{' '}
+                          {planEntitlements.storageBytes >= 1073741824
+                            ? `${(planEntitlements.storageBytes / 1073741824).toFixed(0)} GB`
+                            : `${(planEntitlements.storageBytes / 1048576).toFixed(0)} MB`}
+                        </strong>
+                      </span>
+                      <span>
+                        <small>AI rate</small>
+                        <strong>
+                          {planEntitlements.aiRequestsPerMinute} / minute
                         </strong>
                       </span>
                     </div>
@@ -6347,8 +6371,8 @@ export default function Home() {
                       <div>
                         <h2>Invite a teammate</h2>
                         <p>
-                          Invitations expire after seven days. Trial limit:
-                          three active members.
+                            Invitations expire after seven days. This plan allows{' '}
+                            {planEntitlements.activeMembers} active members.
                         </p>
                       </div>
                     </div>

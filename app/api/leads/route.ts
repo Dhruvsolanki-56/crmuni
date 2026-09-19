@@ -1,6 +1,7 @@
 import { auditStatement, database, eventAccessClause, requireEventAccess, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
 import { accountIdentity } from '@/lib/accounts';
+import { enforceStorageEntitlement, isEntitlementConstraint, storageLimitResponse } from '@/lib/entitlements';
 
 type NewLead = {
   fullName?: unknown;
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
   if (file && await validateUpload(file, allowedFiles, 15 * 1024 * 1024)) return Response.json({ error: 'The attachment content does not match a supported image, PDF, or audio file up to 15 MB.' }, { status: 400 });
   if (file && ['card', 'badge', 'qr'].includes(requestedAttachmentKind) && !file.type.startsWith('image/')) return Response.json({ error: 'Card, badge and QR captures must be image files.' }, { status: 400 });
   if (file && requestedAttachmentKind === 'audio' && !file.type.startsWith('audio/')) return Response.json({ error: 'Conversation recordings must be audio files.' }, { status: 400 });
+  if (file) await enforceStorageEntitlement(database(), context.workspace.id, context.workspace.plan, file.size);
 
   const now = Date.now();
   const requestedEventId = clean(request.headers.get('x-revenue-event-id'), 80);
@@ -110,6 +112,6 @@ export async function POST(request: Request) {
   if (file && assetId && storageKey) statements.push(database().prepare(`INSERT INTO lead_capture_assets (id, workspace_id, lead_id, kind, original_name, storage_key, content_type, size_bytes, processing_status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'stored_pending_extraction', ?, ?)`).bind(assetId, context.workspace.id, leadId, attachmentKind, file.name.slice(0, 180), storageKey, file.type, file.size, context.user.id, now));
   statements.push(auditStatement(context, 'lead.created', 'lead', leadId, { source, consentChannels }));
 
-  try { await database().batch(statements); } catch (error) { if (storageKey) await revenueEnv().FILES.delete(storageKey); throw error; }
+  try { await database().batch(statements); } catch (error) { if (storageKey) await revenueEnv().FILES.delete(storageKey); if (isEntitlementConstraint(error, 'STORAGE_LIMIT')) throw storageLimitResponse(context.workspace.plan); throw error; }
   return Response.json({ lead: { id: leadId, fullName, company, role, email, phone, note, nextAction, dueDate, reviewStatus: 'needs_review', qualificationState:'unqualified',ownerId:context.user.id, emailConsentStatus: consentChannels.includes('email')?'granted':null, whatsappConsentStatus: consentChannels.includes('whatsapp')?'granted':null, duplicateLeadId:duplicate?.id||null,duplicateLeadName:duplicate?.fullName||null, captureStatus: assetId ? 'stored_pending_extraction' : null, captureKind: assetId ? attachmentKind : null, createdAt: now }, asset: assetId ? { id: assetId, kind: attachmentKind, processingStatus: 'stored_pending_extraction' } : null }, { status: 201 });
 }

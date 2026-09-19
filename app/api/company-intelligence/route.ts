@@ -1,5 +1,6 @@
 import { auditStatement, database, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
+import { enforceStorageEntitlement, isEntitlementConstraint, storageLimitResponse } from '@/lib/entitlements';
 
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const list = (value: unknown) => clean(value, 2000).split(',').map((item) => item.trim()).filter(Boolean).slice(0, 30);
@@ -28,12 +29,20 @@ export async function POST(request: Request) {
     const form = await request.formData(); const file = form.get('file');
     if (!(file instanceof File)) return Response.json({ error: 'Choose a file to upload.' }, { status: 400 });
     if (await validateUpload(file, allowedFiles, 10 * 1024 * 1024)) return Response.json({ error: 'The file content must match a PDF, DOCX, XLSX, CSV, TXT, PNG or JPG file up to 10 MB.' }, { status: 400 });
+    await enforceStorageEntitlement(db, context.workspace.id, context.workspace.plan, file.size);
     const id = crypto.randomUUID(); const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 120); const key = `${context.workspace.id}/${id}/${safeName}`;
     await revenueEnv().FILES.put(key, file.stream(), { httpMetadata: { contentType: file.type }, customMetadata: { workspaceId: context.workspace.id, uploadedBy: context.user.id } });
-    await db.batch([
-      db.prepare(`INSERT INTO knowledge_sources (id, workspace_id, name, source_type, storage_key, content_type, size_bytes, status, created_by, created_at) VALUES (?, ?, ?, 'file', ?, ?, ?, 'stored', ?, ?)`).bind(id, context.workspace.id, file.name.slice(0, 180), key, file.type, file.size, context.user.id, now),
-      auditStatement(context, 'knowledge.uploaded', 'knowledge_source', id, { name: file.name, size: file.size }),
-    ]);
+    try {
+      await db.batch([
+        db.prepare(`INSERT INTO knowledge_sources (id, workspace_id, name, source_type, storage_key, content_type, size_bytes, status, created_by, created_at) VALUES (?, ?, ?, 'file', ?, ?, ?, 'stored', ?, ?)`).bind(id, context.workspace.id, file.name.slice(0, 180), key, file.type, file.size, context.user.id, now),
+        auditStatement(context, 'knowledge.uploaded', 'knowledge_source', id, { name: file.name, size: file.size }),
+      ]);
+    } catch (error) {
+      await revenueEnv().FILES.delete(key);
+      if (isEntitlementConstraint(error, 'STORAGE_LIMIT'))
+        throw storageLimitResponse(context.workspace.plan);
+      throw error;
+    }
     return Response.json({ source: { id, name: file.name, sourceType: 'file', contentType: file.type, sizeBytes: file.size, status: 'stored', createdAt: now } }, { status: 201 });
   }
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;

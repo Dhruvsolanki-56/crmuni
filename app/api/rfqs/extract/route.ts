@@ -1,10 +1,12 @@
 import {
   database,
+  enforceRateLimit,
   requireRfqAccess,
   requireRole,
   requireWorkspace,
   revenueEnv,
 } from '@/lib/db';
+import { entitlementsFor } from '@/lib/entitlements';
 
 type RfqExtraction = {
   deliveryLocation: string | null;
@@ -69,6 +71,12 @@ function base64(bytes: Uint8Array) {
 export async function POST(request: Request) {
   const context = await requireWorkspace(request);
   requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
+  await enforceRateLimit(
+    context,
+    'ai',
+    entitlementsFor(context.workspace.plan).aiRequestsPerMinute,
+    60_000,
+  );
   const body = (await request.json().catch(() => null)) as Record<
     string,
     unknown

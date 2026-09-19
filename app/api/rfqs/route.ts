@@ -9,6 +9,7 @@ import {
   revenueEnv,
 } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
+import { enforceStorageEntitlement, isEntitlementConstraint, storageLimitResponse } from '@/lib/entitlements';
 
 const clean = (value: unknown, max: number) =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -389,6 +390,7 @@ export async function POST(request: Request) {
   }
   let storageKey: string | null = null;
   if (file instanceof File) {
+    await enforceStorageEntitlement(db, context.workspace.id, context.workspace.plan, file.size);
     const documentId = crypto.randomUUID();
     const safeName =
       file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 120) || 'rfq';
@@ -430,6 +432,8 @@ export async function POST(request: Request) {
     await db.batch(statements);
   } catch (error) {
     if (storageKey) await revenueEnv().FILES.delete(storageKey);
+    if (isEntitlementConstraint(error, 'STORAGE_LIMIT'))
+      throw storageLimitResponse(context.workspace.plan);
     throw error;
   }
   return Response.json(

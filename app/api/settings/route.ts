@@ -5,6 +5,7 @@ import {
   requireWorkspace,
   revenueEnv,
 } from '@/lib/db';
+import { entitlementsFor, isEntitlementConstraint } from '@/lib/entitlements';
 
 const ROLES = [
   'owner',
@@ -247,6 +248,7 @@ export async function GET(request: Request) {
     invitations: privileged ? invitations.results : [],
     audit: privileged ? audit.results : [],
     usage,
+    entitlements: privileged ? entitlementsFor(context.workspace.plan) : null,
     deletionRequest,
     supportGrants: privileged ? supportGrants.results : [],
     capabilities: { aiConfigured: Boolean(revenueEnv().OPENAI_API_KEY) },
@@ -578,9 +580,10 @@ export async function POST(request: Request) {
       )
       .bind(context.workspace.id)
       .first<{ count: number }>();
-    if (context.workspace.plan === 'trial' && Number(count?.count || 0) >= 3)
+    const memberLimit = entitlementsFor(context.workspace.plan).activeMembers;
+    if (Number(count?.count || 0) >= memberLimit)
       return Response.json(
-        { error: 'Trial workspaces support up to three active members.' },
+        { error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.` },
         { status: 402 },
       );
     const duplicate = await db
@@ -760,8 +763,7 @@ export async function POST(request: Request) {
       );
     if (
       status === 'active' &&
-      target.status !== 'active' &&
-      context.workspace.plan === 'trial'
+      target.status !== 'active'
     ) {
       const count = await db
         .prepare(
@@ -769,26 +771,38 @@ export async function POST(request: Request) {
         )
         .bind(context.workspace.id)
         .first<{ count: number }>();
-      if (Number(count?.count || 0) >= 3)
+      const memberLimit = entitlementsFor(context.workspace.plan).activeMembers;
+      if (Number(count?.count || 0) >= memberLimit)
         return Response.json(
-          { error: 'Trial workspaces support up to three active members.' },
+          { error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.` },
           { status: 402 },
         );
     }
-    await db.batch([
-      db
-        .prepare(
-          `UPDATE memberships SET role = ?, status = ?, updated_at = ? WHERE id = ? AND workspace_id = ?`,
-        )
-        .bind(role, status, now, membershipId, context.workspace.id),
-      auditStatement(
-        context,
-        'membership.updated',
-        'membership',
-        membershipId,
-        { role, status },
-      ),
-    ]);
+    try {
+      await db.batch([
+        db
+          .prepare(
+            `UPDATE memberships SET role = ?, status = ?, updated_at = ? WHERE id = ? AND workspace_id = ?`,
+          )
+          .bind(role, status, now, membershipId, context.workspace.id),
+        auditStatement(
+          context,
+          'membership.updated',
+          'membership',
+          membershipId,
+          { role, status },
+        ),
+      ]);
+    } catch (error) {
+      if (isEntitlementConstraint(error, 'ACTIVE_MEMBER_LIMIT')) {
+        const memberLimit = entitlementsFor(context.workspace.plan).activeMembers;
+        return Response.json(
+          { error: `The ${context.workspace.plan} plan supports up to ${memberLimit} active members.` },
+          { status: 402 },
+        );
+      }
+      throw error;
+    }
     return Response.json({ ok: true });
   }
   if (action === 'revoke_invitation') {

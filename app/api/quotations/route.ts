@@ -11,6 +11,7 @@ import {
   revenueEnv,
 } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
+import { enforceStorageEntitlement, isEntitlementConstraint, storageLimitResponse } from '@/lib/entitlements';
 
 const clean = (value: unknown, max: number) =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -160,6 +161,7 @@ export async function POST(request: Request) {
       { error: 'Attach a valid PDF or DOCX quotation up to 15 MB.' },
       { status: 400 },
     );
+  if (file) await enforceStorageEntitlement(db, context.workspace.id, context.workspace.plan, file.size);
   const duplicate = await db
     .prepare(
       `SELECT id FROM quotations WHERE workspace_id=? AND quote_number=?`,
@@ -225,6 +227,8 @@ export async function POST(request: Request) {
     ]);
   } catch (error) {
     if (storageKey) await revenueEnv().FILES.delete(storageKey);
+    if (isEntitlementConstraint(error, 'STORAGE_LIMIT'))
+      throw storageLimitResponse(context.workspace.plan);
     throw error;
   }
   return Response.json(

@@ -1,5 +1,6 @@
 import { auditStatement, database, enforceRateLimit, requireLeadAccess, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
 import { suppressionIdentifier, type ContactChannel } from '@/lib/consent';
+import { entitlementsFor } from '@/lib/entitlements';
 
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 function outputText(payload: { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }) { return payload.output?.flatMap((item) => item.content || []).find((part) => part.type === 'output_text')?.text; }
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     const id=clean(body.id,80);const version=Math.max(1,Number(body.version)||0);const draft=await db.prepare(`SELECT lead_id AS leadId FROM communication_drafts WHERE id=? AND workspace_id=?`).bind(id,context.workspace.id).first<{leadId:string}>();if(!draft)return Response.json({error:'Draft is unavailable.'},{status:404});await requireLeadAccess(context,draft.leadId);const result=await db.prepare(`UPDATE communication_drafts SET status='approved',approved_by=?,approved_at=?,updated_at=? WHERE id=? AND workspace_id=? AND status='draft' AND version=?`).bind(context.user.id,now,now,id,context.workspace.id,version).run();if(!result.meta.changes)return Response.json({error:'This draft changed or is already approved. Reload before approving.'},{status:409});await auditStatement(context,'followup.approved','communication_draft',id,{version}).run();return Response.json({ok:true,version});
   }
   if (action !== 'generate') return Response.json({ error: 'Unknown action.' }, { status: 400 });
-  await enforceRateLimit(context,'ai',20,60_000);
+  await enforceRateLimit(context,'ai',entitlementsFor(context.workspace.plan).aiRequestsPerMinute,60_000);
   const leadId = clean(body.leadId, 80); const channel = clean(body.channel, 20); if (!['email', 'whatsapp'].includes(channel)) return Response.json({ error: 'Choose email or WhatsApp.' }, { status: 400 }); await requireLeadAccess(context,leadId);
   const lead = await db.prepare(`SELECT id, full_name AS fullName, company, role, email, phone FROM leads WHERE id=? AND workspace_id=? AND review_status='confirmed'`).bind(leadId, context.workspace.id).first<Record<string, string | null>>(); if (!lead) return Response.json({ error: 'Confirm the conversation facts before drafting a follow-up.' }, { status: 409 });
   const recipient = channel === 'email' ? lead.email : lead.phone; if (!recipient) return Response.json({ error: `Add a ${channel === 'email' ? 'work email' : 'phone number'} before creating this draft.` }, { status: 409 });

@@ -20,6 +20,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - Offline captures use a device outbox, stable capture IDs, automatic retry, and server-side idempotency.
 - Workspace membership and role checks are enforced in API routes.
 - Customer support access is read-only, owner-granted to a named authenticated identity, time-limited, audited, and immediately revocable.
+- Trial, Starter, Growth, and Scale limits for active members, aggregate file storage, and AI request rate are enforced in API code and by database concurrency guards. Unknown plans fail closed to Trial limits.
 - Uploaded file signatures are checked instead of trusting the browser-provided MIME type.
 - AI output is untrusted until a salesperson confirms it; source evidence remains retained.
 - Follow-up approval does not silently send a message.
@@ -65,5 +66,5 @@ Configure secrets through the hosted runtime; never commit `.env.local`, API key
 
 - Email and WhatsApp open in the salesperson's approved client; provider-side delivery tracking is not included yet.
 - Zoho, Salesforce, and HubSpot synchronization require a later connector phase and customer credentials.
-- Subscription checkout, invoicing, and entitlement enforcement require a selected billing provider before public self-service sales.
+- Subscription checkout and invoicing require approved pricing, tax/legal terms, and a selected billing provider before public self-service sales. Product entitlements are already enforced independently of billing.
 - OCR and transcription quality depends on capture clarity and configured AI access, so human verification remains mandatory.

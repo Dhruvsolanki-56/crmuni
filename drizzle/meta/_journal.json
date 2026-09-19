@@ -232,6 +232,13 @@
       "when": 1789859513134,
       "tag": "0032_woozy_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1789860213352,
+      "tag": "0033_enforce_plan_entitlements",
+      "breakpoints": true
     }
   ]
 }
