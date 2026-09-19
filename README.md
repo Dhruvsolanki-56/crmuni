@@ -19,6 +19,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - D1 is the authoritative store for tenant-scoped records; R2 stores original uploads.
 - Offline captures use a device outbox, stable capture IDs, automatic retry, and server-side idempotency.
 - Workspace membership and role checks are enforced in API routes.
+- Customer support access is read-only, owner-granted to a named authenticated identity, time-limited, audited, and immediately revocable.
 - Uploaded file signatures are checked instead of trusting the browser-provided MIME type.
 - AI output is untrusted until a salesperson confirms it; source evidence remains retained.
 - Follow-up approval does not silently send a message.

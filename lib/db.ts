@@ -74,6 +74,35 @@ export async function requireWorkspace(
     ORDER BY m.created_at ASC LIMIT 1`)
     .bind(...(requested ? [user.id, requested] : [user.id]))
     .first<Record<string, string>>();
+  let supportGrant:
+    | { grantId: string; lastAccessAt: number | null }
+    | undefined;
+  if (!membership) {
+    const grant = await db
+      .prepare(
+        `SELECT g.id AS grantId,g.last_access_at AS lastAccessAt,w.id,w.name,w.slug,w.timezone,w.currency,w.plan,w.status FROM support_access_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.support_user_id=? AND g.status='active' AND g.expires_at>? AND w.status='active' ${requested ? 'AND w.id=?' : ''} ORDER BY g.created_at ASC LIMIT 1`,
+      )
+      .bind(user.id, Date.now(), ...(requested ? [requested] : []))
+      .first<Record<string, string | number | null>>();
+    if (grant) {
+      supportGrant = {
+        grantId: String(grant.grantId),
+        lastAccessAt:
+          grant.lastAccessAt == null ? null : Number(grant.lastAccessAt),
+      };
+      membership = {
+        membershipId: `support:${String(grant.grantId)}`,
+        role: 'support',
+        id: String(grant.id),
+        name: String(grant.name),
+        slug: String(grant.slug),
+        timezone: String(grant.timezone),
+        currency: String(grant.currency),
+        plan: String(grant.plan),
+        status: String(grant.status),
+      };
+    }
+  }
   if (!membership) {
     if (requested)
       throw new Response('You do not have access to this workspace.', {
@@ -128,6 +157,38 @@ export async function requireWorkspace(
       status: membership.status,
     },
   };
+  if (
+    supportGrant &&
+    (!supportGrant.lastAccessAt ||
+      supportGrant.lastAccessAt < Date.now() - 60 * 60 * 1000)
+  ) {
+    const accessedAt = Date.now();
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE support_access_grants SET last_access_at=?,updated_at=? WHERE id=? AND workspace_id=? AND status='active' AND expires_at>?`,
+        )
+        .bind(
+          accessedAt,
+          accessedAt,
+          supportGrant.grantId,
+          context.workspace.id,
+          accessedAt,
+        ),
+      db
+        .prepare(
+          `INSERT INTO audit_events (id,workspace_id,actor_id,action,entity_type,entity_id,detail_json,created_at) VALUES (?,?,?,'support.session_accessed','support_access_grant',?,?,?,?)`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          context.workspace.id,
+          user.id,
+          supportGrant.grantId,
+          JSON.stringify({ email: user.email }),
+          accessedAt,
+        ),
+    ]);
+  }
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method))
     await enforceRateLimit(context, 'mutation', 120, 60_000);
   return context;

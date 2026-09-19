@@ -225,6 +225,13 @@
       "when": 1789859353008,
       "tag": "0031_wet_franklin_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1789859513134,
+      "tag": "0032_woozy_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }

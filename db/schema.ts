@@ -51,6 +51,40 @@ export const memberships = sqliteTable(
   ],
 );
 
+export const supportAccessGrants = sqliteTable(
+  'support_access_grants',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    supportUserId: text('support_user_id').notNull(),
+    supportEmail: text('support_email').notNull(),
+    reason: text('reason').notNull(),
+    ticketReference: text('ticket_reference'),
+    status: text('status').notNull().default('active'),
+    grantedBy: text('granted_by').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    lastAccessAt: integer('last_access_at'),
+    revokedBy: text('revoked_by'),
+    revokedAt: integer('revoked_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_support_grants_user_status').on(
+      table.supportUserId,
+      table.status,
+      table.expiresAt,
+    ),
+    index('idx_support_grants_workspace_status').on(
+      table.workspaceId,
+      table.status,
+      table.expiresAt,
+    ),
+  ],
+);
+
 export const invitations = sqliteTable(
   'invitations',
   {

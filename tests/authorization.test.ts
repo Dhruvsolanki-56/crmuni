@@ -2,12 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { canAccessAllEvents, eventAccessClause } from '../lib/authorization.ts';
 
-const context = (role: string) => ({ role, membershipId: 'member-1', workspace: { id: 'workspace-1' } });
+const context = (role: string) => ({
+  role,
+  membershipId: 'member-1',
+  workspace: { id: 'workspace-1' },
+});
 
-test('owners and admins receive workspace-wide event access', () => {
-  for (const role of ['owner', 'admin']) {
+test('owners, admins and active support sessions receive workspace-wide event access', () => {
+  for (const role of ['owner', 'admin', 'support']) {
     assert.equal(canAccessAllEvents(context(role)), true);
-    assert.deepEqual(eventAccessClause(context(role), 'l.event_id'), { sql: '', bindings: [] });
+    assert.deepEqual(eventAccessClause(context(role), 'l.event_id'), {
+      sql: '',
+      bindings: [],
+    });
   }
 });
 
@@ -22,6 +29,12 @@ test('operational roles are restricted to active event assignments', () => {
 });
 
 test('event access SQL rejects dynamic or unsafe expressions', () => {
-  assert.throws(() => eventAccessClause(context('salesperson'), 'l.event_id OR 1=1'), /Unsafe event column/);
-  assert.throws(() => eventAccessClause(context('salesperson'), 'event_id'), /Unsafe event column/);
+  assert.throws(
+    () => eventAccessClause(context('salesperson'), 'l.event_id OR 1=1'),
+    /Unsafe event column/,
+  );
+  assert.throws(
+    () => eventAccessClause(context('salesperson'), 'event_id'),
+    /Unsafe event column/,
+  );
 });

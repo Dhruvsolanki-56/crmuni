@@ -25,6 +25,7 @@ export async function GET(request: Request) {
     requireRole(context, ['owner', 'admin']);
     const tables = [
       'memberships',
+      'support_access_grants',
       'invitations',
       'accounts',
       'leads',
@@ -122,6 +123,7 @@ export async function GET(request: Request) {
     rfqUsage,
     quotationUsage,
     deletionRequest,
+    supportGrants,
   ] = await Promise.all([
     db
       .prepare(
@@ -141,12 +143,19 @@ export async function GET(request: Request) {
       )
       .bind(context.workspace.id)
       .all(),
-    db
-      .prepare(
-        `SELECT w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, m.role FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ORDER BY m.created_at ASC`,
-      )
-      .bind(context.user.id)
-      .all(),
+    context.role === 'support'
+      ? db
+          .prepare(
+            `SELECT w.id,w.name,w.slug,w.timezone,w.currency,w.plan,w.status,'support' AS role FROM support_access_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.support_user_id=? AND g.status='active' AND g.expires_at>? AND w.status='active' ORDER BY g.created_at ASC`,
+          )
+          .bind(context.user.id, Date.now())
+          .all()
+      : db
+          .prepare(
+            `SELECT w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, m.role FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ORDER BY m.created_at ASC`,
+          )
+          .bind(context.user.id)
+          .all(),
     db
       .prepare(`SELECT COUNT(*) AS count FROM leads WHERE workspace_id=?`)
       .bind(context.workspace.id)
@@ -189,6 +198,14 @@ export async function GET(request: Request) {
           .bind(context.workspace.id)
           .first()
       : Promise.resolve(null),
+    privileged
+      ? db
+          .prepare(
+            `SELECT id,support_user_id AS supportUserId,support_email AS supportEmail,reason,ticket_reference AS ticketReference,status,expires_at AS expiresAt,last_access_at AS lastAccessAt,created_at AS createdAt FROM support_access_grants WHERE workspace_id=? ORDER BY created_at DESC LIMIT 30`,
+          )
+          .bind(context.workspace.id)
+          .all()
+      : Promise.resolve({ results: [] }),
   ]);
   const usage = privileged
     ? {
@@ -231,6 +248,7 @@ export async function GET(request: Request) {
     audit: privileged ? audit.results : [],
     usage,
     deletionRequest,
+    supportGrants: privileged ? supportGrants.results : [],
     capabilities: { aiConfigured: Boolean(revenueEnv().OPENAI_API_KEY) },
   });
 }
@@ -247,6 +265,115 @@ export async function POST(request: Request) {
   const action = clean(body.action, 30);
   const db = database();
   const now = Date.now();
+  if (action === 'grant_support') {
+    requireRole(context, ['owner']);
+    const supportUserId = clean(body.supportUserId, 200);
+    const supportEmail = clean(body.supportEmail, 254).toLowerCase();
+    const reason = clean(body.reason, 1000);
+    const ticketReference = clean(body.ticketReference, 120) || null;
+    const durationHours = Number(body.durationHours);
+    if (
+      supportUserId.length < 3 ||
+      !/^\S+@\S+\.\S+$/.test(supportEmail) ||
+      !reason ||
+      !Number.isInteger(durationHours) ||
+      durationHours < 1 ||
+      durationHours > 72
+    )
+      return Response.json(
+        {
+          error:
+            'Support user id, email, reason and a one-to-72-hour duration are required.',
+        },
+        { status: 400 },
+      );
+    const existingMember = await db
+      .prepare(
+        `SELECT id FROM memberships WHERE workspace_id=? AND user_id=? AND status='active'`,
+      )
+      .bind(context.workspace.id, supportUserId)
+      .first();
+    if (existingMember)
+      return Response.json(
+        { error: 'This user already has normal workspace membership.' },
+        { status: 409 },
+      );
+    const existingGrant = await db
+      .prepare(
+        `SELECT id FROM support_access_grants WHERE workspace_id=? AND support_user_id=? AND status='active' AND expires_at>?`,
+      )
+      .bind(context.workspace.id, supportUserId, now)
+      .first();
+    if (existingGrant)
+      return Response.json(
+        { error: 'An active support grant already exists for this user.' },
+        { status: 409 },
+      );
+    const id = crypto.randomUUID();
+    const expiresAt = now + durationHours * 60 * 60 * 1000;
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO support_access_grants (id,workspace_id,support_user_id,support_email,reason,ticket_reference,status,granted_by,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',?,?,?,?)`,
+        )
+        .bind(
+          id,
+          context.workspace.id,
+          supportUserId,
+          supportEmail,
+          reason,
+          ticketReference,
+          context.user.id,
+          expiresAt,
+          now,
+          now,
+        ),
+      auditStatement(context, 'support.granted', 'support_access_grant', id, {
+        supportUserId,
+        supportEmail,
+        ticketReference,
+        expiresAt,
+        reason,
+      }),
+    ]);
+    return Response.json(
+      {
+        grant: {
+          id,
+          supportUserId,
+          supportEmail,
+          reason,
+          ticketReference,
+          status: 'active',
+          expiresAt,
+          createdAt: now,
+        },
+      },
+      { status: 201 },
+    );
+  }
+  if (action === 'revoke_support') {
+    requireRole(context, ['owner']);
+    const id = clean(body.id, 80);
+    const result = await db
+      .prepare(
+        `UPDATE support_access_grants SET status='revoked',revoked_by=?,revoked_at=?,updated_at=? WHERE id=? AND workspace_id=? AND status='active'`,
+      )
+      .bind(context.user.id, now, now, id, context.workspace.id)
+      .run();
+    if (!result.meta.changes)
+      return Response.json(
+        { error: 'Active support grant not found.' },
+        { status: 404 },
+      );
+    await auditStatement(
+      context,
+      'support.revoked',
+      'support_access_grant',
+      id,
+    ).run();
+    return Response.json({ ok: true });
+  }
   if (action === 'request_deletion') {
     requireRole(context, ['owner']);
     const confirmName = clean(body.confirmName, 120);
@@ -401,6 +528,7 @@ export async function POST(request: Request) {
       'products',
       'company_profiles',
       'request_rate_limits',
+      'support_access_grants',
       'invitations',
       'audit_events',
       'workspace_deletion_requests',

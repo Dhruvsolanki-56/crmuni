@@ -203,6 +203,17 @@ type Invitation = {
   status: string;
   expiresAt: number;
 };
+type SupportGrant = {
+  id: string;
+  supportUserId: string;
+  supportEmail: string;
+  reason: string;
+  ticketReference?: string;
+  status: string;
+  expiresAt: number;
+  lastAccessAt?: number;
+  createdAt: number;
+};
 type AuditEvent = {
   id: string;
   action: string;
@@ -598,6 +609,7 @@ export default function Home() {
   const [appContext, setAppContext] = useState<AppContext | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [supportGrants, setSupportGrants] = useState<SupportGrant[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [availableWorkspaces, setAvailableWorkspaces] = useState<
     Array<AppContext['workspace'] & { role: string }>
@@ -753,6 +765,7 @@ export default function Home() {
       serverTime: number;
       members: Member[];
       invitations: Invitation[];
+      supportGrants?: SupportGrant[];
       audit: AuditEvent[];
       usage?: WorkspaceUsage;
       deletionRequest?: DeletionRequest | null;
@@ -762,6 +775,7 @@ export default function Home() {
     setAppContext(data.context);
     setMembers(data.members);
     setInvitations(data.invitations);
+    setSupportGrants(data.supportGrants || []);
     setAuditEvents(data.audit);
     setWorkspaceUsage(
       data.usage || {
@@ -1950,6 +1964,43 @@ export default function Home() {
       setNotice('Invitation revoked');
       void loadSettings();
     }
+  }
+
+  async function grantSupportAccess(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'grant_support', ...values }),
+    });
+    const data = (await response.json()) as {
+      grant?: SupportGrant;
+      error?: string;
+    };
+    if (!response.ok || !data.grant) {
+      setNotice(data.error || 'Could not grant support access.');
+      return;
+    }
+    form.reset();
+    setNotice('Time-limited read-only support access granted');
+    await loadSettings();
+  }
+
+  async function revokeSupportAccess(id: string) {
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'revoke_support', id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not revoke support access.');
+      return;
+    }
+    setNotice('Support access revoked immediately');
+    await loadSettings();
   }
 
   async function exportWorkspace() {
@@ -6187,6 +6238,107 @@ export default function Home() {
                             </Button>
                           </div>
                         ))}
+                    </article>
+                  ) : null}
+                  {appContext?.role === 'owner' ? (
+                    <article className="panel settings-card">
+                      <div className="settings-heading">
+                        <ShieldCheck />
+                        <div>
+                          <h2>Support access</h2>
+                          <p>
+                            Grant a named support identity read-only access for
+                            at most 72 hours. Every access session is audited.
+                          </p>
+                        </div>
+                      </div>
+                      <form className="lead-form" onSubmit={grantSupportAccess}>
+                        <div className="field-grid">
+                          <div className="field-block">
+                            <label htmlFor="support-user-id">
+                              Authenticated support user ID
+                            </label>
+                            <Input
+                              id="support-user-id"
+                              name="supportUserId"
+                              required
+                              placeholder="User ID supplied by support"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="support-email">Support email</label>
+                            <Input
+                              id="support-email"
+                              name="supportEmail"
+                              type="email"
+                              required
+                              placeholder="agent@support.example"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="support-ticket">
+                              Ticket reference
+                            </label>
+                            <Input
+                              id="support-ticket"
+                              name="ticketReference"
+                              placeholder="SUP-1234"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="support-duration">Duration</label>
+                            <select
+                              id="support-duration"
+                              name="durationHours"
+                              defaultValue="8"
+                            >
+                              <option value="1">1 hour</option>
+                              <option value="4">4 hours</option>
+                              <option value="8">8 hours</option>
+                              <option value="24">24 hours</option>
+                              <option value="72">72 hours</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="support-reason">
+                            Exact troubleshooting reason
+                          </label>
+                          <Textarea
+                            id="support-reason"
+                            name="reason"
+                            required
+                            placeholder="Investigate failed RFQ document processing for ticket SUP-1234."
+                          />
+                        </div>
+                        <Button type="submit">Grant support access</Button>
+                      </form>
+                      <div className="knowledge-records">
+                        {supportGrants.map((grant) => (
+                          <div key={grant.id}>
+                            <span>
+                              <strong>{grant.supportEmail}</strong>
+                              <small>
+                                {grant.status} · expires{' '}
+                                {new Date(grant.expiresAt).toLocaleString()}
+                                {grant.ticketReference
+                                  ? ` · ${grant.ticketReference}`
+                                  : ''}
+                              </small>
+                            </span>
+                            {grant.status === 'active' &&
+                            grant.expiresAt > clockNow ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => revokeSupportAccess(grant.id)}
+                              >
+                                Revoke now
+                              </Button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
                     </article>
                   ) : null}
                   <article className="panel settings-card">
