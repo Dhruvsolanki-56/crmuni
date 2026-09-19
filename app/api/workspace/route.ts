@@ -130,6 +130,7 @@ export async function GET(request: Request) {
       Record<string, unknown> & {
         eventId: string | null;
         value: number;
+        stage: string;
         contactsJson: string;
       }
     >
@@ -147,10 +148,9 @@ export async function GET(request: Request) {
   const metricOpportunities = selectedEventId
     ? opportunities.filter((item) => item.eventId === selectedEventId)
     : opportunities;
-  const pipelineValue = metricOpportunities.reduce(
-    (sum, item) => sum + Number(item.value || 0),
-    0,
-  );
+  const pipelineValue = metricOpportunities
+    .filter((item) => !['won', 'lost'].includes(String(item.stage)))
+    .reduce((sum, item) => sum + Number(item.value || 0), 0);
   return Response.json({
     context: {
       workspace: context.workspace,

@@ -836,8 +836,12 @@ export const quotationRevisions = sqliteTable(
   'quotation_revisions',
   {
     id: text('id').primaryKey(),
-    workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
-    quotationId: text('quotation_id').notNull().references(() => quotations.id),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    quotationId: text('quotation_id')
+      .notNull()
+      .references(() => quotations.id),
     version: integer('version').notNull(),
     amount: integer('amount').notNull(),
     validUntil: text('valid_until'),
@@ -850,8 +854,16 @@ export const quotationRevisions = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (table) => [
-    uniqueIndex('uidx_quotation_revisions_version').on(table.workspaceId, table.quotationId, table.version),
-    index('idx_quotation_revisions_quote').on(table.workspaceId, table.quotationId, table.createdAt),
+    uniqueIndex('uidx_quotation_revisions_version').on(
+      table.workspaceId,
+      table.quotationId,
+      table.version,
+    ),
+    index('idx_quotation_revisions_quote').on(
+      table.workspaceId,
+      table.quotationId,
+      table.createdAt,
+    ),
   ],
 );
 
@@ -859,8 +871,12 @@ export const quotationHistory = sqliteTable(
   'quotation_history',
   {
     id: text('id').primaryKey(),
-    workspaceId: text('workspace_id').notNull().references(() => workspaces.id),
-    quotationId: text('quotation_id').notNull().references(() => quotations.id),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    quotationId: text('quotation_id')
+      .notNull()
+      .references(() => quotations.id),
     action: text('action').notNull(),
     fromStatus: text('from_status'),
     toStatus: text('to_status'),
@@ -871,8 +887,15 @@ export const quotationHistory = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (table) => [
-    uniqueIndex('uidx_quotation_history_mutation').on(table.workspaceId, table.mutationToken),
-    index('idx_quotation_history_quote').on(table.workspaceId, table.quotationId, table.createdAt),
+    uniqueIndex('uidx_quotation_history_mutation').on(
+      table.workspaceId,
+      table.mutationToken,
+    ),
+    index('idx_quotation_history_quote').on(
+      table.workspaceId,
+      table.quotationId,
+      table.createdAt,
+    ),
   ],
 );
 
@@ -1017,6 +1040,10 @@ export const events = sqliteTable(
     endsOn: text('ends_on').notNull(),
     timezone: text('timezone').notNull(),
     budget: integer('budget').notNull().default(0),
+    attributionWindowDays: integer('attribution_window_days')
+      .notNull()
+      .default(180),
+    grossMarginBps: integer('gross_margin_bps').notNull().default(4000),
     objective: text('objective'),
     productsJson: text('products_json').notNull().default('[]'),
     targetAccountsJson: text('target_accounts_json').notNull().default('[]'),
@@ -1039,6 +1066,68 @@ export const events = sqliteTable(
       table.workspaceId,
       table.status,
       table.startsOn,
+    ),
+  ],
+);
+
+export const eventCostLines = sqliteTable(
+  'event_cost_lines',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id),
+    category: text('category').notNull(),
+    description: text('description').notNull(),
+    vendor: text('vendor'),
+    amount: integer('amount').notNull(),
+    status: text('status').notNull().default('actual'),
+    incurredOn: text('incurred_on'),
+    version: integer('version').notNull().default(1),
+    mutationToken: text('mutation_token'),
+    voidedAt: integer('voided_at'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_event_cost_lines_event_status').on(
+      table.eventId,
+      table.status,
+      table.incurredOn,
+    ),
+  ],
+);
+
+export const eventCostHistory = sqliteTable(
+  'event_cost_history',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id),
+    costLineId: text('cost_line_id')
+      .notNull()
+      .references(() => eventCostLines.id),
+    action: text('action').notNull(),
+    fromVersion: integer('from_version'),
+    toVersion: integer('to_version').notNull(),
+    snapshotJson: text('snapshot_json').notNull(),
+    mutationToken: text('mutation_token').notNull(),
+    changedBy: text('changed_by').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_event_cost_history_line').on(table.costLineId, table.createdAt),
+    uniqueIndex('uidx_event_cost_history_mutation').on(
+      table.costLineId,
+      table.mutationToken,
     ),
   ],
 );

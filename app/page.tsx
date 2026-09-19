@@ -282,6 +282,8 @@ type EventItem = {
   endsOn: string;
   timezone: string;
   budget: number;
+  attributionWindowDays: number;
+  grossMarginBps: number;
   objective?: string;
   products: string[];
   targetAccounts: string[];
@@ -292,6 +294,51 @@ type EventItem = {
   badgeProvider?: string;
   qrCampaignCode?: string;
   status: string;
+};
+type EventCost = {
+  id: string;
+  eventId: string;
+  category: string;
+  description: string;
+  vendor?: string;
+  amount: number;
+  status: string;
+  incurredOn?: string;
+  version: number;
+};
+type RevenueReport = {
+  attributionModel: string;
+  attributionWindowDays: number | null;
+  totalLeads: number;
+  qualifiedLeads: number;
+  openOpportunities: number;
+  pipelineValue: number;
+  weightedPipelineValue: number;
+  wonOpportunities: number;
+  closedRevenue: number;
+  plannedInvestment: number;
+  plannedCostLines: number;
+  actualInvestment: number;
+  investmentBasis: number;
+  investmentBasisSource: string;
+  grossProfit: number;
+  revenueRoiPercent: number | null;
+  profitRoiPercent: number | null;
+  reconciliation: {
+    acceptedQuotationValue: number;
+    wonWithoutAcceptedQuotation: number;
+    acceptedQuotationWithoutWonOpportunity: number;
+    excludedOutsideAttributionWindow: number;
+  };
+};
+type NextBestAction = {
+  id: string;
+  kind: string;
+  title: string;
+  subject: string;
+  priority: number;
+  reason: string;
+  dueAt?: number;
 };
 type FollowupDraft = {
   id: string;
@@ -536,6 +583,11 @@ export default function Home() {
     sources: [],
   });
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [revenueReport, setRevenueReport] = useState<RevenueReport | null>(
+    null,
+  );
+  const [eventCosts, setEventCosts] = useState<EventCost[]>([]);
+  const [nextBestActions, setNextBestActions] = useState<NextBestAction[]>([]);
   const [activeEventId, setActiveEventId] = useState(() =>
     typeof window === 'undefined'
       ? ''
@@ -641,6 +693,18 @@ export default function Home() {
         setActiveEventId('');
       }
     }
+  }
+  async function loadReports() {
+    const response = await apiFetch('/api/reports');
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      report: RevenueReport;
+      costs: EventCost[];
+      nextBestActions: NextBestAction[];
+    };
+    setRevenueReport(data.report);
+    setEventCosts(data.costs || []);
+    setNextBestActions(data.nextBestActions || []);
   }
   async function loadSettings() {
     const response = await apiFetch('/api/settings');
@@ -748,6 +812,7 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       void loadWorkspace();
       void loadEvents();
+      void loadReports();
       void refreshOutbox();
     }, 0);
     return () => window.clearTimeout(timer);
@@ -791,7 +856,10 @@ export default function Home() {
       void loadQuotations();
     }
     if (view === 'meetings') void loadMeetings();
-    if (view === 'roi') void loadEvents();
+    if (view === 'roi') {
+      void loadEvents();
+      void loadReports();
+    }
     if (view === 'events') {
       void loadEvents();
       void loadSettings();
@@ -2165,12 +2233,26 @@ export default function Home() {
     await loadQuotations();
   }
   async function updateQuotationStatus(item: Quotation, status: string) {
-    const note=status==='rejected'?window.prompt('Why did the customer reject this quotation?')?.trim()||'':'';
-    if(status==='rejected'&&!note){setNotice('A rejection reason is required.');return;}
+    const note =
+      status === 'rejected'
+        ? window
+            .prompt('Why did the customer reject this quotation?')
+            ?.trim() || ''
+        : '';
+    if (status === 'rejected' && !note) {
+      setNotice('A rejection reason is required.');
+      return;
+    }
     const response = await apiFetch('/api/quotations', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'update_status', id:item.id, status,version:item.version,note }),
+      body: JSON.stringify({
+        action: 'update_status',
+        id: item.id,
+        status,
+        version: item.version,
+        note,
+      }),
     });
     const data = (await response.json()) as { error?: string };
     if (!response.ok) {
@@ -2180,8 +2262,48 @@ export default function Home() {
     setNotice('Quotation status updated');
     await loadQuotations();
   }
-  async function reviseQuotation(item:Quotation){
-    const amountValue=window.prompt(`New amount (${item.currency})`,String(item.amount));if(amountValue===null)return;const amount=Number(amountValue);if(!Number.isFinite(amount)||amount<=0){setNotice('Enter a positive quotation amount.');return;}const validUntil=window.prompt('New valid-until date (YYYY-MM-DD)',item.validUntil||'')?.trim()??'';if(validUntil&&!/^\d{4}-\d{2}-\d{2}$/.test(validUntil)){setNotice('Use YYYY-MM-DD for the valid-until date.');return;}const note=window.prompt('Why is this quotation being revised?')?.trim()||'';if(!note)return;const response=await apiFetch('/api/quotations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'revise',id:item.id,version:item.version,amount,validUntil,note})});const data=await response.json() as {error?:string};if(!response.ok){setNotice(data.error||'Could not revise quotation.');await loadQuotations();return;}setNotice(`Quotation v${item.version+1} created for internal approval`);await loadQuotations();
+  async function reviseQuotation(item: Quotation) {
+    const amountValue = window.prompt(
+      `New amount (${item.currency})`,
+      String(item.amount),
+    );
+    if (amountValue === null) return;
+    const amount = Number(amountValue);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setNotice('Enter a positive quotation amount.');
+      return;
+    }
+    const validUntil =
+      window
+        .prompt('New valid-until date (YYYY-MM-DD)', item.validUntil || '')
+        ?.trim() ?? '';
+    if (validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)) {
+      setNotice('Use YYYY-MM-DD for the valid-until date.');
+      return;
+    }
+    const note =
+      window.prompt('Why is this quotation being revised?')?.trim() || '';
+    if (!note) return;
+    const response = await apiFetch('/api/quotations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'revise',
+        id: item.id,
+        version: item.version,
+        amount,
+        validUntil,
+        note,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not revise quotation.');
+      await loadQuotations();
+      return;
+    }
+    setNotice(`Quotation v${item.version + 1} created for internal approval`);
+    await loadQuotations();
   }
   async function downloadQuotation(item: Quotation) {
     const response = await apiFetch(
@@ -2200,12 +2322,90 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  async function submitEventCost(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeEventId) {
+      setNotice('Select one event before adding reconciled costs.');
+      return;
+    }
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const response = await apiFetch('/api/reports', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_cost',
+        eventId: activeEventId,
+        category: values.get('category'),
+        description: values.get('description'),
+        vendor: values.get('vendor'),
+        amount: Number(values.get('amount')),
+        status: values.get('status'),
+        incurredOn: values.get('incurredOn'),
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not add the event cost.');
+      return;
+    }
+    form.reset();
+    setNotice('Event cost added to the reconciled report');
+    await loadReports();
+  }
+
+  async function voidEventCost(item: EventCost) {
+    const reason =
+      window.prompt('Why should this cost line be voided?')?.trim() || '';
+    if (!reason) return;
+    const response = await apiFetch('/api/reports', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'void_cost',
+        id: item.id,
+        version: item.version,
+        reason,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not void this cost line.');
+      await loadReports();
+      return;
+    }
+    setNotice('Cost line voided with an audit reason');
+    await loadReports();
+  }
+
+  async function exportReport(kind: string) {
+    const response = await apiFetch(
+      `/api/reports?export=${encodeURIComponent(kind)}${activeEventId ? `&eventId=${encodeURIComponent(activeEventId)}` : ''}`,
+    );
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      setNotice(data.error || 'Could not export this report.');
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${appContext?.workspace.slug || 'workspace'}-${kind}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setNotice(`${kind} CSV downloaded`);
+  }
+
   function selectEvent(id: string) {
     if (id) window.localStorage.setItem('revenue-event-id', id);
     else window.localStorage.removeItem('revenue-event-id');
     setActiveEventId(id);
     setNotice(id ? 'Active event changed' : 'Active event cleared');
     void loadWorkspace();
+    void loadReports();
   }
 
   const activeEvent = events.find(
@@ -2214,14 +2414,6 @@ export default function Home() {
   const activeEventOpportunities = activeEvent
     ? opportunities.filter((item) => item.eventId === activeEvent.id)
     : opportunities;
-  const eventInvestment =
-    activeEvent?.budget ??
-    events
-      .filter((item) => item.status !== 'archived')
-      .reduce((sum, item) => sum + item.budget, 0);
-  const closedRevenue = activeEventOpportunities
-    .filter((item) => item.stage === 'won')
-    .reduce((sum, item) => sum + item.value, 0);
 
   return (
     <main className="app-shell">
@@ -3410,7 +3602,31 @@ export default function Home() {
                     </button>
                   </div>
                   <div className="action-list">
-                    {tasks.filter((task) => task.status === 'open').length ? (
+                    {!showAllTasks && nextBestActions.length
+                      ? nextBestActions.slice(0, 5).map((action) => (
+                          <article
+                            className="action-row task-row"
+                            key={`priority-${action.kind}-${action.id}`}
+                          >
+                            <span className="initial-avatar">
+                              {action.kind.slice(0, 2).toUpperCase()}
+                            </span>
+                            <span className="action-copy">
+                              <strong>{action.title}</strong>
+                              <small>
+                                {action.subject} · {action.reason}
+                              </small>
+                            </span>
+                            <span
+                              className={`due ${action.priority >= 94 ? 'urgent' : ''}`}
+                            >
+                              P{action.priority}
+                            </span>
+                          </article>
+                        ))
+                      : null}
+                    {(showAllTasks || !nextBestActions.length) &&
+                    tasks.filter((task) => task.status === 'open').length ? (
                       tasks
                         .filter((task) => task.status === 'open')
                         .slice(0, showAllTasks ? tasks.length : 5)
@@ -3488,12 +3704,12 @@ export default function Home() {
                             </article>
                           );
                         })
-                    ) : (
+                    ) : !nextBestActions.length ? (
                       <div className="empty-state">
                         No open commitments. Capture a lead and add a next
                         action.
                       </div>
-                    )}
+                    ) : null}
                     {tasks.some((task) => task.status !== 'open') ? (
                       <details className="closed-tasks">
                         <summary>Recently closed commitments</summary>
@@ -4169,7 +4385,9 @@ export default function Home() {
                             <div>
                               <span>
                                 <strong>{item.quoteNumber}</strong>
-                                <small>{item.customer} · v{item.version}</small>
+                                <small>
+                                  {item.customer} · v{item.version}
+                                </small>
                               </span>
                               <strong>
                                 {money(item.amount, item.currency)}
@@ -4194,18 +4412,40 @@ export default function Home() {
                               aria-label={`Status for quotation ${item.quoteNumber}`}
                               value={item.status}
                               onChange={(event) =>
-                                updateQuotationStatus(
-                                  item,
-                                  event.target.value,
-                                )
+                                updateQuotationStatus(item, event.target.value)
                               }
                             >
-                              <option value={item.status}>{item.status.replaceAll('_',' ')}</option>
-                              {item.status==='draft'?<option value="approved">Approve internally</option>:null}
-                              {item.status==='approved'?<><option value="sent">Mark sent</option><option value="expired">Expire</option></>:null}
-                              {item.status==='sent'?<><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="expired">Expired</option></>:null}
+                              <option value={item.status}>
+                                {item.status.replaceAll('_', ' ')}
+                              </option>
+                              {item.status === 'draft' ? (
+                                <option value="approved">
+                                  Approve internally
+                                </option>
+                              ) : null}
+                              {item.status === 'approved' ? (
+                                <>
+                                  <option value="sent">Mark sent</option>
+                                  <option value="expired">Expire</option>
+                                </>
+                              ) : null}
+                              {item.status === 'sent' ? (
+                                <>
+                                  <option value="accepted">Accepted</option>
+                                  <option value="rejected">Rejected</option>
+                                  <option value="expired">Expired</option>
+                                </>
+                              ) : null}
                             </select>
-                            {item.status!=='accepted'?<Button type="button" variant="outline" onClick={()=>reviseQuotation(item)}>Create revision</Button>:null}
+                            {item.status !== 'accepted' ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => reviseQuotation(item)}
+                              >
+                                Create revision
+                              </Button>
+                            ) : null}
                           </article>
                         ))
                       ) : (
@@ -4694,6 +4934,33 @@ export default function Home() {
                           />
                         </div>
                         <div className="field-block">
+                          <label htmlFor="event-attribution-window">
+                            Attribution window (days)
+                          </label>
+                          <Input
+                            id="event-attribution-window"
+                            name="attributionWindowDays"
+                            type="number"
+                            min="0"
+                            max="730"
+                            defaultValue="180"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="event-margin">
+                            Expected gross margin (%)
+                          </label>
+                          <Input
+                            id="event-margin"
+                            name="grossMarginPercent"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            defaultValue="40"
+                          />
+                        </div>
+                        <div className="field-block">
                           <label htmlFor="event-badge">
                             Badge or QR provider
                           </label>
@@ -4923,52 +5190,257 @@ export default function Home() {
                 </div>
               ) : null}
               {activeView === 'roi' ? (
-                <div className="roi-grid">
-                  <article className="panel roi-card">
-                    <small>Event investment</small>
-                    <strong>
-                      {money(eventInvestment, appContext?.workspace.currency)}
-                    </strong>
-                    <span>
-                      {activeEvent ? activeEvent.name : 'Available events'}
-                    </span>
-                  </article>
-                  <article className="panel roi-card">
-                    <small>Pipeline created</small>
-                    <strong>
-                      {money(
-                        metrics.pipelineValue,
-                        appContext?.workspace.currency,
-                      )}
-                    </strong>
-                    <span>
-                      {activeEventOpportunities.length} attributed opportunities
-                    </span>
-                  </article>
-                  <article className="panel roi-card">
-                    <small>Closed revenue</small>
-                    <strong>
-                      {money(closedRevenue, appContext?.workspace.currency)}
-                    </strong>
-                    <span>
-                      {closedRevenue
-                        ? 'Won opportunities'
-                        : 'No closed opportunities yet'}
-                    </span>
-                  </article>
-                  <article className="panel roi-card">
-                    <small>Realized event ROI</small>
-                    <strong>
-                      {eventInvestment
-                        ? `${(((closedRevenue - eventInvestment) / eventInvestment) * 100).toFixed(1)}%`
-                        : 'Not available'}
-                    </strong>
-                    <span>
-                      {eventInvestment
-                        ? 'Based on closed revenue'
-                        : 'Add the event investment first'}
-                    </span>
-                  </article>
+                <div className="events-layout">
+                  <section className="roi-grid">
+                    <article className="panel roi-card">
+                      <small>Reconciled investment</small>
+                      <strong>
+                        {money(
+                          revenueReport?.investmentBasis || 0,
+                          appContext?.workspace.currency,
+                        )}
+                      </strong>
+                      <span>
+                        {revenueReport?.investmentBasisSource ===
+                        'actual_cost_lines'
+                          ? 'Actual cost lines'
+                          : revenueReport?.investmentBasisSource ===
+                              'planned_cost_lines'
+                            ? 'Planned cost lines'
+                            : 'Planned event budget'}{' '}
+                        · actual{' '}
+                        {money(
+                          revenueReport?.actualInvestment || 0,
+                          appContext?.workspace.currency,
+                        )}
+                      </span>
+                    </article>
+                    <article className="panel roi-card">
+                      <small>Open pipeline</small>
+                      <strong>
+                        {money(
+                          revenueReport?.pipelineValue || 0,
+                          appContext?.workspace.currency,
+                        )}
+                      </strong>
+                      <span>
+                        Weighted:{' '}
+                        {money(
+                          revenueReport?.weightedPipelineValue || 0,
+                          appContext?.workspace.currency,
+                        )}
+                      </span>
+                    </article>
+                    <article className="panel roi-card">
+                      <small>Closed revenue</small>
+                      <strong>
+                        {money(
+                          revenueReport?.closedRevenue || 0,
+                          appContext?.workspace.currency,
+                        )}
+                      </strong>
+                      <span>
+                        {revenueReport?.wonOpportunities || 0} attributed won
+                        opportunities
+                      </span>
+                    </article>
+                    <article className="panel roi-card">
+                      <small>Revenue ROI</small>
+                      <strong>
+                        {revenueReport?.revenueRoiPercent == null
+                          ? 'Not available'
+                          : `${revenueReport.revenueRoiPercent.toFixed(1)}%`}
+                      </strong>
+                      <span>
+                        Revenue less investment, divided by investment
+                      </span>
+                    </article>
+                    <article className="panel roi-card">
+                      <small>Estimated gross profit</small>
+                      <strong>
+                        {money(
+                          revenueReport?.grossProfit || 0,
+                          appContext?.workspace.currency,
+                        )}
+                      </strong>
+                      <span>
+                        Uses each event&apos;s configured gross margin
+                      </span>
+                    </article>
+                    <article className="panel roi-card">
+                      <small>Profit ROI</small>
+                      <strong>
+                        {revenueReport?.profitRoiPercent == null
+                          ? 'Not available'
+                          : `${revenueReport.profitRoiPercent.toFixed(1)}%`}
+                      </strong>
+                      <span>
+                        Gross profit less investment, divided by investment
+                      </span>
+                    </article>
+                  </section>
+                  <section className="settings-grid">
+                    <article className="panel settings-card">
+                      <h2>Cost reconciliation</h2>
+                      <p>
+                        Add actual invoices separately from planned costs. Voids
+                        preserve an immutable reason and version history.
+                      </p>
+                      <form className="lead-form" onSubmit={submitEventCost}>
+                        <div className="field-grid">
+                          <div className="field-block">
+                            <label htmlFor="cost-status">Cost status</label>
+                            <select
+                              id="cost-status"
+                              name="status"
+                              defaultValue="actual"
+                            >
+                              <option value="actual">Actual cost</option>
+                              <option value="planned">Planned cost</option>
+                            </select>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="cost-category">Category</label>
+                            <select
+                              id="cost-category"
+                              name="category"
+                              defaultValue="space"
+                            >
+                              <option value="space">Space and booth</option>
+                              <option value="travel">Travel</option>
+                              <option value="logistics">Logistics</option>
+                              <option value="marketing">Marketing</option>
+                              <option value="staffing">Staffing</option>
+                              <option value="technology">Technology</option>
+                              <option value="other">Other</option>
+                            </select>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="cost-description">
+                              Description
+                            </label>
+                            <Input
+                              id="cost-description"
+                              name="description"
+                              placeholder="Booth invoice"
+                              required
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="cost-vendor">Vendor</label>
+                            <Input
+                              id="cost-vendor"
+                              name="vendor"
+                              placeholder="Vendor"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="cost-amount">
+                              Amount ({appContext?.workspace.currency || 'INR'})
+                            </label>
+                            <Input
+                              id="cost-amount"
+                              name="amount"
+                              type="number"
+                              min="0"
+                              step="1"
+                              placeholder="Amount"
+                              required
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="cost-date">Incurred on</label>
+                            <Input
+                              id="cost-date"
+                              name="incurredOn"
+                              type="date"
+                            />
+                          </div>
+                        </div>
+                        <Button type="submit" disabled={!activeEventId}>
+                          Add cost line
+                        </Button>
+                      </form>
+                      <div className="action-list">
+                        {eventCosts.map((cost) => (
+                          <article className="action-row" key={cost.id}>
+                            <span className="action-copy">
+                              <strong>{cost.description}</strong>
+                              <small>
+                                {cost.category} · {cost.status}
+                                {cost.vendor ? ` · ${cost.vendor}` : ''}
+                              </small>
+                            </span>
+                            <strong>
+                              {money(
+                                cost.amount,
+                                appContext?.workspace.currency,
+                              )}
+                            </strong>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => voidEventCost(cost)}
+                            >
+                              Void
+                            </Button>
+                          </article>
+                        ))}
+                      </div>
+                    </article>
+                    <article className="panel settings-card">
+                      <h2>Attribution and reconciliation</h2>
+                      <p>
+                        Model: 100% to the originating event. Window:{' '}
+                        {revenueReport?.attributionWindowDays ??
+                          'per-event configuration'}{' '}
+                        days after the event.
+                      </p>
+                      <ul>
+                        <li>
+                          Accepted quotation value:{' '}
+                          {money(
+                            revenueReport?.reconciliation
+                              .acceptedQuotationValue || 0,
+                            appContext?.workspace.currency,
+                          )}
+                        </li>
+                        <li>
+                          Won without accepted quotation:{' '}
+                          {revenueReport?.reconciliation
+                            .wonWithoutAcceptedQuotation || 0}
+                        </li>
+                        <li>
+                          Accepted quotation without won opportunity:{' '}
+                          {revenueReport?.reconciliation
+                            .acceptedQuotationWithoutWonOpportunity || 0}
+                        </li>
+                        <li>
+                          Outside attribution window:{' '}
+                          {revenueReport?.reconciliation
+                            .excludedOutsideAttributionWindow || 0}
+                        </li>
+                      </ul>
+                      <div className="task-actions">
+                        {[
+                          'summary',
+                          'leads',
+                          'opportunities',
+                          'costs',
+                          'actions',
+                        ].map((kind) => (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            key={kind}
+                            onClick={() => exportReport(kind)}
+                          >
+                            Export {kind} CSV
+                          </Button>
+                        ))}
+                      </div>
+                    </article>
+                  </section>
                 </div>
               ) : null}
               {activeView === 'knowledge' ? (
