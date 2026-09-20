@@ -41,6 +41,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  classifyCaptureResponse,
+  nextCaptureRetry,
+} from '@/lib/offline-capture';
 
 type SavedLead = {
   id: string;
@@ -519,6 +523,11 @@ type OfflineCapture = {
   attachment?: File;
   attachmentKind?: string;
   queuedAt: number;
+  status: 'queued' | 'retrying' | 'needs_review';
+  attempts: number;
+  lastAttemptAt?: number;
+  nextAttemptAt: number;
+  lastError?: string;
 };
 
 function openOutbox() {
@@ -801,6 +810,7 @@ export default function Home() {
       : window.localStorage.getItem('revenue-event-id') || '',
   );
   const [outboxCount, setOutboxCount] = useState(0);
+  const [outboxNeedsReview, setOutboxNeedsReview] = useState(0);
   const [followups, setFollowups] = useState<FollowupDraft[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [drafting, setDrafting] = useState('');
@@ -1005,16 +1015,24 @@ export default function Home() {
   }
   async function refreshOutbox() {
     try {
-      setOutboxCount((await outboxItems()).length);
+      const items = await outboxItems();
+      setOutboxCount(items.length);
+      setOutboxNeedsReview(
+        items.filter((item) => item.status === 'needs_review').length,
+      );
     } catch {
       setOutboxCount(0);
+      setOutboxNeedsReview(0);
     }
   }
-  async function flushOutbox() {
+  async function flushOutbox(force = false) {
     if (!navigator.onLine) return;
     const queued = await outboxItems().catch(() => []);
     let synced = 0;
     for (const item of queued) {
+      const now = Date.now();
+      if (!force && item.status === 'needs_review') continue;
+      if (!force && Number(item.nextAttemptAt || 0) > now) continue;
       const form = new FormData();
       Object.entries(item.fields).forEach(([key, value]) =>
         form.set(key, value),
@@ -1033,10 +1051,54 @@ export default function Home() {
           headers,
           body: form,
         });
-        if (!response.ok) continue;
-        await outboxWrite(item.id, 'delete');
-        synced += 1;
+        const disposition = classifyCaptureResponse(response.status);
+        if (disposition === 'synced') {
+          await outboxWrite(item.id, 'delete');
+          synced += 1;
+          continue;
+        }
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (disposition === 'needs_review') {
+          await outboxWrite(
+            {
+              ...item,
+              status: 'needs_review',
+              attempts: Number(item.attempts || 0) + 1,
+              lastAttemptAt: now,
+              nextAttemptAt: 0,
+              lastError:
+                payload.error ||
+                `Capture rejected with HTTP ${response.status}`,
+            },
+            'put',
+          );
+          continue;
+        }
+        await outboxWrite(
+          {
+            ...item,
+            ...nextCaptureRetry(
+              Number(item.attempts || 0),
+              now,
+              payload.error || `Temporary HTTP ${response.status}`,
+            ),
+          },
+          'put',
+        );
       } catch {
+        await outboxWrite(
+          {
+            ...item,
+            ...nextCaptureRetry(
+              Number(item.attempts || 0),
+              Date.now(),
+              'Network unavailable',
+            ),
+          },
+          'put',
+        );
         break;
       }
     }
@@ -1155,6 +1217,9 @@ export default function Home() {
             attachment: attachment?.file,
             attachmentKind: attachment?.kind,
             queuedAt: Date.now(),
+            status: 'queued',
+            attempts: 0,
+            nextAttemptAt: 0,
           },
           'put',
         );
@@ -2912,13 +2977,16 @@ export default function Home() {
             <button
               type="button"
               className="sync-state sync-state-button sync-pending"
-              onClick={() => void flushOutbox()}
+              onClick={() => void flushOutbox(true)}
               aria-label="Retry offline captures now"
             >
               <Wifi size={15} />
               <span>
-                {outboxCount} capture{outboxCount === 1 ? '' : 's'} waiting to
-                sync · Retry now
+                {outboxCount} capture{outboxCount === 1 ? '' : 's'} waiting
+                {outboxNeedsReview
+                  ? ` · ${outboxNeedsReview} need review`
+                  : ' to sync'}{' '}
+                · Retry now
               </span>
             </button>
           ) : (

@@ -17,7 +17,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 ## Reliability and safety
 
 - D1 is the authoritative store for tenant-scoped records; R2 stores original uploads.
-- Offline captures use a device outbox, stable capture IDs, automatic retry, and server-side idempotency.
+- Offline captures use a device outbox, stable capture IDs, server-side idempotency, bounded automatic retry for transient failures, and a visible manual-review state for rejected captures instead of retrying them forever.
 - Events cannot capture leads until ten readiness checks pass and an owner, admin, or manager activates that exact configuration version. The activated snapshot is SHA-256 verified before it is cached on the device for offline use.
 - Workspace membership and role checks are enforced in API routes.
 - Customer support access is read-only, owner-granted to a named authenticated identity, time-limited, audited, and immediately revocable.
