@@ -74,3 +74,4 @@ Configure secrets through the hosted runtime; never commit `.env.local`, API key
 - Zoho, Salesforce, and HubSpot synchronization require a later connector phase and customer credentials.
 - Subscription checkout and invoicing require approved pricing, tax/legal terms, and a selected billing provider before public self-service sales. Product entitlements are already enforced independently of billing.
 - OCR and transcription quality depends on capture clarity and configured AI access, so human verification remains mandatory.
+- Card, badge, QR and audio files are stored first, then extraction starts automatically and opens a prefilled correction screen. Local demos can use the clearly labelled sample card without an API key; arbitrary real captures still require configured AI access.

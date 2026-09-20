@@ -731,9 +731,12 @@ function dueStatus(dueDate: string | undefined, timezone: string) {
 
 export default function Home() {
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [initializing, setInitializing] = useState(true);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [captureProgress, setCaptureProgress] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [captureOutcome, setCaptureOutcome] = useState('');
   const [savedLead, setSavedLead] = useState<SavedLead | null>(null);
   const [capturedLeads, setCapturedLeads] = useState<SavedLead[]>([]);
   const [reviewLead, setReviewLead] = useState<SavedLead | null>(null);
@@ -876,27 +879,28 @@ export default function Home() {
   }, [activeEventId, events]);
 
   async function loadWorkspace() {
-    apiFetch('/api/workspace')
-      .then(async (response) => {
-        if (!response.ok) return;
-        const data = (await response.json()) as {
-          context?: AppContext;
-          leads?: SavedLead[];
-          tasks?: TaskItem[];
-          opportunities?: Opportunity[];
-          accounts?: Account[];
-          merges?: LeadMerge[];
-          metrics?: typeof metrics;
-        };
-        setCapturedLeads(data.leads || []);
-        setTasks(data.tasks || []);
-        setOpportunities(data.opportunities || []);
-        setAccounts(data.accounts || []);
-        setLeadMerges(data.merges || []);
-        if (data.context) setAppContext(data.context);
-        if (data.metrics) setMetrics(data.metrics);
-      })
-      .catch(() => undefined);
+    try {
+      const response = await apiFetch('/api/workspace');
+      if (!response.ok) return;
+      const data = (await response.json()) as {
+        context?: AppContext;
+        leads?: SavedLead[];
+        tasks?: TaskItem[];
+        opportunities?: Opportunity[];
+        accounts?: Account[];
+        merges?: LeadMerge[];
+        metrics?: typeof metrics;
+      };
+      setCapturedLeads(data.leads || []);
+      setTasks(data.tasks || []);
+      setOpportunities(data.opportunities || []);
+      setAccounts(data.accounts || []);
+      setLeadMerges(data.merges || []);
+      if (data.context) setAppContext(data.context);
+      if (data.metrics) setMetrics(data.metrics);
+    } catch {
+      // Offline event capture can continue from its verified device cache.
+    }
   }
   async function loadEvents() {
     try {
@@ -1112,10 +1116,12 @@ export default function Home() {
   }
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadWorkspace();
-      void loadEvents();
-      void loadReports();
-      void refreshOutbox();
+      void Promise.all([
+        loadWorkspace(),
+        loadEvents(),
+        loadReports(),
+        refreshOutbox(),
+      ]).finally(() => setInitializing(false));
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -1148,6 +1154,30 @@ export default function Home() {
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
   }, []);
+  useEffect(() => {
+    const extraction = captureExtraction(reviewLead?.extractedJson);
+    if (!reviewLead) return;
+    const values = {
+      fullName:
+        extraction?.fullName ||
+        (reviewLead.fullName === 'Unidentified visitor'
+          ? ''
+          : reviewLead.fullName),
+      company:
+        extraction?.company ||
+        (reviewLead.company === 'Company pending' ? '' : reviewLead.company),
+      role: extraction?.role || reviewLead.role || '',
+      email: extraction?.email || reviewLead.email || '',
+      phone: extraction?.phone || reviewLead.phone || '',
+    };
+    const timer = window.setTimeout(() => {
+      for (const [field, value] of Object.entries(values)) {
+        const control = reviewContactForm.current?.elements.namedItem(field);
+        if (control instanceof HTMLInputElement) control.value = value;
+      }
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [reviewLead]);
   function go(view: View) {
     setActiveView(view);
     setMobileNav(false);
@@ -1174,7 +1204,9 @@ export default function Home() {
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
+    setCaptureProgress('Saving the original…');
     setSaveError('');
+    setCaptureOutcome('');
     const form = new FormData(event.currentTarget);
     form.set('clientCaptureId', crypto.randomUUID());
     if (attachment) {
@@ -1196,8 +1228,67 @@ export default function Home() {
       }
       setSavedLead(data.lead);
       setCapturedLeads((current) => [data.lead!, ...current]);
-      setSaved(true);
       void loadWorkspace();
+      if (attachment && data.lead.captureStatus) {
+        try {
+          setCaptureProgress(
+            attachment.kind === 'audio'
+              ? 'Transcribing the conversation…'
+              : 'Reading the capture…',
+          );
+          const extractionResponse = await apiFetch(
+            '/api/capture-extraction',
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                leadId: data.lead.id,
+                demoSample: attachment.name === 'revenue-os-demo-card.png',
+              }),
+            },
+          );
+          const extractionData = (await extractionResponse
+            .json()
+            .catch(() => ({}))) as {
+            extraction?: CaptureExtraction;
+            status?: string;
+            error?: string;
+            code?: string;
+          };
+          if (extractionResponse.ok && extractionData.extraction) {
+            const extraction = extractionData.extraction;
+            const next = {
+              ...data.lead,
+              captureStatus:
+                extractionData.status || 'completed_pending_review',
+              extractedJson: JSON.stringify(extraction),
+            };
+            const suggestedFields: string[] = (
+              ['fullName', 'company', 'role', 'email', 'phone'] as const
+            ).filter((field) => Boolean(extraction[field]));
+            if (extraction.transcript) suggestedFields.push('transcript');
+            setAcceptedCaptureFields(suggestedFields);
+            setCapturedLeads((current) =>
+              current.map((lead) => (lead.id === next.id ? next : lead)),
+            );
+            setCaptureOpen(false);
+            setTimeout(() => openReview(next), 180);
+            setNotice('Capture read · verify the prefilled details');
+            return;
+          }
+          setCaptureOutcome(
+            extractionData.code === 'AI_NOT_CONFIGURED'
+              ? 'The original is saved. Automatic reading needs an OpenAI API key in this local environment, so you can review and enter the details manually.'
+              : extractionData.error ||
+                  'The original is saved, but automatic reading did not finish. You can review the contact manually.',
+          );
+        } catch {
+          setCaptureOutcome(
+            'The original is saved, but automatic reading could not be reached. You can review the contact manually without creating another lead.',
+          );
+        }
+      }
+      setSaved(true);
     } catch (error) {
       try {
         const fields: Record<string, string> = {};
@@ -1244,6 +1335,7 @@ export default function Home() {
         );
       }
     } finally {
+      setCaptureProgress('');
       setSaving(false);
     }
   }
@@ -1257,6 +1349,8 @@ export default function Home() {
         setSaved(false);
         setSavedLead(null);
         setSaveError('');
+        setCaptureProgress('');
+        setCaptureOutcome('');
       }, 150);
     }
   }
@@ -1274,6 +1368,45 @@ export default function Home() {
       kind,
       file,
     });
+  }
+
+  function loadDemoCard() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200;
+    canvas.height = 700;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.fillStyle = '#f7f4ee';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#14213d';
+    context.fillRect(0, 0, 34, canvas.height);
+    context.font = '700 54px system-ui';
+    context.fillStyle = '#14213d';
+    context.fillText('Maya Kapoor', 100, 170);
+    context.font = '32px system-ui';
+    context.fillStyle = '#3d4966';
+    context.fillText('Procurement Director', 100, 235);
+    context.font = '700 38px system-ui';
+    context.fillStyle = '#d66b35';
+    context.fillText('ACME PHARMA', 100, 335);
+    context.font = '28px system-ui';
+    context.fillStyle = '#3d4966';
+    context.fillText('maya.kapoor@example.com', 100, 445);
+    context.fillText('+1 415 555 0148', 100, 500);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      if (attachment?.url) URL.revokeObjectURL(attachment.url);
+      const file = new File([blob], 'revenue-os-demo-card.png', {
+        type: 'image/png',
+      });
+      setAttachment({
+        name: file.name,
+        url: URL.createObjectURL(file),
+        kind: 'card',
+        file,
+      });
+      setSaveError('');
+    }, 'image/png');
   }
 
   async function toggleRecording() {
@@ -1630,7 +1763,11 @@ export default function Home() {
         captureStatus: data.status || 'completed_pending_review',
         extractedJson: JSON.stringify(extraction),
       };
-      setAcceptedCaptureFields([]);
+      const suggestedFields: string[] = (
+        ['fullName', 'company', 'role', 'email', 'phone'] as const
+      ).filter((field) => Boolean(extraction[field]));
+      if (extraction.transcript) suggestedFields.push('transcript');
+      setAcceptedCaptureFields(suggestedFields);
       setReviewLead(next);
       setCapturedLeads((current) =>
         current.map((lead) => (lead.id === next.id ? next : lead)),
@@ -1645,11 +1782,18 @@ export default function Home() {
     field: 'fullName' | 'company' | 'role' | 'email' | 'phone',
     value: string,
   ) {
-    const control = reviewContactForm.current?.elements.namedItem(field);
-    if (!(control instanceof HTMLInputElement)) return;
-    control.value = value;
     setAcceptedCaptureFields((current) =>
       current.includes(field) ? current : [...current, field],
+    );
+    window.setTimeout(() => {
+      const control = reviewContactForm.current?.elements.namedItem(field);
+      if (control instanceof HTMLInputElement) control.value = value;
+    }, 0);
+  }
+
+  function markCaptureCorrection(field: string) {
+    setAcceptedCaptureFields((current) =>
+      current.filter((item) => item !== field),
     );
   }
 
@@ -2891,6 +3035,17 @@ export default function Home() {
     ? opportunities.filter((item) => item.eventId === activeEvent.id)
     : opportunities;
 
+  if (initializing)
+    return (
+      <main className="app-loading" aria-busy="true" aria-live="polite">
+        <span className="brand-mark">
+          <Sparkles size={18} />
+        </span>
+        <strong>Preparing your revenue workspace…</strong>
+        <small>Loading the verified event, team and offline queue.</small>
+      </main>
+    );
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
@@ -3172,6 +3327,13 @@ export default function Home() {
                             onInput={(event) => selectAttachment(event, 'qr')}
                           />
                         </div>
+                        <button
+                          type="button"
+                          className="demo-card-button"
+                          onClick={loadDemoCard}
+                        >
+                          No card nearby? Try the clearly labelled sample card
+                        </button>
                         {attachment ? (
                           <div className="attachment-preview">
                             {attachment.kind === 'audio' ? (
@@ -3195,8 +3357,10 @@ export default function Home() {
                             <span>
                               <strong>{attachment.name}</strong>
                               <small>
-                                Attached for this local test · automatic reading
-                                comes with OCR
+                                {attachment.name ===
+                                'revenue-os-demo-card.png'
+                                  ? 'Demo sample · automatic reading begins after save'
+                                  : 'Original ready · automatic reading begins after save'}
                               </small>
                             </span>
                           </div>
@@ -3323,10 +3487,12 @@ export default function Home() {
                             disabled={saving || !activeEvent}
                           >
                             {saving
-                              ? 'Saving securely…'
+                              ? captureProgress || 'Saving securely…'
                               : !activeEvent
                                 ? 'Create or select an event before capture'
-                                : 'Save conversation'}{' '}
+                                : attachment
+                                  ? 'Save and read capture'
+                                  : 'Save conversation'}{' '}
                             {!saving && activeEvent && <ArrowRight />}
                           </Button>
                           <p className="offline-note">
@@ -3353,10 +3519,12 @@ export default function Home() {
                             : 'ready for review'}
                         </DialogTitle>
                         <DialogDescription>
-                          {savedLead?.reviewStatus === 'queued_offline'
+                          {captureOutcome
+                            ? captureOutcome
+                            : savedLead?.reviewStatus === 'queued_offline'
                             ? 'Keep working. Revenue OS will retry this exact capture without creating duplicates when the connection returns.'
                             : attachment
-                              ? 'The original file is stored securely and queued for extraction. No facts have been invented.'
+                              ? 'The original file is stored securely. Review the contact before any extracted detail becomes a confirmed fact.'
                               : 'The conversation is stored as source evidence. No facts have been invented.'}
                         </DialogDescription>
                         <div className="saved-summary">
@@ -3385,8 +3553,21 @@ export default function Home() {
                             </span>
                           ) : null}
                         </div>
+                        {captureOutcome && savedLead ? (
+                          <Button
+                            className="save-button"
+                            onClick={() => {
+                              const lead = savedLead;
+                              resetCapture(false);
+                              setTimeout(() => openReview(lead), 180);
+                            }}
+                          >
+                            Review manually
+                          </Button>
+                        ) : null}
                         <Button
-                          className="save-button"
+                          variant={captureOutcome ? 'outline' : 'default'}
+                          className={captureOutcome ? undefined : 'save-button'}
                           onClick={() => resetCapture(false)}
                         >
                           Back to today
@@ -3408,7 +3589,10 @@ export default function Home() {
                     <DialogHeader>
                       <p className="dialog-kicker">Conversation intelligence</p>
                       <DialogTitle className="dialog-title">
-                        Review {reviewLead?.fullName}
+                        {reviewLead?.captureStatus ===
+                          'completed_pending_review'
+                          ? `Review ${reviewLead.captureKind || 'uploaded'} capture`
+                          : `Review ${reviewLead?.fullName}`}
                       </DialogTitle>
                       <DialogDescription>
                         AI suggestions remain separate from confirmed customer
@@ -3487,6 +3671,7 @@ export default function Home() {
                         className="lead-form review-contact-form"
                         ref={reviewContactForm}
                         onSubmit={saveLeadDetails}
+                        key={`${reviewLead.id}-${reviewLead.captureStatus}`}
                       >
                         <h3>Verified contact details</h3>
                         {reviewLead.captureStatus ===
@@ -3575,51 +3760,73 @@ export default function Home() {
                         <div className="field-grid">
                           <div className="field-block">
                             <label htmlFor="review-name">Full name</label>
-                            <Input
+                            <input
+                              className="review-input"
                               id="review-name"
                               name="fullName"
                               defaultValue={
-                                reviewLead.fullName === 'Unidentified visitor'
+                                reviewCaptureExtraction?.fullName ||
+                                (reviewLead.fullName === 'Unidentified visitor'
                                   ? ''
-                                  : reviewLead.fullName
+                                  : reviewLead.fullName)
+                              }
+                              onChange={() =>
+                                markCaptureCorrection('fullName')
                               }
                               required
                             />
                           </div>
                           <div className="field-block">
                             <label htmlFor="review-company">Company</label>
-                            <Input
+                            <input
+                              className="review-input"
                               id="review-company"
                               name="company"
                               defaultValue={
-                                reviewLead.company === 'Company pending'
+                                reviewCaptureExtraction?.company ||
+                                (reviewLead.company === 'Company pending'
                                   ? ''
-                                  : reviewLead.company
+                                  : reviewLead.company)
+                              }
+                              onChange={() =>
+                                markCaptureCorrection('company')
                               }
                               required
                             />
                           </div>
                         </div>
                         <div className="field-grid">
-                          <Input
+                          <input
+                            className="review-input"
                             name="role"
                             aria-label="Verified role"
-                            defaultValue={reviewLead.role || ''}
+                            defaultValue={
+                              reviewCaptureExtraction?.role ||
+                              reviewLead.role ||
+                              ''
+                            }
+                            onChange={() => markCaptureCorrection('role')}
                             placeholder="Role"
                           />
-                          <Input
+                          <input
+                            className="review-input"
                             name="email"
                             aria-label="Verified work email"
-                            type="email"
-                            defaultValue={reviewLead.email || ''}
+                            type="text"
+                            inputMode="email"
+                            defaultValue=""
+                            onChange={() => markCaptureCorrection('email')}
                             placeholder="Work email"
                           />
                         </div>
-                        <Input
+                        <input
+                          className="review-input"
                           name="phone"
                           aria-label="Verified phone"
-                          type="tel"
-                          defaultValue={reviewLead.phone || ''}
+                          type="text"
+                          inputMode="tel"
+                          defaultValue=""
+                          onChange={() => markCaptureCorrection('phone')}
                           placeholder="Phone / WhatsApp"
                         />
                         <Button type="submit" variant="outline">

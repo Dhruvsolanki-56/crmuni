@@ -162,6 +162,7 @@ export async function POST(request: Request) {
     email?: unknown;
     phone?: unknown;
     acceptedFields?: unknown;
+    demoSample?: unknown;
   } | null;
   const leadId = clean(body?.leadId, 80);
   if (!leadId)
@@ -344,6 +345,65 @@ export async function POST(request: Request) {
       extraction,
       status: asset.processingStatus,
       duplicate: true,
+    });
+  }
+  const isDemoSample =
+    body?.demoSample === true &&
+    asset.kind === 'card' &&
+    asset.originalName === 'revenue-os-demo-card.png';
+  if (isDemoSample) {
+    const demoExtraction: CaptureExtraction = {
+      fullName: 'Maya Kapoor',
+      company: 'Acme Pharma',
+      role: 'Procurement Director',
+      email: 'maya.kapoor@example.com',
+      phone: '+1 415 555 0148',
+      transcript: null,
+      confidence: 0.99,
+      fieldConfidence: {
+        fullName: 0.99,
+        company: 0.99,
+        role: 0.99,
+        email: 0.99,
+        phone: 0.99,
+        transcript: 0,
+      },
+      warnings: [
+        'Sample card data for product demonstration. Review before confirming.',
+      ],
+    };
+    const result = await db.batch([
+      db
+        .prepare(
+          `UPDATE lead_capture_assets SET processing_status='processing' WHERE id=? AND workspace_id=? AND processing_status IN ('stored','stored_pending_extraction','failed')`,
+        )
+        .bind(asset.id, context.workspace.id),
+      db
+        .prepare(
+          `UPDATE lead_capture_assets SET processing_status='completed_pending_review', extracted_json=? WHERE id=? AND workspace_id=? AND processing_status='processing'`,
+        )
+        .bind(
+          JSON.stringify(demoExtraction),
+          asset.id,
+          context.workspace.id,
+        ),
+      auditStatement(
+        context,
+        'lead_capture.demo_sample_extracted',
+        'lead_capture_asset',
+        String(asset.id),
+        { leadId, kind: asset.kind },
+      ),
+    ]);
+    if (!result[0].meta.changes || !result[1].meta.changes)
+      return Response.json(
+        { error: 'This sample capture is already processing.' },
+        { status: 409 },
+      );
+    return Response.json({
+      status: 'completed_pending_review',
+      extraction: demoExtraction,
+      demo: true,
     });
   }
   const configured = revenueEnv();
