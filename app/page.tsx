@@ -1572,6 +1572,11 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  useEffect(() => {
     const sync = () => {
       void flushOutbox();
     };
