@@ -95,9 +95,10 @@ export async function GET(request: Request) {
     const item = row as Record<string, unknown>;
     let customFields: Record<string, string> = {};
     try {
-      customFields = item.customFieldsJson
-        ? JSON.parse(String(item.customFieldsJson))
-        : {};
+      customFields =
+        typeof item.customFieldsJson === 'string' && item.customFieldsJson
+          ? JSON.parse(item.customFieldsJson)
+          : {};
     } catch {
       customFields = {};
     }

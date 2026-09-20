@@ -779,7 +779,7 @@ function grayscaleValues(imageData: ImageData) {
 // Otsu's method: pick the threshold that best separates ink from
 // background across lighting conditions and colored card stock.
 function otsuThreshold(gray: Uint8ClampedArray) {
-  const histogram = new Array(256).fill(0);
+  const histogram = Array.from({ length: 256 }, () => 0);
   for (const value of gray) histogram[value] += 1;
   const total = gray.length;
   let sum = 0;
@@ -1224,7 +1224,7 @@ export default function Home() {
   const badgeInput = useRef<HTMLInputElement>(null);
   const qrInput = useRef<HTMLInputElement>(null);
   const leadForm = useRef<HTMLFormElement>(null);
-  const eventGateRef = useRef<HTMLDivElement>(null);
+  const eventGateRef = useRef<HTMLOutputElement>(null);
   const leadDraftRef = useRef<Record<string, string> | null>(null);
   const eventForm = useRef<HTMLFormElement>(null);
   const reviewContactForm = useRef<HTMLFormElement>(null);
@@ -1656,8 +1656,10 @@ export default function Home() {
       return;
     }
     const formEl = event.currentTarget;
-    const fieldValue = (name: string) =>
-      String(new FormData(formEl).get(name) || '').trim();
+    const fieldValue = (name: string) => {
+      const value = new FormData(formEl).get(name);
+      return typeof value === 'string' ? value.trim() : '';
+    };
     const missing: string[] = [];
     if (!attachment && !fieldValue('fullName')) missing.push('Full name');
     if (!attachment && !fieldValue('company')) missing.push('Company');
@@ -1773,6 +1775,8 @@ export default function Home() {
           if (typeof value === 'string') fields[key] = value;
         });
         const id = fields.clientCaptureId;
+        // eslint-disable-next-line react/react-compiler -- inside an onSubmit handler, never invoked during render
+        const queuedAt = Date.now();
         await outboxWrite(
           {
             id,
@@ -1784,7 +1788,7 @@ export default function Home() {
             fields,
             attachment: attachment?.file,
             attachmentKind: attachment?.kind,
-            queuedAt: Date.now(),
+            queuedAt,
             status: 'queued',
             attempts: 0,
             nextAttemptAt: 0,
@@ -1800,7 +1804,7 @@ export default function Home() {
           nextAction: fields.nextAction,
           dueDate: fields.dueDate,
           reviewStatus: 'queued_offline',
-          createdAt: Date.now(),
+          createdAt: queuedAt,
         };
         setSavedLead(queuedLead);
         setCapturedLeads((current) => [queuedLead, ...current]);
@@ -3399,7 +3403,8 @@ export default function Home() {
   async function joinCanonicalEvent(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const code = String(new FormData(form).get('code') || '').trim();
+    const codeValue = new FormData(form).get('code');
+    const code = typeof codeValue === 'string' ? codeValue.trim() : '';
     if (!code) return;
     await joinEventByCode(code);
     form.reset();
@@ -4254,10 +4259,9 @@ export default function Home() {
                           </DialogDescription>
                         </DialogHeader>
                         {!activeEvent ? (
-                          <div
+                          <output
                             ref={eventGateRef}
                             className="capture-event-gate"
-                            role="status"
                           >
                             <span>
                               <CalendarDays size={17} />
@@ -4300,7 +4304,7 @@ export default function Home() {
                             <small>
                               Your scanned fields are kept while you choose.
                             </small>
-                          </div>
+                          </output>
                         ) : null}
                         <div className="capture-methods">
                           <button
@@ -6836,15 +6840,15 @@ export default function Home() {
                       <div>
                         <strong>No event is active yet</strong>
                         <p>
-                          Leads can't be captured until one event is
+                          Leads can&apos;t be captured until one event is
                           activated and selected. 1) Click{' '}
                           <b>New event</b> below and fill in the details.
                           2) On the created event, click{' '}
                           <b>Run readiness</b>. 3) Once checks pass, click{' '}
                           <b>Activate for capture</b>, then{' '}
                           <b>Use for capture</b>. 4) Go back to Today and
-                          click Capture lead again — anything you'd already
-                          typed there is restored automatically.
+                          click Capture lead again — anything you&apos;d
+                          already typed there is restored automatically.
                         </p>
                       </div>
                     </div>
@@ -6871,13 +6875,13 @@ export default function Home() {
                       onSubmit={submitEvent}
                     >
                       {editingEventId ? (
-                        <p className="editing-banner" role="status">
+                        <output className="editing-banner">
                           Editing an existing event. Saving will reassess
                           readiness and move it back to draft.{' '}
                           <button type="button" onClick={cancelEditEvent}>
                             Cancel edit
                           </button>
-                        </p>
+                        </output>
                       ) : null}
                       <div className="field-grid">
                         <div className="field-block">
@@ -6910,7 +6914,7 @@ export default function Home() {
                                   </span>
                                 ))}
                                 . Configure one of these instead of creating a
-                                duplicate, if it's the same event.
+                                duplicate, if it&apos;s the same event.
                               </span>
                             </div>
                           ) : null}
@@ -7019,8 +7023,8 @@ export default function Home() {
                           placeholder="Budget, Timeline, Machine count (comma separated)"
                         />
                         <small className="field-help">
-                          Each label becomes an extra field on this event's
-                          capture form.
+                          Each label becomes an extra field on this
+                          event&apos;s capture form.
                         </small>
                       </div>
                       <div className="field-grid">
@@ -8847,8 +8851,8 @@ export default function Home() {
                         <h2>Discover</h2>
                         <p>
                           Search exhibitors who have published their event to
-                          the directory. Only what they've chosen to share is
-                          shown here.
+                          the directory. Only what they&apos;ve chosen to
+                          share is shown here.
                         </p>
                       </div>
                     </div>
@@ -9047,7 +9051,7 @@ export default function Home() {
                     <h2>Memory</h2>
                     <p className="field-help">
                       Search your own captured contacts and conversation
-                      notes across every event you've attended.
+                      notes across every event you&apos;ve attended.
                     </p>
                     <Input
                       placeholder="Search by name, company or note"
