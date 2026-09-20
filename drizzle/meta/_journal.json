@@ -260,6 +260,13 @@
       "when": 1789861508108,
       "tag": "0036_track_knowledge_ingestion",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1789862158484,
+      "tag": "0037_gate_event_readiness",
+      "breakpoints": true
     }
   ]
 }

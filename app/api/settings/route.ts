@@ -74,6 +74,7 @@ export async function GET(request: Request) {
       'background_jobs',
       'in_app_notifications',
       'operational_alerts',
+      'event_readiness_snapshots',
       'events',
       'event_memberships',
     ] as const;
@@ -527,6 +528,7 @@ export async function POST(request: Request) {
       'operational_alerts',
       'background_jobs',
       'event_memberships',
+      'event_readiness_snapshots',
       'events',
       'company_documents',
       'knowledge_ingestions',

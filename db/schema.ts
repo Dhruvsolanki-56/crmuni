@@ -1214,6 +1214,7 @@ export const events = sqliteTable(
     dailyLeadTarget: integer('daily_lead_target').notNull().default(25),
     badgeProvider: text('badge_provider'),
     qrCampaignCode: text('qr_campaign_code'),
+    configVersion: integer('config_version').notNull().default(1),
     status: text('status').notNull().default('draft'),
     createdBy: text('created_by').notNull(),
     createdAt: integer('created_at').notNull(),
@@ -1224,6 +1225,41 @@ export const events = sqliteTable(
       table.workspaceId,
       table.status,
       table.startsOn,
+    ),
+  ],
+);
+
+export const eventReadinessSnapshots = sqliteTable(
+  'event_readiness_snapshots',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id),
+    version: integer('version').notNull(),
+    configVersion: integer('config_version').notNull(),
+    status: text('status').notNull(),
+    checksJson: text('checks_json').notNull(),
+    configJson: text('config_json').notNull(),
+    configHash: text('config_hash').notNull(),
+    assessedBy: text('assessed_by').notNull(),
+    assessedAt: integer('assessed_at').notNull(),
+    activatedBy: text('activated_by'),
+    activatedAt: integer('activated_at'),
+  },
+  (table) => [
+    uniqueIndex('uidx_event_readiness_version').on(
+      table.workspaceId,
+      table.eventId,
+      table.version,
+    ),
+    index('idx_event_readiness_latest').on(
+      table.workspaceId,
+      table.eventId,
+      table.assessedAt,
     ),
   ],
 );

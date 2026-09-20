@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   BarChart3,
   Building2,
@@ -376,7 +377,21 @@ type EventItem = {
   dailyLeadTarget: number;
   badgeProvider?: string;
   qrCampaignCode?: string;
+  configVersion: number;
   status: string;
+  readinessVersion?: number;
+  readinessStatus?: string;
+  readinessChecks: Array<{
+    key: string;
+    label: string;
+    passed: boolean;
+    detail: string;
+    required: boolean;
+  }>;
+  configHash?: string;
+  assessedAt?: number;
+  activatedAt?: number;
+  deviceConfig?: Record<string, unknown>;
 };
 type EventCost = {
   id: string;
@@ -502,14 +517,100 @@ type OfflineCapture = {
 
 function openOutbox() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('revenue-os-offline', 1);
+    const request = indexedDB.open('revenue-os-offline', 2);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains('captures'))
         request.result.createObjectStore('captures', { keyPath: 'id' });
+      if (!request.result.objectStoreNames.contains('event-configs'))
+        request.result.createObjectStore('event-configs', { keyPath: 'key' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+async function sha256Text(value: string) {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  );
+  return [...new Uint8Array(digest)]
+    .map((item) => item.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function cacheEventConfig(workspaceId: string, event: EventItem) {
+  if (!event.deviceConfig || !event.configHash)
+    throw new Error('Event readiness snapshot is missing.');
+  const configJson = JSON.stringify(event.deviceConfig);
+  if ((await sha256Text(configJson)) !== event.configHash)
+    throw new Error('Event configuration integrity check failed.');
+  const db = await openOutbox();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction('event-configs', 'readwrite');
+    transaction.objectStore('event-configs').put({
+      key: `${workspaceId}:${event.id}`,
+      workspaceId,
+      eventId: event.id,
+      configVersion: event.configVersion,
+      readinessVersion: event.readinessVersion,
+      configHash: event.configHash,
+      config: event.deviceConfig,
+      event: { ...event, status: 'active' },
+      cachedAt: Date.now(),
+    });
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
+}
+
+async function cachedEvents(workspaceId: string) {
+  if (!workspaceId) return [];
+  const db = await openOutbox();
+  const rows = await new Promise<
+    Array<{ workspaceId: string; event: EventItem }>
+  >((resolve, reject) => {
+    const request = db
+      .transaction('event-configs')
+      .objectStore('event-configs')
+      .getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return rows
+    .filter((row) => row.workspaceId === workspaceId && row.event)
+    .map((row) => row.event);
+}
+
+async function clearWorkspaceOfflineData(workspaceId: string) {
+  if (!workspaceId) return;
+  const db = await openOutbox();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(
+      ['captures', 'event-configs'],
+      'readwrite',
+    );
+    for (const storeName of ['captures', 'event-configs']) {
+      const store = transaction.objectStore(storeName);
+      const request = store.getAll();
+      request.onsuccess = () => {
+        for (const row of request.result as Array<{
+          id?: string;
+          key?: string;
+          workspaceId?: string;
+        }>) {
+          if (row.workspaceId !== workspaceId) continue;
+          const key = storeName === 'captures' ? row.id : row.key;
+          if (key) store.delete(key);
+        }
+      };
+    }
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
 }
 
 async function outboxWrite(
@@ -771,20 +872,40 @@ export default function Home() {
       .catch(() => undefined);
   }
   async function loadEvents() {
-    const response = await apiFetch('/api/events');
-    if (response.ok) {
-      const data = (await response.json()) as { events: EventItem[] };
-      setEvents(data.events);
-      const selected = window.localStorage.getItem('revenue-event-id');
-      if (
-        selected &&
-        !data.events.some(
-          (item) => item.id === selected && item.status !== 'archived',
-        )
-      ) {
-        window.localStorage.removeItem('revenue-event-id');
-        setActiveEventId('');
+    try {
+      const response = await apiFetch('/api/events');
+      if (response.ok) {
+        const data = (await response.json()) as { events: EventItem[] };
+        setEvents(data.events);
+        const selected = window.localStorage.getItem('revenue-event-id');
+        if (selected) {
+          const selectedEvent = data.events.find(
+            (item) => item.id === selected && item.status === 'active',
+          );
+          if (!selectedEvent) {
+            window.localStorage.removeItem('revenue-event-id');
+            setActiveEventId('');
+          } else {
+            const workspaceId =
+              window.localStorage.getItem('revenue-workspace-id') || '';
+            try {
+              await cacheEventConfig(workspaceId, selectedEvent);
+            } catch {
+              window.localStorage.removeItem('revenue-event-id');
+              setActiveEventId('');
+              setNotice(
+                'Event configuration verification failed. Select it again.',
+              );
+            }
+          }
+        }
+        return;
       }
+    } catch {
+      const workspaceId =
+        window.localStorage.getItem('revenue-workspace-id') || '';
+      const cached = await cachedEvents(workspaceId).catch(() => []);
+      if (cached.length) setEvents(cached);
     }
   }
   async function loadReports() {
@@ -2095,6 +2216,9 @@ export default function Home() {
       return;
     }
     if (action === 'execute_deletion') {
+      await clearWorkspaceOfflineData(appContext?.workspace.id || '').catch(
+        () => undefined,
+      );
       window.localStorage.removeItem('revenue-workspace-id');
       window.localStorage.removeItem('revenue-event-id');
       window.location.reload();
@@ -2251,16 +2375,33 @@ export default function Home() {
     await loadEvents();
   }
 
-  async function eventAction(action: 'duplicate' | 'archive', id: string) {
+  async function eventAction(
+    action: 'duplicate' | 'archive' | 'assess_readiness' | 'activate',
+    id: string,
+  ) {
     const response = await apiFetch('/api/events', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action, id }),
     });
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as {
+      error?: string;
+      status?: string;
+      checks?: Array<{ passed: boolean }>;
+    };
     if (response.ok) {
-      if (action === 'archive' && activeEventId === id) selectEvent('');
-      setNotice(action === 'duplicate' ? 'Event duplicated' : 'Event archived');
+      if (action === 'archive' && activeEventId === id) void selectEvent('');
+      setNotice(
+        action === 'duplicate'
+          ? 'Event duplicated'
+          : action === 'archive'
+            ? 'Event archived'
+            : action === 'activate'
+              ? 'Event activated and ready for device caching'
+              : data.status === 'ready'
+                ? 'Readiness passed. Activate the event for capture.'
+                : `${data.checks?.filter((check) => !check.passed).length || 0} required readiness checks need attention`,
+      );
       await loadEvents();
     } else setNotice(data.error || `Could not ${action} event`);
   }
@@ -2600,11 +2741,36 @@ export default function Home() {
     setNotice(`${kind} CSV downloaded`);
   }
 
-  function selectEvent(id: string) {
-    if (id) window.localStorage.setItem('revenue-event-id', id);
-    else window.localStorage.removeItem('revenue-event-id');
+  async function selectEvent(id: string) {
+    if (id) {
+      const selected = events.find((item) => item.id === id);
+      if (!selected || selected.status !== 'active') {
+        setNotice('Activate the event after readiness passes before capture.');
+        return;
+      }
+      try {
+        const workspaceId =
+          appContext?.workspace.id ||
+          window.localStorage.getItem('revenue-workspace-id') ||
+          '';
+        if (!workspaceId) throw new Error('Workspace context is unavailable.');
+        await cacheEventConfig(workspaceId, selected);
+      } catch (error) {
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : 'Could not cache the event configuration.',
+        );
+        return;
+      }
+      window.localStorage.setItem('revenue-event-id', id);
+    } else window.localStorage.removeItem('revenue-event-id');
     setActiveEventId(id);
-    setNotice(id ? 'Active event changed' : 'Active event cleared');
+    setNotice(
+      id
+        ? 'Active event verified and cached for offline capture'
+        : 'Active event cleared',
+    );
     void loadWorkspace();
     void loadReports();
   }
@@ -5015,7 +5181,11 @@ export default function Home() {
                         </p>
                       </div>
                     </div>
-                    <form className="lead-form" onSubmit={submitEvent}>
+                    <form
+                      className="lead-form"
+                      key={appContext?.workspace.id || 'event-loading'}
+                      onSubmit={submitEvent}
+                    >
                       <div className="field-grid">
                         <div className="field-block">
                           <label htmlFor="event-name">Event name</label>
@@ -5266,10 +5436,10 @@ export default function Home() {
                       </div>
                       <b>
                         {
-                          events.filter((item) => item.status !== 'archived')
+                          events.filter((item) => item.status === 'active')
                             .length
                         }{' '}
-                        active
+                        activated
                       </b>
                     </div>
                     {events.length ? (
@@ -5339,8 +5509,29 @@ export default function Home() {
                               ))}
                             </div>
                           ) : null}
+                          {item.readinessChecks.length ? (
+                            <div className="readiness-checks">
+                              {item.readinessChecks.map((check) => (
+                                <span
+                                  className={
+                                    check.passed ? 'passed' : 'blocked'
+                                  }
+                                  key={check.key}
+                                  title={check.detail}
+                                >
+                                  {check.passed ? <Check /> : <AlertTriangle />}
+                                  {check.label}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <small className="readiness-empty">
+                              Readiness has not been assessed for configuration
+                              v{item.configVersion}.
+                            </small>
+                          )}
                           <div className="event-actions">
-                            {item.status !== 'archived' ? (
+                            {item.status === 'active' ? (
                               <Button
                                 type="button"
                                 variant={
@@ -5358,6 +5549,33 @@ export default function Home() {
                                   'Use for capture'
                                 )}
                               </Button>
+                            ) : item.status === 'ready' ? (
+                              <Button
+                                type="button"
+                                onClick={() => eventAction('activate', item.id)}
+                              >
+                                Activate for capture
+                              </Button>
+                            ) : item.status === 'draft' ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  eventAction('assess_readiness', item.id)
+                                }
+                              >
+                                Run readiness
+                              </Button>
+                            ) : null}
+                            {item.status === 'active' ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  eventAction('assess_readiness', item.id)
+                                }
+                              >
+                                Recheck
+                              </button>
                             ) : null}
                             <button
                               type="button"
@@ -5678,7 +5896,11 @@ export default function Home() {
                   </article>
                   <article className="panel knowledge-card">
                     <h2>Business profile</h2>
-                    <form className="lead-form" onSubmit={submitKnowledge}>
+                    <form
+                      className="lead-form"
+                      key={`${appContext?.workspace.id || 'loading'}:${knowledge.profile?.legalName || 'new'}`}
+                      onSubmit={submitKnowledge}
+                    >
                       <input type="hidden" name="action" value="save_profile" />
                       <div className="field-grid">
                         <div className="field-block">
@@ -6277,7 +6499,11 @@ export default function Home() {
                         </p>
                       </div>
                     </div>
-                    <form className="lead-form" onSubmit={saveSettings}>
+                    <form
+                      className="lead-form"
+                      key={appContext?.workspace.id || 'settings-loading'}
+                      onSubmit={saveSettings}
+                    >
                       <div className="field-block">
                         <label htmlFor="workspace-name">Workspace name</label>
                         <Input
