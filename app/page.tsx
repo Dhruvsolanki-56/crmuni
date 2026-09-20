@@ -45,6 +45,12 @@ import {
   classifyCaptureResponse,
   nextCaptureRetry,
 } from '@/lib/offline-capture';
+import {
+  extractContactCandidates,
+  extractEncodedContact,
+  mergeContactCandidates,
+  type ContactCandidates,
+} from '@/lib/client-card-ocr';
 
 type SavedLead = {
   id: string;
@@ -713,6 +719,66 @@ function captureExtraction(value?: string) {
     return null;
   }
 }
+
+async function readContactImageLocally(
+  file: File,
+  onProgress: (progress: number) => void,
+): Promise<ContactCandidates> {
+  const [{ createWorker, PSM }, { default: jsQR }] = await Promise.all([
+    import('tesseract.js'),
+    import('jsqr'),
+  ]);
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.max(1, Math.min(3, 2400 / bitmap.width));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) throw new Error('Image processing is unavailable.');
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const original = context.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(original.data, original.width, original.height, {
+    inversionAttempts: 'attemptBoth',
+  });
+  const pixels = original.data;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const gray =
+      pixels[index] * 0.299 +
+      pixels[index + 1] * 0.587 +
+      pixels[index + 2] * 0.114;
+    const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
+    pixels[index] = contrasted;
+    pixels[index + 1] = contrasted;
+    pixels[index + 2] = contrasted;
+  }
+  context.putImageData(original, 0, 0);
+  const worker = await createWorker('eng', 1, {
+    workerPath: '/tesseract/worker.min.js',
+    corePath: '/tesseract-core',
+    langPath: '/tessdata',
+    logger: (message) => {
+      if (message.status === 'recognizing text')
+        onProgress(Math.max(0, Math.min(1, Number(message.progress) || 0)));
+    },
+  });
+  try {
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+      preserve_interword_spaces: '1',
+    });
+    const result = await worker.recognize(canvas);
+    const ocr = extractContactCandidates(result.data.text);
+    const encoded = code?.data
+      ? extractEncodedContact(code.data)
+      : extractContactCandidates('');
+    return mergeContactCandidates(encoded, ocr);
+  } finally {
+    await worker.terminate();
+  }
+}
 function dueStatus(dueDate: string | undefined, timezone: string) {
   if (!dueDate) return { label: 'No date', tone: 'neutral' };
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -818,6 +884,9 @@ export default function Home() {
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [drafting, setDrafting] = useState('');
   const [extractingCapture, setExtractingCapture] = useState(false);
+  const [readingAttachment, setReadingAttachment] = useState(false);
+  const [localOcrFields, setLocalOcrFields] = useState<string[]>([]);
+  const [localOcrStatus, setLocalOcrStatus] = useState('');
   const [acceptedCaptureFields, setAcceptedCaptureFields] = useState<string[]>(
     [],
   );
@@ -838,6 +907,7 @@ export default function Home() {
   const reviewContactForm = useRef<HTMLFormElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
+  const ocrRun = useRef(0);
 
   useEffect(() => {
     const context = (
@@ -1209,6 +1279,10 @@ export default function Home() {
     setCaptureOutcome('');
     const form = new FormData(event.currentTarget);
     form.set('clientCaptureId', crypto.randomUUID());
+    if (localOcrFields.length) {
+      form.set('localOcrConfirmed', 'true');
+      form.set('localOcrFields', localOcrFields.join(','));
+    }
     if (attachment) {
       form.set('attachment', attachment.file);
       form.set('attachmentKind', attachment.kind);
@@ -1229,7 +1303,11 @@ export default function Home() {
       setSavedLead(data.lead);
       setCapturedLeads((current) => [data.lead!, ...current]);
       void loadWorkspace();
-      if (attachment && data.lead.captureStatus) {
+      if (attachment && localOcrFields.length) {
+        setCaptureOutcome(
+          'The on-device OCR fields and original image are saved. You can correct the contact at any time from People.',
+        );
+      } else if (attachment && data.lead.captureStatus) {
         try {
           setCaptureProgress(
             attachment.kind === 'audio'
@@ -1351,7 +1429,49 @@ export default function Home() {
         setSaveError('');
         setCaptureProgress('');
         setCaptureOutcome('');
+        setReadingAttachment(false);
+        setLocalOcrFields([]);
+        setLocalOcrStatus('');
+        ocrRun.current += 1;
       }, 150);
+    }
+  }
+
+  async function prefillContactFromImage(file: File) {
+    const run = ++ocrRun.current;
+    setReadingAttachment(true);
+    setLocalOcrFields([]);
+    setLocalOcrStatus('Reading text and QR data on this device…');
+    try {
+      const candidates = await readContactImageLocally(file, (progress) => {
+        if (run === ocrRun.current)
+          setLocalOcrStatus(
+            `Reading on this device… ${Math.round(progress * 100)}%`,
+          );
+      });
+      if (run !== ocrRun.current) return;
+      const filled: string[] = [];
+      for (const [field, value] of Object.entries(candidates)) {
+        if (!value) continue;
+        const control = leadForm.current?.elements.namedItem(field);
+        if (!(control instanceof HTMLInputElement) || control.value.trim())
+          continue;
+        control.value = value;
+        filled.push(field);
+      }
+      setLocalOcrFields(filled);
+      setLocalOcrStatus(
+        filled.length
+          ? `${filled.length} field${filled.length === 1 ? '' : 's'} prefilled on this device · verify before saving`
+          : 'No reliable contact fields were found. Retake a sharper, closer photo or enter the basics manually.',
+      );
+    } catch {
+      if (run === ocrRun.current)
+        setLocalOcrStatus(
+          'This image could not be read locally. Retake a sharper photo or enter the basics manually.',
+        );
+    } finally {
+      if (run === ocrRun.current) setReadingAttachment(false);
     }
   }
 
@@ -1368,9 +1488,15 @@ export default function Home() {
       kind,
       file,
     });
+    setSaveError('');
+    void prefillContactFromImage(file);
   }
 
   function loadDemoCard() {
+    ocrRun.current += 1;
+    setReadingAttachment(false);
+    setLocalOcrFields([]);
+    setLocalOcrStatus('Preparing the sample for on-device OCR…');
     const canvas = document.createElement('canvas');
     canvas.width = 1200;
     canvas.height = 700;
@@ -1406,6 +1532,7 @@ export default function Home() {
         file,
       });
       setSaveError('');
+      void prefillContactFromImage(file);
     }, 'image/png');
   }
 
@@ -3359,11 +3486,26 @@ export default function Home() {
                               <small>
                                 {attachment.name ===
                                 'revenue-os-demo-card.png'
-                                  ? 'Demo sample · automatic reading begins after save'
-                                  : 'Original ready · automatic reading begins after save'}
+                                  ? 'Demo sample · reading locally on this device'
+                                  : 'Original ready · reading locally on this device'}
                               </small>
                             </span>
                           </div>
+                        ) : null}
+                        {localOcrStatus ? (
+                          <p
+                            className={`local-ocr-status ${localOcrFields.length ? 'ready' : ''}`}
+                            aria-live="polite"
+                          >
+                            {readingAttachment ? (
+                              <span className="local-ocr-spinner" />
+                            ) : localOcrFields.length ? (
+                              <Check size={15} />
+                            ) : (
+                              <AlertTriangle size={15} />
+                            )}
+                            {localOcrStatus}
+                          </p>
                         ) : null}
                         <div className="or">
                           <span>or enter the basics</span>
@@ -3484,12 +3626,16 @@ export default function Home() {
                           <Button
                             type="submit"
                             className="save-button"
-                            disabled={saving || !activeEvent}
+                            disabled={saving || readingAttachment || !activeEvent}
                           >
-                            {saving
+                            {readingAttachment
+                              ? 'Reading card on this device…'
+                              : saving
                               ? captureProgress || 'Saving securely…'
-                              : !activeEvent
+                                : !activeEvent
                                 ? 'Create or select an event before capture'
+                                : localOcrFields.length
+                                  ? 'Save reviewed capture'
                                 : attachment
                                   ? 'Save and read capture'
                                   : 'Save conversation'}{' '}
@@ -3513,10 +3659,13 @@ export default function Home() {
                             : 'Lead saved'}
                         </p>
                         <DialogTitle className="dialog-title">
-                          {savedLead?.fullName} is{' '}
-                          {savedLead?.reviewStatus === 'queued_offline'
-                            ? 'waiting to sync'
-                            : 'ready for review'}
+                          {localOcrFields.length
+                            ? `${savedLead?.fullName} was saved from on-device OCR`
+                            : `${savedLead?.fullName} is ${
+                                savedLead?.reviewStatus === 'queued_offline'
+                                  ? 'waiting to sync'
+                                  : 'ready for review'
+                              }`}
                         </DialogTitle>
                         <DialogDescription>
                           {captureOutcome
@@ -3537,7 +3686,9 @@ export default function Home() {
                             <strong>
                               {savedLead?.reviewStatus === 'queued_offline'
                                 ? 'Offline queue'
-                                : 'Needs review'}
+                                : localOcrFields.length
+                                  ? 'OCR reviewed'
+                                  : 'Needs review'}
                             </strong>
                           </span>
                           {savedLead?.nextAction ? (
@@ -3553,7 +3704,7 @@ export default function Home() {
                             </span>
                           ) : null}
                         </div>
-                        {captureOutcome && savedLead ? (
+                        {captureOutcome && savedLead && !localOcrFields.length ? (
                           <Button
                             className="save-button"
                             onClick={() => {

@@ -29,6 +29,8 @@ type NewLead = {
   emailConsent?: unknown;
   whatsappConsent?: unknown;
   consentSource?: unknown;
+  localOcrConfirmed?: unknown;
+  localOcrFields?: unknown;
 };
 
 const allowedFiles = new Set([
@@ -112,6 +114,24 @@ export async function POST(request: Request) {
       ? ['whatsapp']
       : []),
   ];
+  const allowedLocalOcrFields = new Set([
+    'fullName',
+    'company',
+    'role',
+    'email',
+    'phone',
+  ]);
+  const localOcrFields = [
+    ...new Set(
+      clean(body.localOcrFields, 120)
+        .split(',')
+        .filter((field) => allowedLocalOcrFields.has(field)),
+    ),
+  ];
+  const localOcrConfirmed =
+    body.localOcrConfirmed === 'true' &&
+    Boolean(file?.type.startsWith('image/')) &&
+    localOcrFields.length > 0;
   if ((!suppliedFullName || !suppliedCompany) && !file)
     return Response.json(
       {
@@ -378,7 +398,7 @@ export async function POST(request: Request) {
     statements.push(
       database()
         .prepare(
-          `INSERT INTO lead_capture_assets (id, workspace_id, lead_id, kind, original_name, storage_key, content_type, size_bytes, processing_status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'stored_pending_extraction', ?, ?)`,
+          `INSERT INTO lead_capture_assets (id, workspace_id, lead_id, kind, original_name, storage_key, content_type, size_bytes, processing_status, extracted_json, accepted_fields_json, reviewed_by, reviewed_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           assetId,
@@ -389,6 +409,26 @@ export async function POST(request: Request) {
           storageKey,
           file.type,
           file.size,
+          localOcrConfirmed ? 'confirmed' : 'stored_pending_extraction',
+          localOcrConfirmed
+            ? JSON.stringify({
+                fullName: suppliedFullName || null,
+                company: suppliedCompany || null,
+                role: role || null,
+                email: email || null,
+                phone: phone || null,
+                transcript: null,
+                confidence: null,
+                fieldConfidence: null,
+                warnings: [
+                  'Free on-device OCR result reviewed by the capturing user.',
+                ],
+                method: 'tesseract_js_and_qr',
+              })
+            : null,
+          localOcrConfirmed ? JSON.stringify(localOcrFields) : null,
+          localOcrConfirmed ? context.user.id : null,
+          localOcrConfirmed ? now : null,
           context.user.id,
           now,
         ),
@@ -397,6 +437,7 @@ export async function POST(request: Request) {
     auditStatement(context, 'lead.created', 'lead', leadId, {
       source,
       consentChannels,
+      captureAssistance: localOcrConfirmed ? 'local_ocr_reviewed' : null,
     }),
   );
 
@@ -431,7 +472,11 @@ export async function POST(request: Request) {
           : null,
         duplicateLeadId: duplicate?.id || null,
         duplicateLeadName: duplicate?.fullName || null,
-        captureStatus: assetId ? 'stored_pending_extraction' : null,
+        captureStatus: assetId
+          ? localOcrConfirmed
+            ? 'confirmed'
+            : 'stored_pending_extraction'
+          : null,
         captureKind: assetId ? attachmentKind : null,
         createdAt: now,
       },
@@ -439,7 +484,9 @@ export async function POST(request: Request) {
         ? {
             id: assetId,
             kind: attachmentKind,
-            processingStatus: 'stored_pending_extraction',
+            processingStatus: localOcrConfirmed
+              ? 'confirmed'
+              : 'stored_pending_extraction',
           }
         : null,
     },

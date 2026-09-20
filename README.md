@@ -6,7 +6,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 
 1. Configure the company, products, ideal customers, qualification rules, team, and event.
 2. Capture a visitor manually or from a card, badge, QR image, or voice recording—even during a connection failure.
-3. Extract identity or transcription data with AI, while keeping machine suggestions separate from verified facts.
+3. Read card and badge images locally with bundled OCR and QR decoding; keep all machine suggestions editable and separate from verified facts.
 4. Review the conversation, confirm facts, score the lead, and turn commitments into dated tasks.
 5. Draft a personalized email or WhatsApp message from confirmed evidence, approve it, then open the chosen channel.
 6. Group contacts into accounts and classify buyer, evaluator, champion, decision-maker, influencer, or user roles.
@@ -26,7 +26,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - Knowledge files and normalized URL references are fingerprinted for duplicate detection, stored with provenance, and require attributed human approval before use. Plain text and CSV content is extracted locally; arbitrary URLs are not fetched server-side.
 - AI output is untrusted until a salesperson confirms it; source evidence remains retained.
 - Conversation analysis is runtime-validated, unsupported facts and commitments are removed unless their exact evidence appears in the source note, and grounding is rechecked immediately before confirmation.
-- Card, badge, QR, and audio extraction stays separate from verified contact data, exposes field-level confidence, and records exactly which machine suggestions a reviewer accepted. Audio transcripts become conversation evidence only through separate explicit acceptance.
+- Card, badge, and QR images are read in the browser with bundled English Tesseract data and QR/vCard decoding, so identity capture needs no OCR API key. Suggested fields stay editable, and the audit trail records exactly which values the salesperson reviewed. Audio transcripts become conversation evidence only through separate explicit acceptance.
 - Company profile changes are versioned, evidence sources require review, and sales claims remain draft until an owner/admin approves them; only approved claims are supplied to AI follow-up generation.
 - Follow-up approval does not silently send a message.
 - Important changes are written to the workspace audit trail.
@@ -46,7 +46,7 @@ npm run dev
 
 Open `http://localhost:3000`. Local preview uses a development identity; deployed Sites use authenticated user headers.
 
-AI-backed extraction, transcription, conversation analysis, and follow-up drafting require `OPENAI_API_KEY`. The defaults can be overridden with `OPENAI_MODEL`, `OPENAI_VISION_MODEL`, and `OPENAI_TRANSCRIBE_MODEL`.
+Card, badge, and QR OCR does not require an API key, paid OCR service, or runtime CDN. The worker, WebAssembly core, and English recognition model are bundled under `public/tesseract*` and run on the user's device. Optional audio transcription, conversation analysis, document extraction, and follow-up drafting still require `OPENAI_API_KEY`; their model defaults can be overridden with `OPENAI_MODEL`, `OPENAI_VISION_MODEL`, and `OPENAI_TRANSCRIBE_MODEL`.
 
 Production background processing also requires a long random `AUTOMATION_SECRET` and an approved scheduler that calls the protected worker endpoint every minute. See `docs/OPERATIONS_RUNBOOK.md`.
 
@@ -73,5 +73,5 @@ Configure secrets through the hosted runtime; never commit `.env.local`, API key
 - Email and WhatsApp open in the salesperson's approved client; provider-side delivery tracking is not included yet.
 - Zoho, Salesforce, and HubSpot synchronization require a later connector phase and customer credentials.
 - Subscription checkout and invoicing require approved pricing, tax/legal terms, and a selected billing provider before public self-service sales. Product entitlements are already enforced independently of billing.
-- OCR and transcription quality depends on capture clarity and configured AI access, so human verification remains mandatory.
-- Card, badge, QR and audio files are stored first, then extraction starts automatically and opens a prefilled correction screen. Local demos can use the clearly labelled sample card without an API key; arbitrary real captures still require configured AI access.
+- Free local OCR accuracy depends on focus, lighting, card layout, font, and language. It is not guaranteed to be perfect, so every prefilled value remains visible and editable before Save.
+- Card, badge, and QR reading starts immediately after image selection and prefills the capture form before Save. The original image and the reviewed fields are then stored together. The bundled sample exercises the same local path. Audio and other AI-assisted extraction remain separate optional features.
