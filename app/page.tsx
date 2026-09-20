@@ -81,6 +81,12 @@ type CaptureExtraction = {
   phone: string | null;
   transcript: string | null;
   confidence: number;
+  fieldConfidence?: Partial<
+    Record<
+      'fullName' | 'company' | 'role' | 'email' | 'phone' | 'transcript',
+      number
+    >
+  >;
   warnings: string[];
 };
 
@@ -691,6 +697,13 @@ function rfqExtraction(value?: string) {
     return null;
   }
 }
+function captureExtraction(value?: string) {
+  try {
+    return value ? (JSON.parse(value) as CaptureExtraction) : null;
+  } catch {
+    return null;
+  }
+}
 function dueStatus(dueDate: string | undefined, timezone: string) {
   if (!dueDate) return { label: 'No date', tone: 'neutral' };
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -792,6 +805,9 @@ export default function Home() {
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [drafting, setDrafting] = useState('');
   const [extractingCapture, setExtractingCapture] = useState(false);
+  const [acceptedCaptureFields, setAcceptedCaptureFields] = useState<string[]>(
+    [],
+  );
   const [rfqs, setRfqs] = useState<RfqItem[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [processingRfq, setProcessingRfq] = useState('');
@@ -806,6 +822,7 @@ export default function Home() {
   const badgeInput = useRef<HTMLInputElement>(null);
   const qrInput = useRef<HTMLInputElement>(null);
   const leadForm = useRef<HTMLFormElement>(null);
+  const reviewContactForm = useRef<HTMLFormElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
 
@@ -1536,6 +1553,7 @@ export default function Home() {
     });
     const data = (await response.json()) as {
       extraction?: CaptureExtraction;
+      status?: string;
       error?: string;
     };
     if (!response.ok || !data.extraction)
@@ -1544,15 +1562,10 @@ export default function Home() {
       const extraction = data.extraction;
       const next = {
         ...reviewLead,
-        fullName: extraction.fullName || reviewLead.fullName,
-        company: extraction.company || reviewLead.company,
-        role: extraction.role || reviewLead.role,
-        email: extraction.email || reviewLead.email,
-        phone: extraction.phone || reviewLead.phone,
-        note: extraction.transcript || reviewLead.note,
-        captureStatus: 'completed',
+        captureStatus: data.status || 'completed_pending_review',
         extractedJson: JSON.stringify(extraction),
       };
+      setAcceptedCaptureFields([]);
       setReviewLead(next);
       setCapturedLeads((current) =>
         current.map((lead) => (lead.id === next.id ? next : lead)),
@@ -1563,21 +1576,40 @@ export default function Home() {
     setExtractingCapture(false);
   }
 
+  function applyCaptureSuggestion(
+    field: 'fullName' | 'company' | 'role' | 'email' | 'phone',
+    value: string,
+  ) {
+    const control = reviewContactForm.current?.elements.namedItem(field);
+    if (!(control instanceof HTMLInputElement)) return;
+    control.value = value;
+    setAcceptedCaptureFields((current) =>
+      current.includes(field) ? current : [...current, field],
+    );
+  }
+
   async function saveLeadDetails(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!reviewLead) return;
     const values = Object.fromEntries(
       new FormData(event.currentTarget).entries(),
     );
-    const response = await apiFetch('/api/workspace', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        action: 'update_lead',
-        id: reviewLead.id,
-        ...values,
-      }),
-    });
+    const pendingCaptureReview =
+      reviewLead.captureStatus === 'completed_pending_review';
+    const response = await apiFetch(
+      pendingCaptureReview ? '/api/capture-extraction' : '/api/workspace',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: pendingCaptureReview ? 'confirm' : 'update_lead',
+          ...(pendingCaptureReview
+            ? { leadId: reviewLead.id, acceptedFields: acceptedCaptureFields }
+            : { id: reviewLead.id }),
+          ...values,
+        }),
+      },
+    );
     const data = (await response.json()) as {
       lead?: Partial<SavedLead>;
       error?: string;
@@ -1586,12 +1618,23 @@ export default function Home() {
       setAnalysisError(data.error || 'Could not save contact details.');
       return;
     }
-    const next = { ...reviewLead, ...data.lead };
+    const next = {
+      ...reviewLead,
+      ...data.lead,
+      captureStatus: pendingCaptureReview
+        ? 'confirmed'
+        : reviewLead.captureStatus,
+    };
+    if (pendingCaptureReview) setAcceptedCaptureFields([]);
     setReviewLead(next);
     setCapturedLeads((current) =>
       current.map((lead) => (lead.id === next.id ? next : lead)),
     );
-    setNotice('Contact details saved');
+    setNotice(
+      pendingCaptureReview
+        ? 'Extraction reviewed and verified details saved'
+        : 'Contact details saved',
+    );
     void loadWorkspace();
   }
 
@@ -2778,6 +2821,7 @@ export default function Home() {
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
   );
+  const reviewCaptureExtraction = captureExtraction(reviewLead?.extractedJson);
   const activeEventOpportunities = activeEvent
     ? opportunities.filter((item) => item.eventId === activeEvent.id)
     : opportunities;
@@ -3286,7 +3330,10 @@ export default function Home() {
                 <Dialog
                   open={Boolean(reviewLead)}
                   onOpenChange={(open) => {
-                    if (!open) setReviewLead(null);
+                    if (!open) {
+                      setReviewLead(null);
+                      setAcceptedCaptureFields([]);
+                    }
                   }}
                 >
                   <DialogContent className="review-dialog">
@@ -3316,11 +3363,14 @@ export default function Home() {
                             {reviewLead.captureKind?.toUpperCase()} capture
                           </strong>
                           <small>
-                            {reviewLead.captureStatus === 'completed'
-                              ? 'Processed · verify the extracted details below'
-                              : reviewLead.captureStatus === 'failed'
-                                ? 'Processing failed · original retained'
-                                : 'Original stored · ready for processing'}
+                            {reviewLead.captureStatus === 'confirmed'
+                              ? 'Reviewed · verified fields saved'
+                              : reviewLead.captureStatus ===
+                                  'completed_pending_review'
+                                ? 'Processed · verify every suggestion below'
+                                : reviewLead.captureStatus === 'failed'
+                                  ? 'Processing failed · original retained'
+                                  : 'Original stored · ready for processing'}
                           </small>
                         </span>
                         <Button
@@ -3329,51 +3379,131 @@ export default function Home() {
                           onClick={processCapture}
                           disabled={
                             extractingCapture ||
-                            reviewLead.captureStatus === 'completed'
+                            ['completed_pending_review', 'confirmed'].includes(
+                              reviewLead.captureStatus,
+                            )
                           }
                         >
                           {extractingCapture
                             ? 'Processing…'
-                            : reviewLead.captureStatus === 'completed'
-                              ? 'Processed'
-                              : 'Extract details'}
+                            : reviewLead.captureStatus === 'confirmed'
+                              ? 'Reviewed'
+                              : reviewLead.captureStatus ===
+                                  'completed_pending_review'
+                                ? 'Awaiting review'
+                                : 'Extract details'}
                         </Button>
                       </div>
                     ) : null}
-                    {reviewLead?.extractedJson
-                      ? (() => {
-                          try {
-                            const extracted = JSON.parse(
-                              reviewLead.extractedJson,
-                            ) as CaptureExtraction;
-                            return (
-                              <div className="extraction-evidence">
-                                <strong>
-                                  Machine-read suggestion ·{' '}
-                                  {Math.round(extracted.confidence * 100)}%
-                                  confidence
-                                </strong>
-                                {extracted.warnings.length ? (
-                                  <span>{extracted.warnings.join(' · ')}</span>
-                                ) : (
-                                  <span>
-                                    No extraction warnings. Human verification
-                                    is still required.
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          } catch {
-                            return null;
-                          }
-                        })()
-                      : null}
+                    {reviewCaptureExtraction ? (
+                      <div className="extraction-evidence">
+                        <strong>
+                          Machine-read suggestions ·{' '}
+                          {Math.round(reviewCaptureExtraction.confidence * 100)}
+                          %{' overall confidence'}
+                        </strong>
+                        {reviewCaptureExtraction.warnings.length ? (
+                          <span>
+                            {reviewCaptureExtraction.warnings.join(' · ')}
+                          </span>
+                        ) : (
+                          <span>
+                            No extraction warnings. Human verification is still
+                            required.
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                     {reviewLead ? (
                       <form
                         className="lead-form review-contact-form"
+                        ref={reviewContactForm}
                         onSubmit={saveLeadDetails}
                       >
                         <h3>Verified contact details</h3>
+                        {reviewLead.captureStatus ===
+                          'completed_pending_review' &&
+                        reviewCaptureExtraction ? (
+                          <div className="capture-suggestions">
+                            {(
+                              [
+                                ['fullName', 'Full name'],
+                                ['company', 'Company'],
+                                ['role', 'Role'],
+                                ['email', 'Email'],
+                                ['phone', 'Phone'],
+                              ] as const
+                            ).map(([field, label]) => {
+                              const value = reviewCaptureExtraction[field];
+                              if (!value) return null;
+                              const applied =
+                                acceptedCaptureFields.includes(field);
+                              const confidence =
+                                reviewCaptureExtraction.fieldConfidence?.[
+                                  field
+                                ] ?? reviewCaptureExtraction.confidence;
+                              return (
+                                <div key={field}>
+                                  <span>
+                                    <small>{label}</small>
+                                    <strong>{value}</strong>
+                                    <small>
+                                      {Math.round(confidence * 100)}% confidence
+                                    </small>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      applyCaptureSuggestion(field, value)
+                                    }
+                                  >
+                                    {applied ? 'Applied' : 'Use suggestion'}
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                            {reviewCaptureExtraction.transcript ? (
+                              <div>
+                                <span>
+                                  <small>Audio transcript</small>
+                                  <strong>
+                                    {reviewCaptureExtraction.transcript.slice(
+                                      0,
+                                      180,
+                                    )}
+                                  </strong>
+                                  <small>
+                                    {Math.round(
+                                      (reviewCaptureExtraction.fieldConfidence
+                                        ?.transcript ??
+                                        reviewCaptureExtraction.confidence) *
+                                        100,
+                                    )}
+                                    % confidence
+                                  </small>
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setAcceptedCaptureFields((current) =>
+                                      current.includes('transcript')
+                                        ? current.filter(
+                                            (item) => item !== 'transcript',
+                                          )
+                                        : [...current, 'transcript'],
+                                    )
+                                  }
+                                >
+                                  {acceptedCaptureFields.includes('transcript')
+                                    ? 'Will add as evidence'
+                                    : 'Add as evidence'}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div className="field-grid">
                           <div className="field-block">
                             <label htmlFor="review-name">Full name</label>
@@ -3425,7 +3555,10 @@ export default function Home() {
                           placeholder="Phone / WhatsApp"
                         />
                         <Button type="submit" variant="outline">
-                          Save verified details
+                          {reviewLead.captureStatus ===
+                          'completed_pending_review'
+                            ? 'Confirm review and save'
+                            : 'Save verified details'}
                         </Button>
                         <div className="field-grid">
                           <div>

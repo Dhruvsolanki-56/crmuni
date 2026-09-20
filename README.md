@@ -25,6 +25,7 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - Uploaded file signatures are checked instead of trusting the browser-provided MIME type.
 - Knowledge files and normalized URL references are fingerprinted for duplicate detection, stored with provenance, and require attributed human approval before use. Plain text and CSV content is extracted locally; arbitrary URLs are not fetched server-side.
 - AI output is untrusted until a salesperson confirms it; source evidence remains retained.
+- Card, badge, QR, and audio extraction stays separate from verified contact data, exposes field-level confidence, and records exactly which machine suggestions a reviewer accepted. Audio transcripts become conversation evidence only through separate explicit acceptance.
 - Company profile changes are versioned, evidence sources require review, and sales claims remain draft until an owner/admin approves them; only approved claims are supplied to AI follow-up generation.
 - Follow-up approval does not silently send a message.
 - Important changes are written to the workspace audit trail.

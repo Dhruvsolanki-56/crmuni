@@ -267,6 +267,13 @@
       "when": 1789862158484,
       "tag": "0037_gate_event_readiness",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1789863133353,
+      "tag": "0038_review_capture_extraction",
+      "breakpoints": true
     }
   ]
 }
