@@ -79,6 +79,7 @@ export async function POST(request: Request) {
   ]);
   let body: NewLead;
   let file: File | null = null;
+  const customFieldEntries: Record<string, string> = {};
   try {
     if (
       (request.headers.get('content-type') || '').includes(
@@ -89,6 +90,17 @@ export async function POST(request: Request) {
       body = Object.fromEntries(form.entries()) as NewLead;
       const candidate = form.get('attachment');
       file = candidate instanceof File && candidate.size ? candidate : null;
+      for (const [key, value] of form.entries()) {
+        if (
+          key.startsWith('custom:') &&
+          typeof value === 'string' &&
+          Object.keys(customFieldEntries).length < 30
+        ) {
+          const label = key.slice('custom:'.length).trim().slice(0, 80);
+          const trimmed = value.trim().slice(0, 500);
+          if (label && trimmed) customFieldEntries[label] = trimmed;
+        }
+      }
     } else body = (await request.json()) as NewLead;
   } catch {
     return Response.json({ error: 'Invalid request body.' }, { status: 400 });
@@ -269,8 +281,8 @@ export async function POST(request: Request) {
   const statements = [
     database()
       .prepare(`
-    INSERT INTO leads (id, workspace_id, event_id, account_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'needs_review', ?, ?)
+    INSERT INTO leads (id, workspace_id, event_id, account_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, custom_fields_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
       .bind(
         leadId,
@@ -285,6 +297,10 @@ export async function POST(request: Request) {
         email || null,
         phone || null,
         source,
+        // A visitor's personal workspace has no second reviewer — the
+        // capturer confirming the fields on the way in is the review.
+        context.workspace.kind === 'visitor' ? 'confirmed' : 'needs_review',
+        JSON.stringify(customFieldEntries),
         now,
         now,
       ),

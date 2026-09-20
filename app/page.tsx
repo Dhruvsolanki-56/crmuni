@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  Bell,
   Building2,
   CalendarDays,
   Camera,
@@ -81,6 +82,8 @@ type SavedLead = {
   qualificationReason?: string;
   ownerId?: string;
   ownerName?: string;
+  customFields?: Record<string, string>;
+  relationshipStatus?: string;
 };
 
 type CaptureExtraction = {
@@ -191,7 +194,14 @@ type View =
   | 'events'
   | 'roi'
   | 'knowledge'
-  | 'settings';
+  | 'settings'
+  | 'visitor-home'
+  | 'visitor-discover'
+  | 'visitor-plan'
+  | 'visitor-capture'
+  | 'visitor-contacts'
+  | 'visitor-memory'
+  | 'visitor-followups';
 type AppContext = {
   workspace: {
     id: string;
@@ -201,6 +211,7 @@ type AppContext = {
     currency: string;
     plan: string;
     status: string;
+    kind: string;
   };
   role: string;
   user: { id: string; email: string };
@@ -388,11 +399,14 @@ type EventItem = {
   products: string[];
   targetAccounts: string[];
   qualificationQuestions: string[];
+  leadFieldSchema: string[];
   leadRoutingRule: string;
   followupSlaHours: number;
   dailyLeadTarget: number;
   badgeProvider?: string;
   qrCampaignCode?: string;
+  canonicalEventId?: string;
+  directoryVisibility?: string;
   configVersion: number;
   status: string;
   readinessVersion?: number;
@@ -465,6 +479,38 @@ type FollowupDraft = {
   version: number;
   createdAt: number;
   updatedAt?: number;
+  handedOffAt?: number;
+};
+type LeadComment = {
+  id: string;
+  body: string;
+  authorId: string;
+  authorName: string;
+  mentionedUserIds: string[];
+  createdAt: number;
+};
+type DirectoryEntry = {
+  eventId: string;
+  eventName: string;
+  venue: string | null;
+  hall: string | null;
+  booth: string | null;
+  startsOn: string;
+  endsOn: string;
+  code: string | null;
+  companyName: string;
+  companyDescription: string;
+  products: string[];
+};
+type ItineraryItem = {
+  id: string;
+  title: string;
+  kind: string;
+  startsAt: number | null;
+  notes: string | null;
+  status: string;
+  visitedAt: number | null;
+  createdAt: number;
 };
 type RfqExtraction = {
   deliveryLocation: string | null;
@@ -720,6 +766,68 @@ function captureExtraction(value?: string) {
   }
 }
 
+function grayscaleValues(imageData: ImageData) {
+  const { data } = imageData;
+  const gray = new Uint8ClampedArray(data.length / 4);
+  for (let index = 0, pixel = 0; index < data.length; index += 4, pixel += 1) {
+    gray[pixel] =
+      data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
+  }
+  return gray;
+}
+
+// Otsu's method: pick the threshold that best separates ink from
+// background across lighting conditions and colored card stock.
+function otsuThreshold(gray: Uint8ClampedArray) {
+  const histogram = new Array(256).fill(0);
+  for (const value of gray) histogram[value] += 1;
+  const total = gray.length;
+  let sum = 0;
+  for (let level = 0; level < 256; level += 1) sum += level * histogram[level];
+  let sumBackground = 0;
+  let weightBackground = 0;
+  let best = 0;
+  let bestVariance = 0;
+  for (let level = 0; level < 256; level += 1) {
+    weightBackground += histogram[level];
+    if (weightBackground === 0) continue;
+    const weightForeground = total - weightBackground;
+    if (weightForeground === 0) break;
+    sumBackground += level * histogram[level];
+    const meanBackground = sumBackground / weightBackground;
+    const meanForeground = (sum - sumBackground) / weightForeground;
+    const variance =
+      weightBackground *
+      weightForeground *
+      (meanBackground - meanForeground) ** 2;
+    if (variance > bestVariance) {
+      bestVariance = variance;
+      best = level;
+    }
+  }
+  return best;
+}
+
+function paintGrayscale(
+  context: CanvasRenderingContext2D,
+  gray: Uint8ClampedArray,
+  width: number,
+  height: number,
+) {
+  const imageData = context.createImageData(width, height);
+  for (let pixel = 0, index = 0; pixel < gray.length; pixel += 1, index += 4) {
+    imageData.data[index] = gray[pixel];
+    imageData.data[index + 1] = gray[pixel];
+    imageData.data[index + 2] = gray[pixel];
+    imageData.data[index + 3] = 255;
+  }
+  context.putImageData(imageData, 0, 0);
+}
+
+function countFilledFields(candidates: ContactCandidates) {
+  return Object.values(candidates).filter(Boolean).length;
+}
+
 async function readContactImageLocally(
   file: File,
   onProgress: (progress: number) => void,
@@ -729,39 +837,43 @@ async function readContactImageLocally(
     import('jsqr'),
   ]);
   const bitmap = await createImageBitmap(file);
-  const scale = Math.max(1, Math.min(3, 2400 / bitmap.width));
+  // Business-card photos are often small crops; upscale generously so thin
+  // strokes and small print survive OCR, without blowing up large scans.
+  const scale = Math.max(1, Math.min(4, 2800 / bitmap.width));
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
+  canvas.width = width;
+  canvas.height = height;
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) throw new Error('Image processing is unavailable.');
   context.fillStyle = '#fff';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  context.fillRect(0, 0, width, height);
+  context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
-  const original = context.getImageData(0, 0, canvas.width, canvas.height);
+  const original = context.getImageData(0, 0, width, height);
   const code = jsQR(original.data, original.width, original.height, {
     inversionAttempts: 'attemptBoth',
   });
-  const pixels = original.data;
-  for (let index = 0; index < pixels.length; index += 4) {
-    const gray =
-      pixels[index] * 0.299 +
-      pixels[index + 1] * 0.587 +
-      pixels[index + 2] * 0.114;
-    const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
-    pixels[index] = contrasted;
-    pixels[index + 1] = contrasted;
-    pixels[index + 2] = contrasted;
+  const gray = grayscaleValues(original);
+
+  // Pass 1: contrast-boosted grayscale — keeps mid-tones for stylized fonts.
+  const contrasted = new Uint8ClampedArray(gray.length);
+  for (let pixel = 0; pixel < gray.length; pixel += 1) {
+    contrasted[pixel] = Math.max(
+      0,
+      Math.min(255, (gray[pixel] - 128) * 1.45 + 128),
+    );
   }
-  context.putImageData(original, 0, 0);
+  paintGrayscale(context, contrasted, width, height);
+
   const worker = await createWorker('eng', 1, {
     workerPath: '/tesseract/worker.min.js',
     corePath: '/tesseract-core',
     langPath: '/tessdata',
     logger: (message) => {
       if (message.status === 'recognizing text')
-        onProgress(Math.max(0, Math.min(1, Number(message.progress) || 0)));
+        onProgress(Math.max(0, Math.min(1, Number(message.progress) || 0)) * 0.6);
     },
   });
   try {
@@ -769,8 +881,28 @@ async function readContactImageLocally(
       tessedit_pageseg_mode: PSM.SPARSE_TEXT,
       preserve_interword_spaces: '1',
     });
-    const result = await worker.recognize(canvas);
-    const ocr = extractContactCandidates(result.data.text);
+    const firstPass = await worker.recognize(canvas);
+    let ocr = extractContactCandidates(firstPass.data.text);
+
+    // Pass 2: Otsu-binarized image, run only if the first pass came up short.
+    // This tends to recover text on colored/gradient card backgrounds that
+    // a fixed contrast curve doesn't fully separate from the ink.
+    if (countFilledFields(ocr) < 3) {
+      const threshold = otsuThreshold(gray);
+      const binarized = new Uint8ClampedArray(gray.length);
+      for (let pixel = 0; pixel < gray.length; pixel += 1) {
+        binarized[pixel] = gray[pixel] < threshold ? 0 : 255;
+      }
+      paintGrayscale(context, binarized, width, height);
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+      const secondPass = await worker.recognize(canvas);
+      onProgress(1);
+      const secondOcr = extractContactCandidates(secondPass.data.text);
+      ocr = mergeContactCandidates(ocr, secondOcr);
+    } else {
+      onProgress(1);
+    }
+
     const encoded = code?.data
       ? extractEncodedContact(code.data)
       : extractContactCandidates('');
@@ -779,6 +911,177 @@ async function readContactImageLocally(
     await worker.terminate();
   }
 }
+
+function VisitorCapture({
+  activeEvent,
+  onSaved,
+  setNotice,
+}: {
+  activeEvent: EventItem | undefined;
+  onSaved: () => void;
+  setNotice: (message: string) => void;
+}) {
+  const form = useRef<HTMLFormElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [reading, setReading] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleFile(event: SyntheticEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    setReading(true);
+    setOcrStatus('Reading text and QR data on this device…');
+    try {
+      const candidates = await readContactImageLocally(file, (progress) =>
+        setOcrStatus(`Reading on this device… ${Math.round(progress * 100)}%`),
+      );
+      let filled = 0;
+      for (const [field, value] of Object.entries(candidates)) {
+        if (!value) continue;
+        const control = form.current?.elements.namedItem(field);
+        if (!(control instanceof HTMLInputElement) || control.value.trim())
+          continue;
+        control.value = value;
+        filled += 1;
+      }
+      setOcrStatus(
+        filled
+          ? `${filled} field${filled === 1 ? '' : 's'} prefilled · verify before saving`
+          : 'No reliable contact fields were found. Enter the details manually.',
+      );
+    } catch {
+      setOcrStatus('This image could not be read locally. Enter details manually.');
+    } finally {
+      setReading(false);
+    }
+  }
+
+  async function submit(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeEvent) return;
+    const formEl = event.currentTarget;
+    const data = new FormData(formEl);
+    data.set('clientCaptureId', crypto.randomUUID());
+    setSaving(true);
+    try {
+      const response = await apiFetch('/api/leads', {
+        method: 'POST',
+        body: data,
+      });
+      const result = (await response.json()) as {
+        lead?: { fullName: string };
+        error?: string;
+      };
+      if (!response.ok || !result.lead) {
+        setNotice(result.error || 'Unable to save this contact.');
+        return;
+      }
+      setNotice(`${result.lead.fullName} saved to My contacts`);
+      formEl.reset();
+      setOcrStatus('');
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!activeEvent) {
+    return (
+      <div className="visitor-placeholder">
+        <article className="panel empty-state large">
+          <CalendarDays />
+          <h2>No active event</h2>
+          <p>Join or create an event on Event home before capturing a contact.</p>
+        </article>
+      </div>
+    );
+  }
+
+  return (
+    <div className="visitor-placeholder">
+      <article className="panel">
+        <div className="settings-heading">
+          <Camera />
+          <div>
+            <h2>Capture a contact</h2>
+            <p>
+              Attending {activeEvent.name}. Scan a card or badge, or enter
+              the basics manually — saved privately to your visitor
+              workspace.
+            </p>
+          </div>
+        </div>
+        <div className="capture-methods">
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            disabled={reading}
+          >
+            <Camera size={20} />
+            <span>
+              <strong>Upload card or badge</strong>
+              <small>Choose or photograph an image</small>
+            </span>
+          </button>
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          hidden
+          ref={fileInput}
+          onChange={handleFile}
+          disabled={reading}
+        />
+        {ocrStatus ? (
+          <p className={`local-ocr-status ${reading ? '' : 'ready'}`}>
+            {reading ? <span className="local-ocr-spinner" /> : <Check size={15} />}
+            {ocrStatus}
+          </p>
+        ) : null}
+        <div className="or">
+          <span>or enter the basics</span>
+        </div>
+        <form className="lead-form" ref={form} onSubmit={submit}>
+          <div className="field-grid">
+            <div className="field-block">
+              <label htmlFor="visitor-lead-name">Full name</label>
+              <Input id="visitor-lead-name" name="fullName" required />
+            </div>
+            <div className="field-block">
+              <label htmlFor="visitor-lead-company">Company</label>
+              <Input id="visitor-lead-company" name="company" required />
+            </div>
+          </div>
+          <div className="field-block">
+            <label htmlFor="visitor-lead-role">Role</label>
+            <Input id="visitor-lead-role" name="role" />
+          </div>
+          <div className="field-grid">
+            <div className="field-block">
+              <label htmlFor="visitor-lead-email">Work email</label>
+              <Input id="visitor-lead-email" name="email" type="email" />
+            </div>
+            <div className="field-block">
+              <label htmlFor="visitor-lead-phone">Phone / WhatsApp</label>
+              <Input id="visitor-lead-phone" name="phone" type="tel" />
+            </div>
+          </div>
+          <div className="field-block">
+            <label htmlFor="visitor-lead-note">
+              Notes — what did they say, what did you promise?
+            </label>
+            <Textarea id="visitor-lead-note" name="note" />
+          </div>
+          <Button type="submit" className="save-button" disabled={saving}>
+            {saving ? 'Saving…' : 'Save contact'}
+          </Button>
+        </form>
+      </article>
+    </div>
+  );
+}
+
 function dueStatus(dueDate: string | undefined, timezone: string) {
   if (!dueDate) return { label: 'No date', tone: 'neutral' };
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -857,6 +1160,10 @@ export default function Home() {
   const [deletionRequest, setDeletionRequest] =
     useState<DeletionRequest | null>(null);
   const [operations, setOperations] = useState<OperationsData | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [leadComments, setLeadComments] = useState<LeadComment[]>([]);
+  const [commentMentions, setCommentMentions] = useState<string[]>([]);
+  const [postingComment, setPostingComment] = useState(false);
   const [settingsLoadedAt, setSettingsLoadedAt] = useState(0);
   const [knowledge, setKnowledge] = useState<KnowledgeData>({
     profile: null,
@@ -868,6 +1175,19 @@ export default function Home() {
     profileVersions: [],
   });
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [similarEventMatches, setSimilarEventMatches] = useState<
+    EventItem[]
+  >([]);
+  const [directoryEntries, setDirectoryEntries] = useState<DirectoryEntry[]>(
+    [],
+  );
+  const [directoryQuery, setDirectoryQuery] = useState('');
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
+  const [memoryQuery, setMemoryQuery] = useState('');
+  const [showArchivedContacts, setShowArchivedContacts] = useState(false);
   const [revenueReport, setRevenueReport] = useState<RevenueReport | null>(
     null,
   );
@@ -904,10 +1224,22 @@ export default function Home() {
   const badgeInput = useRef<HTMLInputElement>(null);
   const qrInput = useRef<HTMLInputElement>(null);
   const leadForm = useRef<HTMLFormElement>(null);
+  const eventGateRef = useRef<HTMLDivElement>(null);
+  const leadDraftRef = useRef<Record<string, string> | null>(null);
+  const eventForm = useRef<HTMLFormElement>(null);
   const reviewContactForm = useRef<HTMLFormElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const ocrRun = useRef(0);
+  const previousWorkspaceKind = useRef<string | null>(null);
+
+  useEffect(() => {
+    const kind = appContext?.workspace.kind;
+    if (!kind || previousWorkspaceKind.current === kind) return;
+    previousWorkspaceKind.current = kind;
+    setActiveView(kind === 'visitor' ? 'visitor-home' : 'today');
+    setReviewLead(null);
+  }, [appContext?.workspace.kind]);
 
   useEffect(() => {
     const context = (
@@ -966,7 +1298,13 @@ export default function Home() {
       setOpportunities(data.opportunities || []);
       setAccounts(data.accounts || []);
       setLeadMerges(data.merges || []);
-      if (data.context) setAppContext(data.context);
+      if (data.context) {
+        setAppContext(data.context);
+        window.localStorage.setItem(
+          'revenue-workspace-id',
+          data.context.workspace.id,
+        );
+      }
       if (data.metrics) setMetrics(data.metrics);
     } catch {
       // Offline event capture can continue from its verified device cache.
@@ -978,26 +1316,37 @@ export default function Home() {
       if (response.ok) {
         const data = (await response.json()) as { events: EventItem[] };
         setEvents(data.events);
-        const selected = window.localStorage.getItem('revenue-event-id');
-        if (selected) {
-          const selectedEvent = data.events.find(
-            (item) => item.id === selected && item.status === 'active',
-          );
-          if (!selectedEvent) {
+        const storedEventId =
+          window.localStorage.getItem('revenue-event-id') || '';
+        const activeEvents = data.events.filter(
+          (item) => item.status === 'active',
+        );
+        const selectedEvent =
+          activeEvents.find((item) => item.id === storedEventId) ||
+          (activeEvents.length === 1 ? activeEvents[0] : null);
+        if (!selectedEvent) {
+          window.localStorage.removeItem('revenue-event-id');
+          setActiveEventId('');
+        } else if (!selectedEvent.deviceConfig || !selectedEvent.configHash) {
+          // No booth-readiness snapshot exists for this event (always true
+          // for a visitor's personal event) — nothing to verify against.
+          window.localStorage.setItem('revenue-event-id', selectedEvent.id);
+          setActiveEventId(selectedEvent.id);
+        } else {
+          const workspaceId =
+            window.localStorage.getItem('revenue-workspace-id') || '';
+          try {
+            if (!workspaceId)
+              throw new Error('Workspace context is unavailable.');
+            await cacheEventConfig(workspaceId, selectedEvent);
+            window.localStorage.setItem('revenue-event-id', selectedEvent.id);
+            setActiveEventId(selectedEvent.id);
+          } catch {
             window.localStorage.removeItem('revenue-event-id');
             setActiveEventId('');
-          } else {
-            const workspaceId =
-              window.localStorage.getItem('revenue-workspace-id') || '';
-            try {
-              await cacheEventConfig(workspaceId, selectedEvent);
-            } catch {
-              window.localStorage.removeItem('revenue-event-id');
-              setActiveEventId('');
-              setNotice(
-                'Event configuration verification failed. Select it again.',
-              );
-            }
+            setNotice(
+              'Event configuration verification failed. Choose the event again.',
+            );
           }
         }
         return;
@@ -1061,6 +1410,23 @@ export default function Home() {
     const response = await apiFetch('/api/operations');
     if (response.ok) setOperations((await response.json()) as OperationsData);
     else setOperations(null);
+  }
+  async function markNotificationRead(id: string) {
+    setOperations((current) =>
+      current
+        ? {
+            ...current,
+            notifications: current.notifications.map((item) =>
+              item.id === id ? { ...item, readAt: Date.now() } : item,
+            ),
+          }
+        : current,
+    );
+    await apiFetch('/api/operations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'read_notification', id }),
+    });
   }
   async function loadKnowledge() {
     const response = await apiFetch('/api/company-intelligence');
@@ -1186,12 +1552,16 @@ export default function Home() {
   }
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void Promise.all([
-        loadWorkspace(),
-        loadEvents(),
-        loadReports(),
-        refreshOutbox(),
-      ]).finally(() => setInitializing(false));
+      void (async () => {
+        await loadWorkspace();
+        await loadEvents();
+        await Promise.all([
+          loadWorkspace(),
+          loadReports(),
+          loadOperations(),
+          refreshOutbox(),
+        ]);
+      })().finally(() => setInitializing(false));
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -1269,10 +1639,39 @@ export default function Home() {
       void loadEvents();
       void loadSettings();
     }
+    if (view === 'visitor-discover') void searchDirectory(directoryQuery);
+    if (view === 'visitor-plan' && activeEventId)
+      void loadItinerary(activeEventId);
   }
 
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!activeEvent) {
+      eventGateRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      eventGateRef.current?.classList.add('shake');
+      setTimeout(() => eventGateRef.current?.classList.remove('shake'), 500);
+      return;
+    }
+    const formEl = event.currentTarget;
+    const fieldValue = (name: string) =>
+      String(new FormData(formEl).get(name) || '').trim();
+    const missing: string[] = [];
+    if (!attachment && !fieldValue('fullName')) missing.push('Full name');
+    if (!attachment && !fieldValue('company')) missing.push('Company');
+    const emailValue = fieldValue('email');
+    if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailValue)) {
+      setNotice('Enter a valid work email address.');
+      setTimeout(() => setNotice(''), 2600);
+      return;
+    }
+    if (missing.length) {
+      setNotice(`Please fill in: ${missing.join(', ')}`);
+      setTimeout(() => setNotice(''), 2600);
+      return;
+    }
     setSaving(true);
     setCaptureProgress('Saving the original…');
     setSaveError('');
@@ -1420,6 +1819,7 @@ export default function Home() {
   function resetCapture(open: boolean) {
     setCaptureOpen(open);
     if (!open) {
+      leadDraftRef.current = null;
       if (recording) recorder.current?.stop();
       setTimeout(() => {
         if (attachment?.url) URL.revokeObjectURL(attachment.url);
@@ -1436,6 +1836,37 @@ export default function Home() {
       }, 150);
     }
   }
+  // Snapshot whatever the user has typed so it survives the round trip to
+  // Events when they leave mid-capture to set up or activate one.
+  function stashLeadDraft() {
+    if (!leadForm.current) return;
+    const snapshot: Record<string, string> = {};
+    new FormData(leadForm.current).forEach((value, key) => {
+      if (typeof value === 'string' && value) snapshot[key] = value;
+    });
+    if (Object.keys(snapshot).length) leadDraftRef.current = snapshot;
+  }
+  useEffect(() => {
+    if (!captureOpen || !leadDraftRef.current) return;
+    const snapshot = leadDraftRef.current;
+    leadDraftRef.current = null;
+    const timer = window.setTimeout(() => {
+      const form = leadForm.current;
+      if (!form) return;
+      for (const [key, value] of Object.entries(snapshot)) {
+        const control = form.elements.namedItem(key);
+        if (control instanceof HTMLInputElement) {
+          if (control.type === 'checkbox') control.checked = true;
+          else control.value = value;
+        } else if (control instanceof HTMLTextAreaElement) {
+          control.value = value;
+        }
+      }
+      setNotice('Your entries were restored.');
+      setTimeout(() => setNotice(''), 2000);
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [captureOpen]);
 
   async function prefillContactFromImage(file: File) {
     const run = ++ocrRun.current;
@@ -1585,9 +2016,56 @@ export default function Home() {
     setAnalysisError('');
     setConfirmed(false);
     setFollowups([]);
+    setLeadComments([]);
+    setCommentMentions([]);
     void loadFollowups(lead.id);
-    if (['owner', 'admin', 'manager'].includes(appContext?.role || ''))
-      void loadSettings();
+    void loadComments(lead.id);
+    void loadSettings();
+  }
+  function openVisitorContact(lead: SavedLead) {
+    setActiveView('visitor-followups');
+    setReviewLead(lead);
+    setAnalysisError('');
+    setFollowups([]);
+    void loadFollowups(lead.id);
+  }
+  async function loadComments(leadId: string) {
+    const response = await apiFetch(
+      `/api/comments?leadId=${encodeURIComponent(leadId)}`,
+    );
+    if (response.ok) {
+      const data = (await response.json()) as { comments: LeadComment[] };
+      setLeadComments(data.comments);
+    }
+  }
+  async function postComment(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reviewLead) return;
+    const form = event.currentTarget;
+    const text = new FormData(form).get('body');
+    if (typeof text !== 'string' || !text.trim()) return;
+    setPostingComment(true);
+    const response = await apiFetch('/api/comments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        leadId: reviewLead.id,
+        body: text.trim(),
+        mentions: commentMentions,
+      }),
+    });
+    const data = (await response.json()) as {
+      comment?: LeadComment;
+      error?: string;
+    };
+    setPostingComment(false);
+    if (!response.ok || !data.comment) {
+      setNotice(data.error || 'Could not post the comment.');
+      return;
+    }
+    setLeadComments((current) => [...current, data.comment!]);
+    setCommentMentions([]);
+    form.reset();
   }
 
   async function loadFollowups(leadId: string) {
@@ -1696,6 +2174,13 @@ export default function Home() {
         ? `mailto:${encodeURIComponent(authorized.recipient)}?subject=${encodeURIComponent(authorized.subject || '')}&body=${encodeURIComponent(authorized.body)}`
         : `https://wa.me/${authorized.recipient.replace(/\D/g, '')}?text=${encodeURIComponent(authorized.body)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+    setFollowups((current) =>
+      current.map((item) =>
+        item.id === draft.id
+          ? { ...item, status: 'handed_off', handedOffAt: authorized.handedOffAt }
+          : item,
+      ),
+    );
   }
   async function setStakeholderRole(buyingRole: string) {
     if (!reviewLead) return;
@@ -2484,14 +2969,43 @@ export default function Home() {
     await loadEvents();
   }
 
+  async function enterVisitorMode() {
+    const response = await apiFetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'ensure_visitor_workspace' }),
+    });
+    const data = (await response.json()) as {
+      workspace?: AppContext['workspace'];
+      error?: string;
+    };
+    if (!response.ok || !data.workspace) {
+      setNotice(data.error || 'Could not open your visitor workspace.');
+      return;
+    }
+    setActiveView('visitor-home');
+    await switchWorkspace(data.workspace.id);
+  }
+
   async function switchWorkspace(id: string) {
     window.localStorage.setItem('revenue-workspace-id', id);
     window.localStorage.removeItem('revenue-event-id');
     setActiveEventId('');
+    // Clear everything scoped to the previous workspace immediately so
+    // nothing stale (next-best-actions, revenue figures) lingers on screen
+    // while the new workspace's data is still loading.
+    setNextBestActions([]);
+    setRevenueReport(null);
+    setEventCosts([]);
+    setOperations(null);
     setNotice('Workspace switched');
-    await loadWorkspace();
-    await loadSettings();
-    await loadEvents();
+    await Promise.all([
+      loadWorkspace(),
+      loadSettings(),
+      loadEvents(),
+      loadReports(),
+      loadOperations(),
+    ]);
   }
 
   async function updateMember(id: string, role: string, status: string) {
@@ -2739,19 +3253,248 @@ export default function Home() {
       .getAll('teamMemberIds')
       .map(String)
       .join(',');
+    const isEditing = Boolean(editingEventId);
     const response = await apiFetch('/api/events', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'create', ...values }),
+      body: JSON.stringify({
+        action: isEditing ? 'update' : 'create',
+        ...(isEditing ? { id: editingEventId } : {}),
+        ...values,
+      }),
     });
     const data = (await response.json()) as { error?: string };
     if (!response.ok) {
-      setNotice(data.error || 'Could not create event');
+      setNotice(data.error || `Could not ${isEditing ? 'update' : 'create'} event`);
       return;
     }
     form.reset();
-    setNotice('Event created');
+    setEditingEventId(null);
+    setSimilarEventMatches([]);
+    setEventDialogOpen(false);
+    setNotice(
+      isEditing
+        ? 'Event updated · run readiness again before activating'
+        : 'Event created · run readiness, then activate it for capture',
+    );
     await loadEvents();
+  }
+  function newEvent() {
+    setEditingEventId(null);
+    setSimilarEventMatches([]);
+    eventForm.current?.reset();
+    setEventDialogOpen(true);
+  }
+  function checkSimilarEvents(typedName: string) {
+    const typed = typedName.trim().toLowerCase();
+    if (typed.length < 3) {
+      setSimilarEventMatches([]);
+      return;
+    }
+    setSimilarEventMatches(
+      events.filter(
+        (item) =>
+          item.id !== editingEventId &&
+          item.status !== 'archived' &&
+          (item.name.trim().toLowerCase() === typed ||
+            item.name.toLowerCase().includes(typed) ||
+            typed.includes(item.name.trim().toLowerCase())),
+      ),
+    );
+  }
+  function editEvent(item: EventItem) {
+    setEditingEventId(item.id);
+    setSimilarEventMatches([]);
+    setEventDialogOpen(true);
+    setTimeout(() => {
+      const form = eventForm.current;
+      if (!form) return;
+      const setField = (name: string, value: string) => {
+        const control = form.elements.namedItem(name);
+        if (
+          control instanceof HTMLInputElement ||
+          control instanceof HTMLTextAreaElement
+        )
+          control.value = value;
+      };
+      setField('name', item.name);
+      setField('venue', item.venue || '');
+      setField('hall', item.hall || '');
+      setField('booth', item.booth || '');
+      setField('timezone', item.timezone);
+      setField('startsOn', item.startsOn);
+      setField('endsOn', item.endsOn);
+      setField('objective', item.objective || '');
+      setField('products', item.products.join(', '));
+      setField('targetAccounts', item.targetAccounts.join(', '));
+      setField(
+        'qualificationQuestions',
+        item.qualificationQuestions.join(', '),
+      );
+      setField('leadFieldSchema', item.leadFieldSchema.join(', '));
+      setField('budget', String(item.budget));
+      setField('attributionWindowDays', String(item.attributionWindowDays));
+      setField(
+        'grossMarginPercent',
+        String(Math.round(item.grossMarginBps / 100)),
+      );
+      setField('badgeProvider', item.badgeProvider || '');
+      setField('followupSlaHours', String(item.followupSlaHours));
+      setField('dailyLeadTarget', String(item.dailyLeadTarget));
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }
+  function cancelEditEvent() {
+    setEditingEventId(null);
+    eventForm.current?.reset();
+  }
+  function closeEventDialog(open: boolean) {
+    setEventDialogOpen(open);
+    if (!open) {
+      setEditingEventId(null);
+      setSimilarEventMatches([]);
+      eventForm.current?.reset();
+    }
+  }
+
+  async function createVisitorEvent(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const response = await apiFetch('/api/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'create_visitor_event', ...values }),
+    });
+    const data = (await response.json()) as { id?: string; error?: string };
+    if (!response.ok || !data.id) {
+      setNotice(data.error || 'Could not create this event.');
+      return;
+    }
+    form.reset();
+    setNotice('Event added');
+    await loadEvents();
+  }
+
+  async function joinEventByCode(code: string) {
+    const response = await apiFetch('/api/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'join_canonical_event', code }),
+    });
+    const data = (await response.json()) as {
+      id?: string;
+      duplicate?: boolean;
+      error?: string;
+    };
+    if (!response.ok || !data.id) {
+      setNotice(data.error || 'Could not find an event for that code.');
+      return;
+    }
+    setNotice(
+      data.duplicate ? "You're already attending that event" : 'Event joined',
+    );
+    await loadEvents();
+  }
+  async function joinCanonicalEvent(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const code = String(new FormData(form).get('code') || '').trim();
+    if (!code) return;
+    await joinEventByCode(code);
+    form.reset();
+  }
+  async function searchDirectory(query: string) {
+    setDirectoryLoading(true);
+    try {
+      const response = await apiFetch(
+        `/api/directory?query=${encodeURIComponent(query)}`,
+      );
+      if (response.ok) {
+        const data = (await response.json()) as {
+          entries: DirectoryEntry[];
+        };
+        setDirectoryEntries(data.entries);
+      }
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }
+
+  async function loadItinerary(eventId: string) {
+    const response = await apiFetch(
+      `/api/itinerary?eventId=${encodeURIComponent(eventId)}`,
+    );
+    if (response.ok) {
+      const data = (await response.json()) as { items: ItineraryItem[] };
+      setItineraryItems(data.items);
+    }
+  }
+  async function addItineraryItem(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeEvent) return;
+    const formEl = event.currentTarget;
+    const values = Object.fromEntries(new FormData(formEl).entries());
+    const response = await apiFetch('/api/itinerary', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add',
+        eventId: activeEvent.id,
+        ...values,
+      }),
+    });
+    const data = (await response.json()) as { id?: string; error?: string };
+    if (!response.ok || !data.id) {
+      setNotice(data.error || 'Could not add this to your plan.');
+      return;
+    }
+    formEl.reset();
+    setNotice('Added to your plan');
+    await loadItinerary(activeEvent.id);
+  }
+  async function updateItineraryStatus(id: string, status: string) {
+    const response = await apiFetch('/api/itinerary', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'update_status', id, status }),
+    });
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setNotice(data.error || 'Could not update this plan item.');
+      return;
+    }
+    setItineraryItems((current) =>
+      current.map((item) =>
+        item.id === id
+          ? { ...item, status, visitedAt: status === 'visited' ? Date.now() : item.visitedAt }
+          : item,
+      ),
+    );
+  }
+  async function setRelationshipStatus(lead: SavedLead, status: string) {
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_relationship_status',
+        id: lead.id,
+        status,
+      }),
+    });
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setNotice(data.error || 'Could not update this contact.');
+      return;
+    }
+    setCapturedLeads((current) =>
+      current.map((item) =>
+        item.id === lead.id ? { ...item, relationshipStatus: status } : item,
+      ),
+    );
+    setNotice(
+      status === 'archived' ? 'Relationship archived' : 'Relationship reopened',
+    );
   }
 
   async function eventAction(
@@ -2783,6 +3526,31 @@ export default function Home() {
       );
       await loadEvents();
     } else setNotice(data.error || `Could not ${action} event`);
+  }
+
+  async function toggleDirectoryVisibility(item: EventItem) {
+    const visibility =
+      item.directoryVisibility === 'published' ? 'private' : 'published';
+    const response = await apiFetch('/api/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_directory_visibility',
+        id: item.id,
+        visibility,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setNotice(data.error || 'Could not update directory visibility.');
+      return;
+    }
+    setNotice(
+      visibility === 'published'
+        ? 'Published to the visitor directory'
+        : 'Removed from the visitor directory',
+    );
+    await loadEvents();
   }
 
   async function submitRfq(event: SyntheticEvent<HTMLFormElement>) {
@@ -3127,20 +3895,25 @@ export default function Home() {
         setNotice('Activate the event after readiness passes before capture.');
         return;
       }
-      try {
-        const workspaceId =
-          appContext?.workspace.id ||
-          window.localStorage.getItem('revenue-workspace-id') ||
-          '';
-        if (!workspaceId) throw new Error('Workspace context is unavailable.');
-        await cacheEventConfig(workspaceId, selected);
-      } catch (error) {
-        setNotice(
-          error instanceof Error
-            ? error.message
-            : 'Could not cache the event configuration.',
-        );
-        return;
+      // No booth-readiness snapshot exists for this event (always true for a
+      // visitor's personal event) — nothing to verify against.
+      if (selected.deviceConfig && selected.configHash) {
+        try {
+          const workspaceId =
+            appContext?.workspace.id ||
+            window.localStorage.getItem('revenue-workspace-id') ||
+            '';
+          if (!workspaceId)
+            throw new Error('Workspace context is unavailable.');
+          await cacheEventConfig(workspaceId, selected);
+        } catch (error) {
+          setNotice(
+            error instanceof Error
+              ? error.message
+              : 'Could not cache the event configuration.',
+          );
+          return;
+        }
       }
       window.localStorage.setItem('revenue-event-id', id);
     } else window.localStorage.removeItem('revenue-event-id');
@@ -3157,6 +3930,7 @@ export default function Home() {
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
   );
+  const capturableEvents = events.filter((item) => item.status === 'active');
   const reviewCaptureExtraction = captureExtraction(reviewLead?.extractedJson);
   const activeEventOpportunities = activeEvent
     ? opportunities.filter((item) => item.eventId === activeEvent.id)
@@ -3197,62 +3971,119 @@ export default function Home() {
           <ChevronDown size={15} />
         </div>
         <nav aria-label="Main navigation">
-          <p className="nav-label">Workspace</p>
-          <NavItem
-            icon={LayoutDashboard}
-            label="Today"
-            active={activeView === 'today'}
-            onClick={() => go('today')}
-          />
-          <NavItem
-            icon={Users}
-            label="People & accounts"
-            active={activeView === 'people'}
-            onClick={() => go('people')}
-          />
-          <NavItem
-            icon={Target}
-            label="Opportunities"
-            active={activeView === 'opportunities'}
-            onClick={() => go('opportunities')}
-          />
-          <NavItem
-            icon={FileText}
-            label="RFQs & quotations"
-            active={activeView === 'rfqs'}
-            onClick={() => go('rfqs')}
-          />
-          <NavItem
-            icon={CalendarDays}
-            label="Meetings"
-            active={activeView === 'meetings'}
-            onClick={() => go('meetings')}
-          />
-          <p className="nav-label nav-label-spaced">Manage</p>
-          <NavItem
-            icon={CalendarDays}
-            label="Events"
-            active={activeView === 'events'}
-            onClick={() => go('events')}
-          />
-          <NavItem
-            icon={BarChart3}
-            label="Revenue & ROI"
-            active={activeView === 'roi'}
-            onClick={() => go('roi')}
-          />
-          <NavItem
-            icon={Building2}
-            label="Company knowledge"
-            active={activeView === 'knowledge'}
-            onClick={() => go('knowledge')}
-          />
-          <NavItem
-            icon={Settings}
-            label="Workspace settings"
-            active={activeView === 'settings'}
-            onClick={() => go('settings')}
-          />
+          {appContext?.workspace.kind === 'visitor' ? (
+            <>
+              <p className="nav-label">Visitor</p>
+              <NavItem
+                icon={LayoutDashboard}
+                label="Event home"
+                active={activeView === 'visitor-home'}
+                onClick={() => go('visitor-home')}
+              />
+              <NavItem
+                icon={Search}
+                label="Discover"
+                active={activeView === 'visitor-discover'}
+                onClick={() => go('visitor-discover')}
+              />
+              <NavItem
+                icon={CalendarDays}
+                label="My plan"
+                active={activeView === 'visitor-plan'}
+                onClick={() => go('visitor-plan')}
+              />
+              <NavItem
+                icon={Camera}
+                label="Capture"
+                active={activeView === 'visitor-capture'}
+                onClick={() => go('visitor-capture')}
+              />
+              <NavItem
+                icon={Users}
+                label="My contacts"
+                active={activeView === 'visitor-contacts'}
+                onClick={() => go('visitor-contacts')}
+              />
+              <NavItem
+                icon={Sparkles}
+                label="Memory"
+                active={activeView === 'visitor-memory'}
+                onClick={() => go('visitor-memory')}
+              />
+              <NavItem
+                icon={FileText}
+                label="Follow-ups"
+                active={activeView === 'visitor-followups'}
+                onClick={() => go('visitor-followups')}
+              />
+              <p className="nav-label nav-label-spaced">Manage</p>
+              <NavItem
+                icon={Settings}
+                label="Workspace settings"
+                active={activeView === 'settings'}
+                onClick={() => go('settings')}
+              />
+            </>
+          ) : (
+            <>
+              <p className="nav-label">Workspace</p>
+              <NavItem
+                icon={LayoutDashboard}
+                label="Today"
+                active={activeView === 'today'}
+                onClick={() => go('today')}
+              />
+              <NavItem
+                icon={Users}
+                label="People & accounts"
+                active={activeView === 'people'}
+                onClick={() => go('people')}
+              />
+              <NavItem
+                icon={Target}
+                label="Opportunities"
+                active={activeView === 'opportunities'}
+                onClick={() => go('opportunities')}
+              />
+              <NavItem
+                icon={FileText}
+                label="RFQs & quotations"
+                active={activeView === 'rfqs'}
+                onClick={() => go('rfqs')}
+              />
+              <NavItem
+                icon={CalendarDays}
+                label="Meetings"
+                active={activeView === 'meetings'}
+                onClick={() => go('meetings')}
+              />
+              <p className="nav-label nav-label-spaced">Manage</p>
+              <NavItem
+                icon={CalendarDays}
+                label="Events"
+                active={activeView === 'events'}
+                onClick={() => go('events')}
+              />
+              <NavItem
+                icon={BarChart3}
+                label="Revenue & ROI"
+                active={activeView === 'roi'}
+                onClick={() => go('roi')}
+              />
+              <NavItem
+                icon={Building2}
+                label="Company knowledge"
+                active={activeView === 'knowledge'}
+                onClick={() => go('knowledge')}
+              />
+              <NavItem
+                icon={Settings}
+                label="Workspace settings"
+                active={activeView === 'settings'}
+                onClick={() => go('settings')}
+              />
+            </>
+          )}
         </nav>
         <div className="sidebar-foot">
           {outboxCount ? (
@@ -3318,6 +4149,55 @@ export default function Home() {
               <span>Search</span>
               <kbd>Ctrl K</kbd>
             </button>
+            <div className="notification-bell">
+              <button
+                className="icon-button"
+                aria-label="Notifications"
+                onClick={() => setNotificationsOpen((value) => !value)}
+              >
+                <Bell size={19} />
+                {operations?.notifications.some((item) => !item.readAt) ? (
+                  <span className="notification-dot" />
+                ) : null}
+              </button>
+              {notificationsOpen ? (
+                <div className="notification-panel">
+                  <div className="notification-panel-head">
+                    <strong>Notifications</strong>
+                    <button
+                      type="button"
+                      onClick={() => setNotificationsOpen(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  {operations?.notifications.length ? (
+                    operations.notifications
+                      .slice(0, 20)
+                      .map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`notification-row ${item.readAt ? '' : 'unread'}`}
+                          onClick={() =>
+                            !item.readAt && markNotificationRead(item.id)
+                          }
+                        >
+                          <strong>{item.title}</strong>
+                          <span>{item.body}</span>
+                          <small>
+                            {new Date(item.createdAt).toLocaleString()}
+                          </small>
+                        </button>
+                      ))
+                  ) : (
+                    <p className="notification-empty">
+                      No notifications yet.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
             <button
               className="icon-button"
               aria-label="Profile"
@@ -3373,6 +4253,55 @@ export default function Home() {
                             conversation immediately after.
                           </DialogDescription>
                         </DialogHeader>
+                        {!activeEvent ? (
+                          <div
+                            ref={eventGateRef}
+                            className="capture-event-gate"
+                            role="status"
+                          >
+                            <span>
+                              <CalendarDays size={17} />
+                              <strong>Choose the event for this lead</strong>
+                            </span>
+                            {capturableEvents.length ? (
+                              <select
+                                aria-label="Event for this lead"
+                                defaultValue=""
+                                onChange={(event) =>
+                                  void selectEvent(event.currentTarget.value)
+                                }
+                              >
+                                <option value="" disabled>
+                                  Select an active event
+                                </option>
+                                {capturableEvents.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  stashLeadDraft();
+                                  setCaptureOpen(false);
+                                  setNotice(
+                                    'Fill in the event, then run readiness and activate it. Come back here and click Capture lead — your entries will be restored.',
+                                  );
+                                  setTimeout(() => setNotice(''), 4200);
+                                  go('events');
+                                  newEvent();
+                                }}
+                              >
+                                Set up and activate an event
+                              </button>
+                            )}
+                            <small>
+                              Your scanned fields are kept while you choose.
+                            </small>
+                          </div>
+                        ) : null}
                         <div className="capture-methods">
                           <button
                             type="button"
@@ -3575,6 +4504,21 @@ export default function Home() {
                               />
                             </div>
                           </div>
+                          {activeEvent?.leadFieldSchema.length ? (
+                            <div className="field-grid">
+                              {activeEvent.leadFieldSchema.map((label) => (
+                                <div className="field-block" key={label}>
+                                  <label htmlFor={`lead-custom-${label}`}>
+                                    {label}
+                                  </label>
+                                  <Input
+                                    id={`lead-custom-${label}`}
+                                    name={`custom:${label}`}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           <fieldset className="field-block">
                             <legend>Follow-up permission</legend>
                             <label>
@@ -3626,7 +4570,7 @@ export default function Home() {
                           <Button
                             type="submit"
                             className="save-button"
-                            disabled={saving || readingAttachment || !activeEvent}
+                            disabled={saving || readingAttachment}
                           >
                             {readingAttachment
                               ? 'Reading card on this device…'
@@ -3728,7 +4672,10 @@ export default function Home() {
                   </DialogContent>
                 </Dialog>
                 <Dialog
-                  open={Boolean(reviewLead)}
+                  open={
+                    Boolean(reviewLead) &&
+                    appContext?.workspace.kind !== 'visitor'
+                  }
                   onOpenChange={(open) => {
                     if (!open) {
                       setReviewLead(null);
@@ -3980,6 +4927,30 @@ export default function Home() {
                           onChange={() => markCaptureCorrection('phone')}
                           placeholder="Phone / WhatsApp"
                         />
+                        {events.find((item) => item.id === reviewLead.eventId)
+                          ?.leadFieldSchema.length ? (
+                          <div className="field-grid">
+                            {events
+                              .find((item) => item.id === reviewLead.eventId)
+                              ?.leadFieldSchema.map((label) => (
+                                <div className="field-block" key={label}>
+                                  <label
+                                    htmlFor={`review-custom-${label}`}
+                                  >
+                                    {label}
+                                  </label>
+                                  <input
+                                    className="review-input"
+                                    id={`review-custom-${label}`}
+                                    name={`custom:${label}`}
+                                    defaultValue={
+                                      reviewLead.customFields?.[label] || ''
+                                    }
+                                  />
+                                </div>
+                              ))}
+                          </div>
+                        ) : null}
                         <Button type="submit" variant="outline">
                           {reviewLead.captureStatus ===
                           'completed_pending_review'
@@ -4383,8 +5354,13 @@ export default function Home() {
                             <span>
                               <b>{draft.channel}</b>
                               <small>
-                                To {draft.recipient} · {draft.status} · v
-                                {draft.version}
+                                To {draft.recipient} ·{' '}
+                                {draft.status === 'handed_off'
+                                  ? 'Handed off'
+                                  : draft.status === 'approved'
+                                    ? 'Approved'
+                                    : 'Draft'}{' '}
+                                · v{draft.version}
                               </small>
                             </span>
                             <form
@@ -4430,6 +5406,14 @@ export default function Home() {
                                       ? 'email'
                                       : 'WhatsApp'}
                                   </Button>
+                                ) : draft.status === 'handed_off' ? (
+                                  <span className="handoff-note">
+                                    <Check size={13} /> Handed off
+                                    {draft.handedOffAt
+                                      ? ` · ${new Date(draft.handedOffAt).toLocaleString()}`
+                                      : ''}{' '}
+                                    — not confirmed sent
+                                  </span>
                                 ) : null}
                                 <Button
                                   type="button"
@@ -4440,6 +5424,10 @@ export default function Home() {
                                     <>
                                       <Check /> Approved
                                     </>
+                                  ) : draft.status === 'handed_off' ? (
+                                    <>
+                                      <Check /> Handed off
+                                    </>
                                   ) : (
                                     'Approve draft'
                                   )}
@@ -4448,6 +5436,97 @@ export default function Home() {
                             </form>
                           </article>
                         ))}
+                      </section>
+                    ) : null}
+                    {reviewLead ? (
+                      <section className="comment-section">
+                        <h3>Team notes</h3>
+                        <p className="field-help">
+                          Visible to everyone with access to this event.
+                          Mention a colleague to notify them.
+                        </p>
+                        <div className="comment-list">
+                          {leadComments.length ? (
+                            leadComments.map((comment) => (
+                              <article className="comment-row" key={comment.id}>
+                                <span className="initial-avatar small">
+                                  {comment.authorName
+                                    .split(' ')
+                                    .map((word) => word[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase()}
+                                </span>
+                                <span>
+                                  <strong>
+                                    {comment.authorName}{' '}
+                                    <small>
+                                      {new Date(
+                                        comment.createdAt,
+                                      ).toLocaleString()}
+                                    </small>
+                                  </strong>
+                                  <p>{comment.body}</p>
+                                </span>
+                              </article>
+                            ))
+                          ) : (
+                            <p className="field-help">
+                              No comments yet. Start the thread below.
+                            </p>
+                          )}
+                        </div>
+                        <form className="comment-form" onSubmit={postComment}>
+                          <Textarea
+                            name="body"
+                            placeholder="Add a note for the team…"
+                            required
+                          />
+                          {members.filter(
+                            (member) =>
+                              member.status === 'active' &&
+                              member.userId !== appContext?.user.id,
+                          ).length ? (
+                            <div className="mention-picker">
+                              <span>Mention:</span>
+                              {members
+                                .filter(
+                                  (member) =>
+                                    member.status === 'active' &&
+                                    member.userId !== appContext?.user.id,
+                                )
+                                .map((member) => (
+                                  <label key={member.id}>
+                                    <input
+                                      type="checkbox"
+                                      checked={commentMentions.includes(
+                                        member.userId,
+                                      )}
+                                      onChange={(event) =>
+                                        setCommentMentions((current) =>
+                                          event.currentTarget.checked
+                                            ? [...current, member.userId]
+                                            : current.filter(
+                                                (id) => id !== member.userId,
+                                              ),
+                                        )
+                                      }
+                                    />
+                                    {member.displayName ||
+                                      member.email ||
+                                      'Member'}
+                                  </label>
+                                ))}
+                            </div>
+                          ) : null}
+                          <Button
+                            type="submit"
+                            variant="outline"
+                            disabled={postingComment}
+                          >
+                            {postingComment ? 'Posting…' : 'Post comment'}
+                          </Button>
+                        </form>
                       </section>
                     ) : null}
                   </DialogContent>
@@ -4772,7 +5851,11 @@ export default function Home() {
             <section className="section-view">
               <div className="section-title">
                 <div>
-                  <p className="eyebrow">Revenue workspace</p>
+                  <p className="eyebrow">
+                    {appContext?.workspace.kind === 'visitor'
+                      ? 'Personal workspace'
+                      : 'Revenue workspace'}
+                  </p>
                   <h1>
                     {activeView === 'people'
                       ? 'People & accounts'
@@ -4788,7 +5871,26 @@ export default function Home() {
                                 ? 'Revenue & ROI'
                                 : activeView === 'settings'
                                   ? 'Workspace settings'
-                                  : 'Company knowledge'}
+                                  : activeView === 'knowledge'
+                                    ? 'Company knowledge'
+                                    : activeView === 'visitor-home'
+                                      ? 'Event home'
+                                      : activeView === 'visitor-discover'
+                                        ? 'Discover'
+                                        : activeView === 'visitor-plan'
+                                          ? 'My plan'
+                                          : activeView === 'visitor-capture'
+                                            ? 'Capture'
+                                            : activeView ===
+                                                'visitor-contacts'
+                                              ? 'My contacts'
+                                              : activeView ===
+                                                  'visitor-memory'
+                                                ? 'Memory'
+                                                : activeView ===
+                                                    'visitor-followups'
+                                                  ? 'Follow-ups'
+                                                  : ''}
                   </h1>
                 </div>
                 {activeView === 'opportunities' ? (
@@ -5727,24 +6829,56 @@ export default function Home() {
                 </div>
               ) : null}
               {activeView === 'events' ? (
-                <div className="events-layout">
-                  <article className="panel event-builder">
+                <div className="events-layout events-layout-single">
+                  {!activeEvent ? (
+                    <div className="event-onboarding-hint">
+                      <CalendarDays size={17} />
+                      <div>
+                        <strong>No event is active yet</strong>
+                        <p>
+                          Leads can't be captured until one event is
+                          activated and selected. 1) Click{' '}
+                          <b>New event</b> below and fill in the details.
+                          2) On the created event, click{' '}
+                          <b>Run readiness</b>. 3) Once checks pass, click{' '}
+                          <b>Activate for capture</b>, then{' '}
+                          <b>Use for capture</b>. 4) Go back to Today and
+                          click Capture lead again — anything you'd already
+                          typed there is restored automatically.
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                  <Dialog open={eventDialogOpen} onOpenChange={closeEventDialog}>
+                    <DialogContent className="capture-dialog">
                     <div className="settings-heading">
                       <CalendarDays />
                       <div>
-                        <h2>Prepare an event</h2>
-                        <p>
+                        <DialogTitle>
+                          {editingEventId ? 'Edit event' : 'Prepare an event'}
+                        </DialogTitle>
+                        <DialogDescription>
                           Configure the booth goal, qualification playbook,
                           routing and follow-up standard before the team
                           arrives.
-                        </p>
+                        </DialogDescription>
                       </div>
                     </div>
                     <form
                       className="lead-form"
                       key={appContext?.workspace.id || 'event-loading'}
+                      ref={eventForm}
                       onSubmit={submitEvent}
                     >
+                      {editingEventId ? (
+                        <p className="editing-banner" role="status">
+                          Editing an existing event. Saving will reassess
+                          readiness and move it back to draft.{' '}
+                          <button type="button" onClick={cancelEditEvent}>
+                            Cancel edit
+                          </button>
+                        </p>
+                      ) : null}
                       <div className="field-grid">
                         <div className="field-block">
                           <label htmlFor="event-name">Event name</label>
@@ -5753,7 +6887,33 @@ export default function Home() {
                             name="name"
                             required
                             placeholder="IndustrialTech Expo 2027"
+                            onChange={(event) =>
+                              checkSimilarEvents(event.currentTarget.value)
+                            }
                           />
+                          {similarEventMatches.length ? (
+                            <div className="similar-event-hint">
+                              <AlertTriangle size={13} />
+                              <span>
+                                {similarEventMatches.length === 1
+                                  ? 'An event with a similar name already exists: '
+                                  : 'Events with similar names already exist: '}
+                                {similarEventMatches.map((match, index) => (
+                                  <span key={match.id}>
+                                    {index > 0 ? ', ' : ''}
+                                    <button
+                                      type="button"
+                                      onClick={() => editEvent(match)}
+                                    >
+                                      {match.name} ({match.status})
+                                    </button>
+                                  </span>
+                                ))}
+                                . Configure one of these instead of creating a
+                                duplicate, if it's the same event.
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                         <div className="field-block">
                           <label htmlFor="event-venue">Venue</label>
@@ -5848,6 +7008,20 @@ export default function Home() {
                           name="qualificationQuestions"
                           placeholder="How many machines?, Which ERP?, When does budget open? (comma separated)"
                         />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="event-lead-fields">
+                          Custom lead fields
+                        </label>
+                        <Textarea
+                          id="event-lead-fields"
+                          name="leadFieldSchema"
+                          placeholder="Budget, Timeline, Machine count (comma separated)"
+                        />
+                        <small className="field-help">
+                          Each label becomes an extra field on this event's
+                          capture form.
+                        </small>
                       </div>
                       <div className="field-grid">
                         <div className="field-block">
@@ -5980,10 +7154,13 @@ export default function Home() {
                           )
                         }
                       >
-                        Create event workspace
+                        {editingEventId
+                          ? 'Save event changes'
+                          : 'Create event workspace'}
                       </Button>
                     </form>
-                  </article>
+                    </DialogContent>
+                  </Dialog>
                   <section
                     className="event-list"
                     aria-label="Configured events"
@@ -5993,13 +7170,18 @@ export default function Home() {
                         <h2>Configured events</h2>
                         <p>Select the event used for new lead captures.</p>
                       </div>
-                      <b>
-                        {
-                          events.filter((item) => item.status === 'active')
-                            .length
-                        }{' '}
-                        activated
-                      </b>
+                      <div className="event-list-heading-actions">
+                        <b>
+                          {
+                            events.filter((item) => item.status === 'active')
+                              .length
+                          }{' '}
+                          activated
+                        </b>
+                        <Button type="button" onClick={newEvent}>
+                          New event
+                        </Button>
+                      </div>
                     </div>
                     {events.length ? (
                       events.map((item) => (
@@ -6028,9 +7210,16 @@ export default function Home() {
                                 {item.booth ? ` · Booth ${item.booth}` : ''}
                               </small>
                             </span>
-                            <b className={`event-status ${item.status}`}>
-                              {item.status}
-                            </b>
+                            <span className="event-status-group">
+                              <b className={`event-status ${item.status}`}>
+                                {item.status}
+                              </b>
+                              {item.directoryVisibility === 'published' ? (
+                                <b className="event-status published">
+                                  In directory
+                                </b>
+                              ) : null}
+                            </span>
                           </div>
                           <p>
                             {item.objective ||
@@ -6070,18 +7259,50 @@ export default function Home() {
                           ) : null}
                           {item.readinessChecks.length ? (
                             <div className="readiness-checks">
-                              {item.readinessChecks.map((check) => (
-                                <span
-                                  className={
-                                    check.passed ? 'passed' : 'blocked'
-                                  }
-                                  key={check.key}
-                                  title={check.detail}
-                                >
-                                  {check.passed ? <Check /> : <AlertTriangle />}
-                                  {check.label}
-                                </span>
-                              ))}
+                              {item.readinessChecks.map((check) => {
+                                const fixesInKnowledge = [
+                                  'company_profile',
+                                  'active_offering',
+                                  'ideal_customer',
+                                  'qualification_rules',
+                                  'approved_evidence',
+                                ].includes(check.key);
+                                const content = (
+                                  <>
+                                    {check.passed ? (
+                                      <Check />
+                                    ) : (
+                                      <AlertTriangle />
+                                    )}
+                                    {check.label}
+                                  </>
+                                );
+                                if (check.passed)
+                                  return (
+                                    <span
+                                      className="passed"
+                                      key={check.key}
+                                      title={check.detail}
+                                    >
+                                      {content}
+                                    </span>
+                                  );
+                                return (
+                                  <button
+                                    type="button"
+                                    className="blocked"
+                                    key={check.key}
+                                    title={`${check.detail} Click to fix this in ${fixesInKnowledge ? 'Company knowledge' : 'this event'}.`}
+                                    onClick={() =>
+                                      fixesInKnowledge
+                                        ? go('knowledge')
+                                        : editEvent(item)
+                                    }
+                                  >
+                                    {content}
+                                  </button>
+                                );
+                              })}
                             </div>
                           ) : (
                             <small className="readiness-empty">
@@ -6136,6 +7357,24 @@ export default function Home() {
                                 Recheck
                               </button>
                             ) : null}
+                            {item.status === 'active' ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleDirectoryVisibility(item)}
+                              >
+                                {item.directoryVisibility === 'published'
+                                  ? 'Unpublish from directory'
+                                  : 'Publish to directory'}
+                              </button>
+                            ) : null}
+                            {item.status !== 'archived' ? (
+                              <button
+                                type="button"
+                                onClick={() => editEvent(item)}
+                              >
+                                Edit
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => eventAction('duplicate', item.id)}
@@ -6162,6 +7401,13 @@ export default function Home() {
                           Create the first event playbook. It stays in draft
                           until selected for capture.
                         </p>
+                        <Button
+                          type="button"
+                          className="event-empty-cta"
+                          onClick={newEvent}
+                        >
+                          New event
+                        </Button>
                       </article>
                     )}
                   </section>
@@ -7020,7 +8266,14 @@ export default function Home() {
                           onClick={() => switchWorkspace(workspace.id)}
                         >
                           <span>
-                            <strong>{workspace.name}</strong>
+                            <strong>
+                              {workspace.name}
+                              {workspace.kind === 'visitor' ? (
+                                <em className="workspace-kind-tag">
+                                  Personal
+                                </em>
+                              ) : null}
+                            </strong>
                             <small>
                               {workspace.role} · {workspace.plan}
                             </small>
@@ -7046,6 +8299,18 @@ export default function Home() {
                       />
                       <Button type="submit">Create</Button>
                     </form>
+                    {!availableWorkspaces.some(
+                      (workspace) => workspace.kind === 'visitor',
+                    ) ? (
+                      <button
+                        type="button"
+                        className="visitor-mode-link"
+                        onClick={enterVisitorMode}
+                      >
+                        Also attending events yourself? Open your personal
+                        visitor workspace →
+                      </button>
+                    ) : null}
                   </article>
                   <article className="panel settings-card">
                     <div className="settings-heading">
@@ -7572,6 +8837,733 @@ export default function Home() {
                     )}
                   </article>
                 </div>
+              ) : null}
+              {activeView === 'visitor-discover' ? (
+                <div className="records-grid">
+                  <article className="panel">
+                    <div className="settings-heading">
+                      <Search />
+                      <div>
+                        <h2>Discover</h2>
+                        <p>
+                          Search exhibitors who have published their event to
+                          the directory. Only what they've chosen to share is
+                          shown here.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="field-block">
+                      <Input
+                        placeholder="Search by company, product or event name"
+                        value={directoryQuery}
+                        onChange={(event) => {
+                          setDirectoryQuery(event.currentTarget.value);
+                          void searchDirectory(event.currentTarget.value);
+                        }}
+                      />
+                    </div>
+                  </article>
+                  <section aria-label="Directory results">
+                    {directoryLoading ? (
+                      <article className="panel empty-state large">
+                        <p>Searching…</p>
+                      </article>
+                    ) : directoryEntries.length ? (
+                      directoryEntries.map((entry) => (
+                        <article
+                          className="panel directory-card"
+                          key={entry.eventId}
+                        >
+                          <div>
+                            <strong>{entry.companyName}</strong>
+                            <small>
+                              {entry.eventName}
+                              {entry.venue ? ` · ${entry.venue}` : ''}
+                              {entry.booth ? ` · Booth ${entry.booth}` : ''}
+                            </small>
+                          </div>
+                          {entry.companyDescription ? (
+                            <p>{entry.companyDescription}</p>
+                          ) : null}
+                          {entry.products.length ? (
+                            <div className="event-tags">
+                              {entry.products.map((product) => (
+                                <span key={product}>{product}</span>
+                              ))}
+                            </div>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              entry.code && joinEventByCode(entry.code)
+                            }
+                            disabled={!entry.code}
+                          >
+                            Join event
+                          </Button>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="panel empty-state large">
+                        <Search />
+                        <h2>No published events yet</h2>
+                        <p>
+                          Nothing matches your search, or no exhibitor has
+                          published to the directory yet. Try Event home to
+                          join by code instead.
+                        </p>
+                      </article>
+                    )}
+                  </section>
+                </div>
+              ) : null}
+              {activeView === 'visitor-plan' ? (
+                !activeEvent ? (
+                  <div className="visitor-placeholder">
+                    <article className="panel empty-state large">
+                      <CalendarDays />
+                      <h2>No active event</h2>
+                      <p>
+                        Join or create an event on Event home before building
+                        a plan.
+                      </p>
+                    </article>
+                  </div>
+                ) : (
+                  <div className="visitor-home-layout">
+                    <article className="panel">
+                      <div className="settings-heading">
+                        <CalendarDays />
+                        <div>
+                          <h2>Add to your plan</h2>
+                          <p>
+                            Attending {activeEvent.name}. Add a booth visit,
+                            session or reminder.
+                          </p>
+                        </div>
+                      </div>
+                      <form className="lead-form" onSubmit={addItineraryItem}>
+                        <div className="field-block">
+                          <label htmlFor="itinerary-title">Title</label>
+                          <Input
+                            id="itinerary-title"
+                            name="title"
+                            required
+                            placeholder="Visit MachineSight booth"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="itinerary-starts">
+                            Date and time
+                          </label>
+                          <Input
+                            id="itinerary-starts"
+                            name="startsAt"
+                            type="datetime-local"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="itinerary-notes">Notes</label>
+                          <Textarea id="itinerary-notes" name="notes" />
+                        </div>
+                        <Button type="submit" className="save-button">
+                          Add to plan
+                        </Button>
+                      </form>
+                    </article>
+                    <section className="event-list" aria-label="Your plan">
+                      {itineraryItems.length ? (
+                        itineraryItems.map((item) => (
+                          <article className="panel event-record" key={item.id}>
+                            <div>
+                              <strong>{item.title}</strong>
+                              <br />
+                              <small>
+                                {item.startsAt
+                                  ? new Date(item.startsAt).toLocaleString()
+                                  : 'No time set'}{' '}
+                                ·{' '}
+                                {item.status === 'in_progress'
+                                  ? 'in progress'
+                                  : item.status}
+                              </small>
+                              {item.notes ? <p>{item.notes}</p> : null}
+                            </div>
+                            <div className="event-actions">
+                              {item.status !== 'visited' ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateItineraryStatus(item.id, 'visited')
+                                  }
+                                >
+                                  Mark visited
+                                </button>
+                              ) : null}
+                              {item.status !== 'skipped' &&
+                              item.status !== 'visited' ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateItineraryStatus(item.id, 'skipped')
+                                  }
+                                >
+                                  Skip
+                                </button>
+                              ) : null}
+                              {item.status !== 'cancelled' &&
+                              item.status !== 'visited' ? (
+                                <button
+                                  className="danger-link"
+                                  type="button"
+                                  onClick={() =>
+                                    updateItineraryStatus(
+                                      item.id,
+                                      'cancelled',
+                                    )
+                                  }
+                                >
+                                  Cancel
+                                </button>
+                              ) : null}
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <article className="panel empty-state large">
+                          <CalendarDays />
+                          <h2>Nothing planned yet</h2>
+                          <p>Add a booth visit or session on the left.</p>
+                        </article>
+                      )}
+                    </section>
+                  </div>
+                )
+              ) : null}
+              {activeView === 'visitor-memory' ? (
+                <div className="records-grid">
+                  <article className="panel records-panel">
+                    <h2>Memory</h2>
+                    <p className="field-help">
+                      Search your own captured contacts and conversation
+                      notes across every event you've attended.
+                    </p>
+                    <Input
+                      placeholder="Search by name, company or note"
+                      value={memoryQuery}
+                      onChange={(event) =>
+                        setMemoryQuery(event.currentTarget.value)
+                      }
+                    />
+                  </article>
+                  <article className="panel records-panel">
+                    {(() => {
+                      const query = memoryQuery.trim().toLowerCase();
+                      const matches = query
+                        ? capturedLeads.filter((lead) =>
+                            [lead.fullName, lead.company, lead.role, lead.note]
+                              .filter(Boolean)
+                              .join(' ')
+                              .toLowerCase()
+                              .includes(query),
+                          )
+                        : capturedLeads;
+                      if (!matches.length)
+                        return (
+                          <div className="empty-state">
+                            {query
+                              ? 'No evidence matches that search.'
+                              : 'Nothing captured yet.'}
+                          </div>
+                        );
+                      return matches.map((lead) => (
+                        <div className="record-row" key={lead.id}>
+                          <span className="initial-avatar">
+                            {lead.fullName
+                              .split(' ')
+                              .map((word) => word[0])
+                              .join('')
+                              .slice(0, 2)}
+                          </span>
+                          <span>
+                            <strong>{lead.fullName}</strong>
+                            <small>
+                              {lead.company}
+                              {lead.note ? ` · ${lead.note}` : ''}
+                            </small>
+                          </span>
+                        </div>
+                      ));
+                    })()}
+                  </article>
+                </div>
+              ) : null}
+              {activeView === 'visitor-home' ? (
+                <div className="visitor-home-layout">
+                  <article className="panel">
+                    <div className="settings-heading">
+                      <CalendarDays />
+                      <div>
+                        <h2>Attend an event</h2>
+                        <p>
+                          Join the event using the code an exhibitor shared
+                          with you, or create a private event of your own —
+                          it stays visible only to you.
+                        </p>
+                      </div>
+                    </div>
+                    <form
+                      className="lead-form"
+                      onSubmit={joinCanonicalEvent}
+                    >
+                      <div className="field-block">
+                        <label htmlFor="visitor-join-code">Event code</label>
+                        <Input
+                          id="visitor-join-code"
+                          name="code"
+                          placeholder="e.g. 8B860DFE"
+                        />
+                      </div>
+                      <Button type="submit" variant="outline">
+                        Join event
+                      </Button>
+                    </form>
+                    <div className="or">
+                      <span>or create a private event</span>
+                    </div>
+                    <form
+                      className="lead-form"
+                      onSubmit={createVisitorEvent}
+                    >
+                      <div className="field-block">
+                        <label htmlFor="visitor-event-name">
+                          Event name
+                        </label>
+                        <Input
+                          id="visitor-event-name"
+                          name="name"
+                          required
+                          placeholder="IndustrialTech Expo 2027"
+                        />
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="visitor-event-venue">Venue</label>
+                          <Input
+                            id="visitor-event-venue"
+                            name="venue"
+                            placeholder="Bombay Exhibition Centre"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="visitor-event-timezone">
+                            Timezone
+                          </label>
+                          <Input
+                            id="visitor-event-timezone"
+                            name="timezone"
+                            defaultValue={
+                              appContext?.workspace.timezone ||
+                              'Asia/Kolkata'
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="field-grid">
+                        <div className="field-block">
+                          <label htmlFor="visitor-event-starts">
+                            Starts
+                          </label>
+                          <Input
+                            id="visitor-event-starts"
+                            name="startsOn"
+                            type="date"
+                            required
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="visitor-event-ends">Ends</label>
+                          <Input
+                            id="visitor-event-ends"
+                            name="endsOn"
+                            type="date"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <Button type="submit" className="save-button">
+                        Create private event
+                      </Button>
+                    </form>
+                  </article>
+                  <section className="event-list" aria-label="Your events">
+                    <div className="event-list-heading">
+                      <div>
+                        <h2>Your events</h2>
+                        <p>The active event is used for new captures.</p>
+                      </div>
+                    </div>
+                    {events.length ? (
+                      events.map((item) => (
+                        <article
+                          className={`panel event-record ${item.id === activeEventId ? 'selected' : ''}`}
+                          key={item.id}
+                        >
+                          <div className="event-record-head">
+                            <span className="calendar-tile">
+                              <b>
+                                {new Date(
+                                  `${item.startsOn}T00:00:00`,
+                                ).toLocaleDateString('en', { day: '2-digit' })}
+                              </b>
+                              <small>
+                                {new Date(
+                                  `${item.startsOn}T00:00:00`,
+                                ).toLocaleDateString('en', {
+                                  month: 'short',
+                                })}
+                              </small>
+                            </span>
+                            <span>
+                              <strong>{item.name}</strong>
+                              <small>
+                                {item.venue || 'Venue pending'}
+                                {item.canonicalEventId
+                                  ? ' · linked to an exhibitor event'
+                                  : ' · private event'}
+                              </small>
+                            </span>
+                          </div>
+                          <div className="event-actions">
+                            <Button
+                              type="button"
+                              variant={
+                                item.id === activeEventId
+                                  ? 'default'
+                                  : 'outline'
+                              }
+                              onClick={() => selectEvent(item.id)}
+                            >
+                              {item.id === activeEventId ? (
+                                <>
+                                  <Check /> Active event
+                                </>
+                              ) : (
+                                'Use for capture'
+                              )}
+                            </Button>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <article className="panel empty-state large">
+                        <CalendarDays />
+                        <h2>No events yet</h2>
+                        <p>
+                          Join or create one to start capturing contacts.
+                        </p>
+                      </article>
+                    )}
+                  </section>
+                </div>
+              ) : null}
+              {activeView === 'visitor-capture' ? (
+                <VisitorCapture
+                  activeEvent={activeEvent}
+                  onSaved={() => void loadWorkspace()}
+                  setNotice={setNotice}
+                />
+              ) : null}
+              {activeView === 'visitor-contacts' ? (
+                <div className="records-grid">
+                  <article className="panel records-panel">
+                    <div className="event-list-heading">
+                      <h2>My contacts</h2>
+                      <label className="show-archived-toggle">
+                        <input
+                          type="checkbox"
+                          checked={showArchivedContacts}
+                          onChange={(event) =>
+                            setShowArchivedContacts(
+                              event.currentTarget.checked,
+                            )
+                          }
+                        />
+                        Show archived
+                      </label>
+                    </div>
+                    {(() => {
+                      const visible = capturedLeads.filter(
+                        (lead) =>
+                          showArchivedContacts ||
+                          lead.relationshipStatus !== 'archived',
+                      );
+                      if (!visible.length)
+                        return (
+                          <div className="empty-state">
+                            No contacts saved yet. Use Capture to add one.
+                          </div>
+                        );
+                      return visible.map((lead) => (
+                        <div className="contact-row-wrap" key={lead.id}>
+                          <button
+                            className="record-row"
+                            onClick={() => openVisitorContact(lead)}
+                          >
+                            <span className="initial-avatar">
+                              {lead.fullName
+                                .split(' ')
+                                .map((word) => word[0])
+                                .join('')
+                                .slice(0, 2)}
+                            </span>
+                            <span>
+                              <strong>{lead.fullName}</strong>
+                              <small>
+                                {lead.role || 'Role not added'} ·{' '}
+                                {lead.company}
+                              </small>
+                            </span>
+                            <small>{lead.email || lead.phone || ''}</small>
+                          </button>
+                          <button
+                            type="button"
+                            className="contact-archive-toggle"
+                            onClick={() =>
+                              setRelationshipStatus(
+                                lead,
+                                lead.relationshipStatus === 'archived'
+                                  ? 'active'
+                                  : 'archived',
+                              )
+                            }
+                          >
+                            {lead.relationshipStatus === 'archived'
+                              ? 'Reopen'
+                              : 'Archive'}
+                          </button>
+                        </div>
+                      ));
+                    })()}
+                  </article>
+                </div>
+              ) : null}
+              {activeView === 'visitor-followups' ? (
+                !reviewLead ? (
+                  <div className="records-grid">
+                    <article className="panel records-panel">
+                      <h2>Choose a contact to follow up with</h2>
+                      {capturedLeads.length ? (
+                        capturedLeads.map((lead) => (
+                          <button
+                            key={lead.id}
+                            className="record-row"
+                            onClick={() => openVisitorContact(lead)}
+                          >
+                            <span className="initial-avatar">
+                              {lead.fullName
+                                .split(' ')
+                                .map((word) => word[0])
+                                .join('')
+                                .slice(0, 2)}
+                            </span>
+                            <span>
+                              <strong>{lead.fullName}</strong>
+                              <small>
+                                {lead.role || 'Role not added'} ·{' '}
+                                {lead.company}
+                              </small>
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="empty-state">
+                          No contacts saved yet. Use Capture to add one.
+                        </div>
+                      )}
+                    </article>
+                  </div>
+                ) : (
+                  <div className="visitor-followup-detail">
+                    <article className="panel">
+                      <div className="settings-heading">
+                        <FileText />
+                        <div>
+                          <h2>{reviewLead.fullName}</h2>
+                          <p>{reviewLead.company}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="visitor-back-link"
+                        onClick={() => setReviewLead(null)}
+                      >
+                        ← Choose a different contact
+                      </button>
+                      {analysisError ? (
+                        <p className="form-error" role="alert">
+                          {analysisError}
+                        </p>
+                      ) : null}
+                      <div className="field-grid">
+                        <div>
+                          <small>
+                            Email permission:{' '}
+                            {reviewLead.emailConsentStatus || 'not recorded'}
+                          </small>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              setContactPermission(
+                                'email',
+                                reviewLead.emailConsentStatus === 'granted'
+                                  ? 'withdrawn'
+                                  : 'granted',
+                              )
+                            }
+                          >
+                            {reviewLead.emailConsentStatus === 'granted'
+                              ? 'Withdraw email permission'
+                              : 'Record email permission'}
+                          </Button>
+                        </div>
+                        <div>
+                          <small>
+                            WhatsApp permission:{' '}
+                            {reviewLead.whatsappConsentStatus ||
+                              'not recorded'}
+                          </small>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              setContactPermission(
+                                'whatsapp',
+                                reviewLead.whatsappConsentStatus === 'granted'
+                                  ? 'withdrawn'
+                                  : 'granted',
+                              )
+                            }
+                          >
+                            {reviewLead.whatsappConsentStatus === 'granted'
+                              ? 'Withdraw WhatsApp permission'
+                              : 'Record WhatsApp permission'}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="followup-buttons">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => generateFollowup('email')}
+                          disabled={Boolean(drafting)}
+                        >
+                          {drafting === 'email' ? 'Drafting…' : 'Draft email'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => generateFollowup('whatsapp')}
+                          disabled={Boolean(drafting)}
+                        >
+                          {drafting === 'whatsapp'
+                            ? 'Drafting…'
+                            : 'Draft WhatsApp'}
+                        </Button>
+                      </div>
+                    </article>
+                    {followups.length ? (
+                      <section className="followup-list">
+                        {followups.map((draft) => (
+                          <article className="panel followup-card" key={draft.id}>
+                            <span>
+                              <strong>
+                                {draft.channel === 'email'
+                                  ? 'Email'
+                                  : 'WhatsApp'}
+                              </strong>
+                              <small>
+                                To {draft.recipient} ·{' '}
+                                {draft.status === 'handed_off'
+                                  ? 'Handed off'
+                                  : draft.status === 'approved'
+                                    ? 'Approved'
+                                    : 'Draft'}{' '}
+                                · v{draft.version}
+                              </small>
+                            </span>
+                            <form
+                              className="lead-form"
+                              onSubmit={(event) => editFollowup(event, draft)}
+                            >
+                              {draft.channel === 'email' ? (
+                                <Input
+                                  name="subject"
+                                  defaultValue={draft.subject || ''}
+                                  aria-label="Follow-up subject"
+                                />
+                              ) : (
+                                <input type="hidden" name="subject" value="" />
+                              )}
+                              <Textarea
+                                name="message"
+                                defaultValue={draft.body}
+                                aria-label="Follow-up message"
+                                required
+                              />
+                              <div>
+                                <Button type="submit" variant="outline">
+                                  Save edits
+                                </Button>
+                                {draft.status === 'approved' ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      openApprovedFollowup(draft)
+                                    }
+                                  >
+                                    Open{' '}
+                                    {draft.channel === 'email'
+                                      ? 'email'
+                                      : 'WhatsApp'}
+                                  </Button>
+                                ) : draft.status === 'handed_off' ? (
+                                  <span className="handoff-note">
+                                    <Check size={13} /> Handed off
+                                    {draft.handedOffAt
+                                      ? ` · ${new Date(draft.handedOffAt).toLocaleString()}`
+                                      : ''}{' '}
+                                    — not confirmed sent
+                                  </span>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  onClick={() => approveFollowup(draft)}
+                                  disabled={draft.status !== 'draft'}
+                                >
+                                  {draft.status === 'approved' ? (
+                                    <>
+                                      <Check /> Approved
+                                    </>
+                                  ) : draft.status === 'handed_off' ? (
+                                    <>
+                                      <Check /> Handed off
+                                    </>
+                                  ) : (
+                                    'Approve draft'
+                                  )}
+                                </Button>
+                              </div>
+                            </form>
+                          </article>
+                        ))}
+                      </section>
+                    ) : null}
+                  </div>
+                )
               ) : null}
             </section>
           )}

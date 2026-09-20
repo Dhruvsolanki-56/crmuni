@@ -43,6 +43,7 @@ export type WorkspaceContext = {
     currency: string;
     plan: string;
     status: string;
+    kind: string;
   };
   role: string;
 };
@@ -68,7 +69,7 @@ export async function requireWorkspace(
   const db = database();
   const requested = request.headers.get('x-revenue-workspace-id');
   let membership = await db
-    .prepare(`SELECT m.id AS membershipId, m.role, w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status
+    .prepare(`SELECT m.id AS membershipId, m.role, w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, w.kind
     FROM memberships m JOIN workspaces w ON w.id = m.workspace_id
     WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ${requested ? 'AND w.id = ?' : ''}
     ORDER BY m.created_at ASC LIMIT 1`)
@@ -80,7 +81,7 @@ export async function requireWorkspace(
   if (!membership) {
     const grant = await db
       .prepare(
-        `SELECT g.id AS grantId,g.last_access_at AS lastAccessAt,w.id,w.name,w.slug,w.timezone,w.currency,w.plan,w.status FROM support_access_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.support_user_id=? AND g.status='active' AND g.expires_at>? AND w.status='active' ${requested ? 'AND w.id=?' : ''} ORDER BY g.created_at ASC LIMIT 1`,
+        `SELECT g.id AS grantId,g.last_access_at AS lastAccessAt,w.id,w.name,w.slug,w.timezone,w.currency,w.plan,w.status,w.kind FROM support_access_grants g JOIN workspaces w ON w.id=g.workspace_id WHERE g.support_user_id=? AND g.status='active' AND g.expires_at>? AND w.status='active' ${requested ? 'AND w.id=?' : ''} ORDER BY g.created_at ASC LIMIT 1`,
       )
       .bind(user.id, Date.now(), ...(requested ? [requested] : []))
       .first<Record<string, string | number | null>>();
@@ -100,6 +101,7 @@ export async function requireWorkspace(
         currency: String(grant.currency),
         plan: String(grant.plan),
         status: String(grant.status),
+        kind: String(grant.kind),
       };
     }
   }
@@ -122,7 +124,7 @@ export async function requireWorkspace(
     await db.batch([
       db
         .prepare(
-          `INSERT INTO workspaces (id, name, slug, timezone, currency, plan, status, created_by, created_at, updated_at) VALUES (?, ?, ?, 'UTC', 'USD', 'trial', 'active', ?, ?, ?)`,
+          `INSERT INTO workspaces (id, name, slug, timezone, currency, plan, status, kind, created_by, created_at, updated_at) VALUES (?, ?, ?, 'UTC', 'USD', 'trial', 'active', 'exhibitor', ?, ?, ?)`,
         )
         .bind(workspaceId, workspaceName, slug, user.id, now, now),
       db
@@ -141,6 +143,7 @@ export async function requireWorkspace(
       currency: 'USD',
       plan: 'trial',
       status: 'active',
+      kind: 'exhibitor',
     };
   }
   const context = {
@@ -155,6 +158,7 @@ export async function requireWorkspace(
       currency: membership.currency,
       plan: membership.plan,
       status: membership.status,
+      kind: membership.kind,
     },
   };
   if (

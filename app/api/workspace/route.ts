@@ -50,7 +50,8 @@ export async function GET(request: Request) {
       l.created_at AS createdAt, i.note, t.title AS nextAction, t.due_date AS dueDate, q.score, q.rationale AS scoreRationale,
       a.id AS assetId, a.kind AS captureKind, a.processing_status AS captureStatus, a.extracted_json AS extractedJson,d.target_lead_id AS duplicateLeadId,dl.full_name AS duplicateLeadName,dl.company AS duplicateLeadCompany,
       (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='email') AS emailConsentStatus,
-      (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='whatsapp') AS whatsappConsentStatus
+      (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='whatsapp') AS whatsappConsentStatus,
+      l.custom_fields_json AS customFieldsJson, l.relationship_status AS relationshipStatus
       FROM leads l
       LEFT JOIN account_stakeholders s ON s.lead_id=l.id AND s.workspace_id=l.workspace_id
       LEFT JOIN memberships om ON om.workspace_id=l.workspace_id AND om.user_id=l.owner_id
@@ -90,7 +91,18 @@ export async function GET(request: Request) {
         .bind(context.workspace.id, ...mergeAccess.bindings)
         .all(),
     ]);
-  const leads = leadRows.results;
+  const leads: Record<string, unknown>[] = leadRows.results.map((row) => {
+    const item = row as Record<string, unknown>;
+    let customFields: Record<string, string> = {};
+    try {
+      customFields = item.customFieldsJson
+        ? JSON.parse(String(item.customFieldsJson))
+        : {};
+    } catch {
+      customFields = {};
+    }
+    return { ...item, customFieldsJson: undefined, customFields };
+  });
   const linkedNames = new Set(
     accountRows.results.map((item) => String(item.normalizedName)),
   );
@@ -469,6 +481,28 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   }
+  if (action === 'set_relationship_status') {
+    const id = clean(body.id, 80);
+    const status = clean(body.status, 20);
+    if (!id || !['active', 'archived'].includes(status))
+      return Response.json(
+        { error: 'A contact and a valid status are required.' },
+        { status: 400 },
+      );
+    await requireLeadAccess(context, id);
+    const result = await database()
+      .prepare(
+        `UPDATE leads SET relationship_status=?,updated_at=? WHERE id=? AND workspace_id=?`,
+      )
+      .bind(status, Date.now(), id, context.workspace.id)
+      .run();
+    if (!result.meta.changes)
+      return Response.json({ error: 'Contact not found.' }, { status: 404 });
+    await auditStatement(context, 'lead.relationship_status_changed', 'lead', id, {
+      status,
+    }).run();
+    return Response.json({ ok: true, status });
+  }
   if (action === 'update_lead') {
     requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
     const id = clean(body.id, 80);
@@ -477,6 +511,14 @@ export async function POST(request: Request) {
     const role = clean(body.role, 120);
     const email = clean(body.email, 254).toLowerCase();
     const phone = clean(body.phone, 40);
+    const customFields: Record<string, string> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (!key.startsWith('custom:') || typeof value !== 'string') continue;
+      if (Object.keys(customFields).length >= 30) break;
+      const label = key.slice('custom:'.length).trim().slice(0, 80);
+      const trimmed = value.trim().slice(0, 500);
+      if (label && trimmed) customFields[label] = trimmed;
+    }
     if (!id || !fullName || !company)
       return Response.json(
         { error: 'Lead, full name and company are required.' },
@@ -505,7 +547,7 @@ export async function POST(request: Request) {
         ),
       database()
         .prepare(
-          `UPDATE leads SET account_id=?,full_name=?,company=?,role=NULLIF(?,''),email=NULLIF(?,''),phone=NULLIF(?,''),updated_at=? WHERE id=? AND workspace_id=?`,
+          `UPDATE leads SET account_id=?,full_name=?,company=?,role=NULLIF(?,''),email=NULLIF(?,''),phone=NULLIF(?,''),custom_fields_json=CASE WHEN ?=1 THEN ? ELSE custom_fields_json END,updated_at=? WHERE id=? AND workspace_id=?`,
         )
         .bind(
           account.id,
@@ -514,6 +556,8 @@ export async function POST(request: Request) {
           role,
           email,
           phone,
+          Object.keys(customFields).length ? 1 : 0,
+          JSON.stringify(customFields),
           now,
           id,
           context.workspace.id,
@@ -1099,10 +1143,10 @@ export async function POST(request: Request) {
     }
     const current = await db
       .prepare(
-        `SELECT owner_id AS ownerId FROM leads WHERE id=? AND workspace_id=?`,
+        `SELECT owner_id AS ownerId, full_name AS fullName FROM leads WHERE id=? AND workspace_id=?`,
       )
       .bind(leadId, context.workspace.id)
-      .first<{ ownerId: string }>();
+      .first<{ ownerId: string; fullName: string }>();
     if (current?.ownerId === ownerId)
       return Response.json({ ok: true, duplicate: true });
     const now = Date.now();
@@ -1124,6 +1168,20 @@ export async function POST(request: Request) {
           ownerId,
           reason,
           context.user.id,
+          now,
+        ),
+      db
+        .prepare(
+          `INSERT INTO in_app_notifications (id,workspace_id,recipient_user_id,kind,title,body,entity_type,entity_id,dedupe_key,created_at) VALUES (?,?,?,'lead_assigned',?,?,'lead',?,?,?) ON CONFLICT (workspace_id,dedupe_key) DO NOTHING`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          context.workspace.id,
+          ownerId,
+          'New lead assigned to you',
+          `${current?.fullName || 'A lead'} was assigned to you.`,
+          leadId,
+          `lead_assigned:${leadId}:${now}`,
           now,
         ),
       auditStatement(context, 'lead.assigned', 'lead', leadId, {

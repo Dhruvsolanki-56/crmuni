@@ -286,7 +286,7 @@ export async function GET(request: Request) {
   const access = eventAccessClause(context, 'e.id');
   const rows = await database()
     .prepare(
-      `SELECT e.id,e.name,e.venue,e.hall,e.booth,e.starts_on AS startsOn,e.ends_on AS endsOn,e.timezone,e.budget,e.attribution_window_days AS attributionWindowDays,e.gross_margin_bps AS grossMarginBps,e.objective,e.products_json AS products,e.target_accounts_json AS targetAccounts,e.qualification_questions_json AS qualificationQuestions,e.team_member_ids_json AS teamMemberIds,e.lead_routing_rule AS leadRoutingRule,e.followup_sla_hours AS followupSlaHours,e.daily_lead_target AS dailyLeadTarget,e.badge_provider AS badgeProvider,e.qr_campaign_code AS qrCampaignCode,e.config_version AS configVersion,e.status,r.version AS readinessVersion,r.status AS readinessStatus,r.checks_json AS readinessChecks,r.config_json AS deviceConfig,r.config_hash AS configHash,r.assessed_at AS assessedAt,r.activated_at AS activatedAt FROM events e LEFT JOIN event_readiness_snapshots r ON r.workspace_id=e.workspace_id AND r.event_id=e.id AND r.version=(SELECT MAX(latest.version) FROM event_readiness_snapshots latest WHERE latest.workspace_id=e.workspace_id AND latest.event_id=e.id) WHERE e.workspace_id=?${access.sql} ORDER BY e.starts_on DESC`,
+      `SELECT e.id,e.name,e.venue,e.hall,e.booth,e.starts_on AS startsOn,e.ends_on AS endsOn,e.timezone,e.budget,e.attribution_window_days AS attributionWindowDays,e.gross_margin_bps AS grossMarginBps,e.objective,e.products_json AS products,e.target_accounts_json AS targetAccounts,e.qualification_questions_json AS qualificationQuestions,e.lead_field_schema_json AS leadFieldSchema,e.team_member_ids_json AS teamMemberIds,e.lead_routing_rule AS leadRoutingRule,e.followup_sla_hours AS followupSlaHours,e.daily_lead_target AS dailyLeadTarget,e.badge_provider AS badgeProvider,e.qr_campaign_code AS qrCampaignCode,e.canonical_event_id AS canonicalEventId,e.directory_visibility AS directoryVisibility,e.config_version AS configVersion,e.status,r.version AS readinessVersion,r.status AS readinessStatus,r.checks_json AS readinessChecks,r.config_json AS deviceConfig,r.config_hash AS configHash,r.assessed_at AS assessedAt,r.activated_at AS activatedAt FROM events e LEFT JOIN event_readiness_snapshots r ON r.workspace_id=e.workspace_id AND r.event_id=e.id AND r.version=(SELECT MAX(latest.version) FROM event_readiness_snapshots latest WHERE latest.workspace_id=e.workspace_id AND latest.event_id=e.id) WHERE e.workspace_id=?${access.sql} ORDER BY e.starts_on DESC`,
     )
     .bind(context.workspace.id, ...access.bindings)
     .all();
@@ -296,6 +296,7 @@ export async function GET(request: Request) {
       products: parse(item.products),
       targetAccounts: parse(item.targetAccounts),
       qualificationQuestions: parse(item.qualificationQuestions),
+      leadFieldSchema: parse(item.leadFieldSchema),
       teamMemberIds: parse(item.teamMemberIds),
       readinessChecks: parse(item.readinessChecks),
       deviceConfig: item.deviceConfig ? parse(item.deviceConfig) : null,
@@ -315,6 +316,134 @@ export async function POST(request: Request) {
   const action = clean(body.action, 30);
   const db = database();
   const now = Date.now();
+  if (action === 'create_visitor_event') {
+    if (context.workspace.kind !== 'visitor')
+      return Response.json(
+        { error: 'Only a personal visitor workspace can join events this way.' },
+        { status: 403 },
+      );
+    const name = clean(body.name, 180);
+    const startsOn = date(body.startsOn);
+    const endsOn = date(body.endsOn);
+    if (!name || !startsOn || !endsOn || endsOn < startsOn)
+      return Response.json(
+        { error: 'Name and a valid date range are required.' },
+        { status: 400 },
+      );
+    const id = crypto.randomUUID();
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO events (id,workspace_id,name,venue,starts_on,ends_on,timezone,status,qr_campaign_code,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'active',?,?,?,?)`,
+        )
+        .bind(
+          id,
+          context.workspace.id,
+          name,
+          clean(body.venue, 180) || null,
+          startsOn,
+          endsOn,
+          clean(body.timezone, 80) || context.workspace.timezone,
+          crypto.randomUUID().slice(0, 8).toUpperCase(),
+          context.user.id,
+          now,
+          now,
+        ),
+      auditStatement(context, 'visitor_event.created', 'event', id),
+    ]);
+    return Response.json({ id }, { status: 201 });
+  }
+  if (action === 'join_canonical_event') {
+    if (context.workspace.kind !== 'visitor')
+      return Response.json(
+        { error: 'Only a personal visitor workspace can join events this way.' },
+        { status: 403 },
+      );
+    const code = clean(body.code, 20).toUpperCase();
+    if (!code)
+      return Response.json(
+        { error: 'Enter the event code.' },
+        { status: 400 },
+      );
+    // Narrow, read-only cross-tenant lookup: only public event facts, never
+    // the owning exhibitor's leads, team, or configuration.
+    const canonical = await db
+      .prepare(
+        `SELECT id,name,venue,starts_on AS startsOn,ends_on AS endsOn,timezone FROM events WHERE qr_campaign_code=? AND status='active'`,
+      )
+      .bind(code)
+      .first<{
+        id: string;
+        name: string;
+        venue: string | null;
+        startsOn: string;
+        endsOn: string;
+        timezone: string;
+      }>();
+    if (!canonical)
+      return Response.json(
+        { error: 'No active event found for that code.' },
+        { status: 404 },
+      );
+    const existing = await db
+      .prepare(
+        `SELECT id FROM events WHERE workspace_id=? AND canonical_event_id=?`,
+      )
+      .bind(context.workspace.id, canonical.id)
+      .first<{ id: string }>();
+    if (existing) return Response.json({ id: existing.id, duplicate: true });
+    const id = crypto.randomUUID();
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO events (id,workspace_id,name,venue,starts_on,ends_on,timezone,status,qr_campaign_code,canonical_event_id,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'active',?,?,?,?,?)`,
+        )
+        .bind(
+          id,
+          context.workspace.id,
+          canonical.name,
+          canonical.venue,
+          canonical.startsOn,
+          canonical.endsOn,
+          canonical.timezone,
+          crypto.randomUUID().slice(0, 8).toUpperCase(),
+          canonical.id,
+          context.user.id,
+          now,
+          now,
+        ),
+      auditStatement(context, 'visitor_event.joined', 'event', id, {
+        canonicalEventId: canonical.id,
+      }),
+    ]);
+    return Response.json({ id }, { status: 201 });
+  }
+  if (action === 'set_directory_visibility') {
+    const id = clean(body.id, 80);
+    const visibility = clean(body.visibility, 20);
+    if (!['private', 'published'].includes(visibility))
+      return Response.json(
+        { error: 'Visibility must be private or published.' },
+        { status: 400 },
+      );
+    const event = await requireEventAccess(context, id);
+    if (visibility === 'published' && event.status !== 'active')
+      return Response.json(
+        { error: 'Activate the event before publishing it to the directory.' },
+        { status: 409 },
+      );
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE events SET directory_visibility=? WHERE id=? AND workspace_id=?`,
+        )
+        .bind(visibility, id, context.workspace.id),
+      auditStatement(context, 'event.directory_visibility_changed', 'event', id, {
+        visibility,
+      }),
+    ]);
+    return Response.json({ ok: true, visibility });
+  }
   if (action === 'assess_readiness') {
     const id = clean(body.id, 80);
     await requireEventAccess(context, id);
@@ -466,7 +595,7 @@ export async function POST(request: Request) {
     await db.batch([
       db
         .prepare(
-          `INSERT INTO events (id,workspace_id,name,venue,hall,booth,starts_on,ends_on,timezone,budget,attribution_window_days,gross_margin_bps,objective,products_json,target_accounts_json,qualification_questions_json,team_member_ids_json,lead_routing_rule,followup_sla_hours,daily_lead_target,badge_provider,qr_campaign_code,status,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,?,?)`,
+          `INSERT INTO events (id,workspace_id,name,venue,hall,booth,starts_on,ends_on,timezone,budget,attribution_window_days,gross_margin_bps,objective,products_json,target_accounts_json,qualification_questions_json,lead_field_schema_json,team_member_ids_json,lead_routing_rule,followup_sla_hours,daily_lead_target,badge_provider,qr_campaign_code,status,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,?,?)`,
         )
         .bind(
           id,
@@ -485,6 +614,7 @@ export async function POST(request: Request) {
           source.products_json,
           source.target_accounts_json,
           source.qualification_questions_json,
+          source.lead_field_schema_json,
           source.team_member_ids_json,
           source.lead_routing_rule,
           source.followup_sla_hours,
@@ -549,6 +679,7 @@ export async function POST(request: Request) {
     JSON.stringify(list(body.products)),
     JSON.stringify(list(body.targetAccounts)),
     JSON.stringify(list(body.qualificationQuestions)),
+    JSON.stringify(list(body.leadFieldSchema)),
     JSON.stringify(persistedUserIds),
     clean(body.leadRoutingRule, 40) || 'capturer',
     Math.max(1, Math.min(720, Number(body.followupSlaHours) || 24)),
@@ -559,7 +690,7 @@ export async function POST(request: Request) {
     await db.batch([
       db
         .prepare(
-          `INSERT INTO events (id,workspace_id,name,venue,hall,booth,starts_on,ends_on,timezone,budget,attribution_window_days,gross_margin_bps,objective,products_json,target_accounts_json,qualification_questions_json,team_member_ids_json,lead_routing_rule,followup_sla_hours,daily_lead_target,badge_provider,qr_campaign_code,status,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,?,?)`,
+          `INSERT INTO events (id,workspace_id,name,venue,hall,booth,starts_on,ends_on,timezone,budget,attribution_window_days,gross_margin_bps,objective,products_json,target_accounts_json,qualification_questions_json,lead_field_schema_json,team_member_ids_json,lead_routing_rule,followup_sla_hours,daily_lead_target,badge_provider,qr_campaign_code,status,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,?,?)`,
         )
         .bind(
           id,
@@ -582,7 +713,7 @@ export async function POST(request: Request) {
   } else {
     const result = await db
       .prepare(
-        `UPDATE events SET name=?,venue=?,hall=?,booth=?,starts_on=?,ends_on=?,timezone=?,budget=?,attribution_window_days=?,gross_margin_bps=?,objective=?,products_json=?,target_accounts_json=?,qualification_questions_json=?,team_member_ids_json=?,lead_routing_rule=?,followup_sla_hours=?,daily_lead_target=?,badge_provider=?,config_version=config_version+1,status='draft',updated_at=? WHERE id=? AND workspace_id=?`,
+        `UPDATE events SET name=?,venue=?,hall=?,booth=?,starts_on=?,ends_on=?,timezone=?,budget=?,attribution_window_days=?,gross_margin_bps=?,objective=?,products_json=?,target_accounts_json=?,qualification_questions_json=?,lead_field_schema_json=?,team_member_ids_json=?,lead_routing_rule=?,followup_sla_hours=?,daily_lead_target=?,badge_provider=?,config_version=config_version+1,status='draft',updated_at=? WHERE id=? AND workspace_id=?`,
       )
       .bind(...values, now, id, context.workspace.id)
       .run();

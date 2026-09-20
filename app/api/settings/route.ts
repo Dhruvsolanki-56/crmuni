@@ -158,7 +158,7 @@ export async function GET(request: Request) {
           .all()
       : db
           .prepare(
-            `SELECT w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, m.role FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ORDER BY m.created_at ASC`,
+            `SELECT w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, w.kind, m.role FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' ORDER BY m.created_at ASC`,
           )
           .bind(context.user.id)
           .all(),
@@ -669,6 +669,73 @@ export async function POST(request: Request) {
     return Response.json({
       workspace: { ...context.workspace, name, timezone, currency },
     });
+  }
+  if (action === 'ensure_visitor_workspace') {
+    const existing = await db
+      .prepare(
+        `SELECT w.id, w.name, w.slug, w.timezone, w.currency, w.plan, w.status, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.status = 'active' AND w.status = 'active' AND w.kind = 'visitor' LIMIT 1`,
+      )
+      .bind(context.user.id)
+      .first<Record<string, string>>();
+    if (existing) return Response.json({ workspace: existing });
+    const id = crypto.randomUUID();
+    const label =
+      context.user.email
+        .split('@')[0]
+        .replace(/[._-]+/g, ' ')
+        .trim()
+        .slice(0, 60) || 'My';
+    const name = `${label}'s visitor workspace`.slice(0, 120);
+    const slug = `visitor-${id.slice(0, 8)}`;
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO workspaces (id, name, slug, timezone, currency, plan, status, kind, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'trial', 'active', 'visitor', ?, ?, ?)`,
+        )
+        .bind(
+          id,
+          name,
+          slug,
+          context.workspace.timezone,
+          context.workspace.currency,
+          context.user.id,
+          now,
+          now,
+        ),
+      db
+        .prepare(
+          `INSERT INTO memberships (id, workspace_id, user_id, email, display_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'owner', 'active', ?, ?)`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          id,
+          context.user.id,
+          context.user.email,
+          context.user.email.split('@')[0],
+          now,
+          now,
+        ),
+      db
+        .prepare(
+          `INSERT INTO audit_events (id, workspace_id, actor_id, action, entity_type, entity_id, created_at) VALUES (?, ?, ?, 'workspace.created', 'workspace', ?, ?)`,
+        )
+        .bind(crypto.randomUUID(), id, context.user.id, id, now),
+    ]);
+    return Response.json(
+      {
+        workspace: {
+          id,
+          name,
+          slug,
+          timezone: context.workspace.timezone,
+          currency: context.workspace.currency,
+          plan: 'trial',
+          status: 'active',
+          kind: 'visitor',
+        },
+      },
+      { status: 201 },
+    );
   }
   if (action === 'create_workspace') {
     const name = clean(body.name, 120);

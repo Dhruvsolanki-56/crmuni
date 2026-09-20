@@ -7,16 +7,18 @@ export type ContactCandidates = {
 };
 
 const roleWords =
-  /\b(owner|founder|co-founder|chief|ceo|cfo|cto|coo|president|vice president|vp|director|manager|head|lead|engineer|consultant|sales|marketing|procurement|operations|officer|executive|specialist)\b/i;
+  /\b(owner|founder|co-founder|chief|ceo|cfo|cto|coo|president|chairman|vice president|vp|director|manager|head|lead|engineer|consultant|sales|marketing|procurement|operations|officer|executive|specialist|designer|architect|photographer|artist|analyst|coordinator|advisor|adviser|freelancer|realtor|agent|broker|planner)\b/i;
 const companyWords =
-  /\b(inc|incorporated|llc|ltd|limited|corp|corporation|company|co\.?|group|industries|industry|systems|solutions|technologies|technology|pharma|labs|automation|engineering)\b/i;
+  /\b(inc|incorporated|llc|ltd|limited|corp|corporation|company|co\.?|group|industries|industry|systems|solutions|technologies|technology|pharma|labs|automation|engineering|studio|studios|design|designs|associates|partners|enterprises|ventures)\b/i;
 const rejectNameWords =
-  /\b(email|phone|mobile|website|www|address|scan|contact|company|limited|llc|inc|director|manager|head|sales|marketing|procurement|operations|visit|booth)\b/i;
+  /\b(email|phone|mobile|tel|fax|website|www|address|scan|contact|company|limited|llc|inc|director|manager|head|sales|marketing|procurement|operations|visit|booth|follow|instagram|facebook|twitter|linkedin)\b/i;
+const socialHandleWords = /\B@\w+/;
 
 function cleanLine(value: string) {
   return value
     .replace(/[|•·]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/^[^\p{L}\p{N}@+]+|[^\p{L}\p{N}]+$/gu, '')
     .trim();
 }
 
@@ -33,42 +35,62 @@ export function extractContactCandidates(text: string): ContactCandidates {
     .split(/\r?\n/)
     .map(cleanLine)
     .filter((line) => line.length > 1);
+  const emailPattern =
+    /[A-Z0-9._%+-]+\s*[@]\s*[A-Z0-9.-]+\s*\.\s*[A-Z]{2,}/gi;
+  const emailCandidates = normalized.match(emailPattern) || [];
   const email =
-    normalized
-      .match(/[A-Z0-9._%+-]+\s*@\s*[A-Z0-9.-]+\s*\.\s*[A-Z]{2,}/i)?.[0]
-      ?.replace(/\s/g, '')
-      .toLowerCase() || '';
+    emailCandidates
+      .map((candidate) => candidate.replace(/\s/g, '').toLowerCase())
+      .find((candidate) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(candidate)) ||
+    '';
   const phoneCandidates = normalized.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) || [];
   const phone =
     phoneCandidates
       .map((candidate) => cleanLine(candidate))
       .find((candidate) => candidate.replace(/\D/g, '').length >= 8) || '';
-  const role = lines.find((line) => roleWords.test(line)) || '';
+  const isContactDetail = (line: string) =>
+    line.includes('@') ||
+    /https?:|www\.|\d{3}/i.test(line) ||
+    socialHandleWords.test(line);
+  const role =
+    lines.find((line) => !isContactDetail(line) && roleWords.test(line)) ||
+    '';
   const company =
     lines.find(
       (line) =>
-        line !== role &&
-        companyWords.test(line) &&
-        !line.includes('@') &&
-        !/https?:|www\./i.test(line),
+        line !== role && !isContactDetail(line) && companyWords.test(line),
     ) || '';
+  const isNameShaped = (line: string, maxWords: number) => {
+    const words = line.split(' ').filter(Boolean);
+    return (
+      words.length >= 1 &&
+      words.length <= maxWords &&
+      words.every((word) => /^[\p{L}][\p{L}.'-]*$/u.test(word))
+    );
+  };
+  const isNameCandidate = (line: string) =>
+    line !== role &&
+    line !== company &&
+    !isContactDetail(line) &&
+    !rejectNameWords.test(line);
   const fullName =
-    lines.find((line) => {
-      if (
-        line === role ||
-        line === company ||
-        line.includes('@') ||
-        /https?:|www\.|\d{3}/i.test(line) ||
-        rejectNameWords.test(line)
-      )
-        return false;
-      const words = line.split(' ').filter(Boolean);
-      return (
-        words.length >= 2 &&
-        words.length <= 5 &&
-        words.every((word) => /^[\p{L}.'-]+$/u.test(word))
-      );
-    }) || '';
+    lines.find(
+      (line) =>
+        isNameCandidate(line) &&
+        (() => {
+          const words = line.split(' ').filter(Boolean);
+          return words.length >= 2 && isNameShaped(line, 5);
+        })(),
+    ) ||
+    // Fall back to a single well-formed capitalized line (common when OCR
+    // merges a first/last name onto separate lines or drops a space).
+    lines.find(
+      (line) =>
+        isNameCandidate(line) &&
+        isNameShaped(line, 4) &&
+        /[\p{Lu}]/u.test(line[0] ?? ''),
+    ) ||
+    '';
 
   return {
     fullName: titleCase(fullName).slice(0, 120),

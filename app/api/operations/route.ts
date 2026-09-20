@@ -35,9 +35,9 @@ export async function GET(request: Request) {
       .all(),
     db
       .prepare(
-        `SELECT id,kind,title,body,entity_type AS entityType,entity_id AS entityId,read_at AS readAt,created_at AS createdAt FROM in_app_notifications WHERE workspace_id=? ORDER BY read_at IS NULL DESC,created_at DESC LIMIT 50`,
+        `SELECT id,kind,title,body,entity_type AS entityType,entity_id AS entityId,read_at AS readAt,created_at AS createdAt FROM in_app_notifications WHERE workspace_id=? AND (recipient_user_id IS NULL OR recipient_user_id=?) ORDER BY read_at IS NULL DESC,created_at DESC LIMIT 50`,
       )
-      .bind(context.workspace.id)
+      .bind(context.workspace.id, context.user.id)
       .all(),
     db
       .prepare(
@@ -145,9 +145,9 @@ export async function POST(request: Request) {
     const id = clean(body.id, 80);
     const result = await db
       .prepare(
-        `UPDATE in_app_notifications SET read_at=? WHERE id=? AND workspace_id=? AND read_at IS NULL`,
+        `UPDATE in_app_notifications SET read_at=? WHERE id=? AND workspace_id=? AND (recipient_user_id IS NULL OR recipient_user_id=?) AND read_at IS NULL`,
       )
-      .bind(now, id, context.workspace.id)
+      .bind(now, id, context.workspace.id, context.user.id)
       .run();
     if (!result.meta.changes)
       return Response.json(

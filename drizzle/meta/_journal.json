@@ -274,6 +274,55 @@
       "when": 1789863133353,
       "tag": "0038_review_capture_extraction",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1789863999999,
+      "tag": "0039_hand_off_followups",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1789864999999,
+      "tag": "0040_lead_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1789865999999,
+      "tag": "0041_event_lead_field_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1789866999999,
+      "tag": "0042_workspace_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1789867999999,
+      "tag": "0043_event_canonical_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1789868999999,
+      "tag": "0044_directory_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1789869999999,
+      "tag": "0045_visitor_itinerary_and_relationships",
+      "breakpoints": true
     }
   ]
 }

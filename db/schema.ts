@@ -16,6 +16,7 @@ export const workspaces = sqliteTable(
     currency: text('currency').notNull().default('INR'),
     plan: text('plan').notNull().default('trial'),
     status: text('status').notNull().default('active'),
+    kind: text('kind').notNull().default('exhibitor'),
     createdBy: text('created_by').notNull(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
@@ -205,6 +206,10 @@ export const leads = sqliteTable(
     qualificationReason: text('qualification_reason'),
     qualificationUpdatedBy: text('qualification_updated_by'),
     qualificationUpdatedAt: integer('qualification_updated_at'),
+    customFieldsJson: text('custom_fields_json').notNull().default('{}'),
+    relationshipStatus: text('relationship_status')
+      .notNull()
+      .default('active'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
@@ -571,6 +576,7 @@ export const communicationDrafts = sqliteTable(
     version: integer('version').notNull().default(1),
     editedBy: text('edited_by'),
     updatedAt: integer('updated_at').notNull().default(0),
+    handedOffAt: integer('handed_off_at'),
   },
   (table) => [
     index('idx_communication_drafts_lead').on(
@@ -1211,6 +1217,9 @@ export const events = sqliteTable(
     qualificationQuestionsJson: text('qualification_questions_json')
       .notNull()
       .default('[]'),
+    leadFieldSchemaJson: text('lead_field_schema_json')
+      .notNull()
+      .default('[]'),
     teamMemberIdsJson: text('team_member_ids_json').notNull().default('[]'),
     leadRoutingRule: text('lead_routing_rule').notNull().default('capturer'),
     followupSlaHours: integer('followup_sla_hours').notNull().default(24),
@@ -1219,6 +1228,10 @@ export const events = sqliteTable(
     qrCampaignCode: text('qr_campaign_code'),
     configVersion: integer('config_version').notNull().default(1),
     status: text('status').notNull().default('draft'),
+    canonicalEventId: text('canonical_event_id'),
+    directoryVisibility: text('directory_visibility')
+      .notNull()
+      .default('private'),
     createdBy: text('created_by').notNull(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
@@ -1697,6 +1710,61 @@ export const leadAssignmentHistory = sqliteTable(
       table.workspaceId,
       table.leadId,
       table.createdAt,
+    ),
+  ],
+);
+
+export const leadComments = sqliteTable(
+  'lead_comments',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    leadId: text('lead_id')
+      .notNull()
+      .references(() => leads.id),
+    authorId: text('author_id').notNull(),
+    body: text('body').notNull(),
+    mentionedUserIdsJson: text('mentioned_user_ids_json')
+      .notNull()
+      .default('[]'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_lead_comments_lead').on(
+      table.workspaceId,
+      table.leadId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const visitorItineraryItems = sqliteTable(
+  'visitor_itinerary_items',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id),
+    title: text('title').notNull(),
+    kind: text('kind').notNull().default('manual'),
+    startsAt: integer('starts_at'),
+    notes: text('notes'),
+    status: text('status').notNull().default('planned'),
+    visitedAt: integer('visited_at'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_visitor_itinerary_event').on(
+      table.workspaceId,
+      table.eventId,
+      table.startsAt,
     ),
   ],
 );

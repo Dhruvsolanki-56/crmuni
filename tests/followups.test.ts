@@ -46,3 +46,43 @@ test('follow-up draft migration backfills timestamps and stale versions cannot e
   assert.deepEqual({ ...final }, { subject: 'Revised', body: 'Revised body', status: 'approved', version: 2, approvedBy: 'user-1', editedBy: 'user-2' });
   db.close();
 });
+
+test('opening an approved follow-up hands it off and further edits reopen it as a draft', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE communication_drafts (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text NOT NULL,
+      lead_id text NOT NULL,
+      subject text,
+      body text NOT NULL,
+      status text NOT NULL,
+      approved_by text,
+      created_at integer NOT NULL,
+      approved_at integer
+    );
+    INSERT INTO communication_drafts
+      (id,workspace_id,lead_id,subject,body,status,approved_by,approved_at,created_at)
+    VALUES
+      ('draft-1','workspace-1','lead-1','Original','Original body','approved','user-1',100,100);
+  `);
+  for (const file of ['0021_sticky_miek.sql', '0039_hand_off_followups.sql']) {
+    const migration = readFileSync(new URL(`../drizzle/${file}`, import.meta.url), 'utf8');
+    for (const statement of migration.split('--> statement-breakpoint').map((part) => part.trim()).filter(Boolean)) db.exec(statement);
+  }
+
+  assert.throws(() =>
+    db.prepare(`UPDATE communication_drafts SET status='handed_off' WHERE id='draft-1'`).run(),
+    /handed off draft requires handed_off_at/,
+  );
+
+  const handOff = db.prepare(`UPDATE communication_drafts SET status='handed_off',handed_off_at=?,updated_at=? WHERE id=? AND workspace_id=? AND status='approved'`).run(200, 200, 'draft-1', 'workspace-1');
+  assert.equal(handOff.changes, 1);
+
+  const reopen = db.prepare(`UPDATE communication_drafts SET subject=NULLIF(?,''),body=?,status='draft',approved_by=NULL,approved_at=NULL,version=version+1,edited_by=?,updated_at=? WHERE id=? AND workspace_id=? AND version=?`).run('Revised', 'Revised body', 'user-2', 210, 'draft-1', 'workspace-1', 1);
+  assert.equal(reopen.changes, 1);
+
+  const final = db.prepare(`SELECT status,handed_off_at AS handedOffAt FROM communication_drafts WHERE id='draft-1'`).get() as Record<string, string | number | null>;
+  assert.deepEqual({ ...final }, { status: 'draft', handedOffAt: 200 });
+  db.close();
+});
