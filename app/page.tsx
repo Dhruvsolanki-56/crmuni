@@ -9926,32 +9926,44 @@ export default function Home() {
                               </select>
                             </div>
                           </div>
-                          <div className="field-block">
-                            <label htmlFor="product-description">
-                              What it does
-                            </label>
-                            <Textarea
-                              id="product-description"
-                              name="description"
-                              placeholder="What it does and the outcome it creates"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="product-roles">Buyer roles</label>
-                            <Input
-                              id="product-roles"
-                              name="buyerRoles"
-                              placeholder="Comma separated"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="product-pains">Pain points solved</label>
-                            <Input
-                              id="product-pains"
-                              name="painPoints"
-                              placeholder="Comma separated"
-                            />
-                          </div>
+                          <details className="more-details">
+                            <summary>
+                              <span>More details</span>
+                              <ChevronDown size={14} />
+                            </summary>
+                            <div className="more-details-body">
+                              <div className="field-block">
+                                <label htmlFor="product-description">
+                                  What it does
+                                </label>
+                                <Textarea
+                                  id="product-description"
+                                  name="description"
+                                  placeholder="What it does and the outcome it creates"
+                                />
+                              </div>
+                              <div className="field-block">
+                                <label htmlFor="product-roles">
+                                  Buyer roles
+                                </label>
+                                <Input
+                                  id="product-roles"
+                                  name="buyerRoles"
+                                  placeholder="Comma separated"
+                                />
+                              </div>
+                              <div className="field-block">
+                                <label htmlFor="product-pains">
+                                  Pain points solved
+                                </label>
+                                <Input
+                                  id="product-pains"
+                                  name="painPoints"
+                                  placeholder="Comma separated"
+                                />
+                              </div>
+                            </div>
+                          </details>
                           <Button type="submit">Add offering</Button>
                         </form>
                       </DialogContent>
@@ -10026,54 +10038,74 @@ export default function Home() {
                               placeholder="e.g. Multi-site pharmaceutical plants"
                             />
                           </div>
-                          <div className="field-block">
-                            <label htmlFor="icp-industries">Industries</label>
-                            <Input
-                              id="icp-industries"
-                              name="industries"
-                              placeholder="Industries, comma separated"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="icp-sizes">Company sizes</label>
-                            <Input
-                              id="icp-sizes"
-                              name="companySizes"
-                              placeholder="e.g. 200–5,000 employees"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="icp-geographies">Target regions</label>
-                            <Input
-                              id="icp-geographies"
-                              name="geographies"
-                              placeholder="Target regions"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="icp-roles">Decision-maker roles</label>
-                            <Input
-                              id="icp-roles"
-                              name="buyerRoles"
-                              placeholder="Decision-maker roles"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="icp-signals">High-value signals</label>
-                            <Textarea
-                              id="icp-signals"
-                              name="mustHaveSignals"
-                              placeholder="Comma separated"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="icp-disqualifiers">Disqualifiers</label>
-                            <Textarea
-                              id="icp-disqualifiers"
-                              name="disqualifiers"
-                              placeholder="Comma separated"
-                            />
-                          </div>
+                          <details className="more-details">
+                            <summary>
+                              <span>More details</span>
+                              <ChevronDown size={14} />
+                            </summary>
+                            <div className="more-details-body">
+                              <div className="field-block">
+                                <label htmlFor="icp-industries">
+                                  Industries
+                                </label>
+                                <Input
+                                  id="icp-industries"
+                                  name="industries"
+                                  placeholder="Industries, comma separated"
+                                />
+                              </div>
+                              <div className="field-block">
+                                <label htmlFor="icp-sizes">
+                                  Company sizes
+                                </label>
+                                <Input
+                                  id="icp-sizes"
+                                  name="companySizes"
+                                  placeholder="e.g. 200–5,000 employees"
+                                />
+                              </div>
+                              <div className="field-block">
+                                <label htmlFor="icp-geographies">
+                                  Target regions
+                                </label>
+                                <Input
+                                  id="icp-geographies"
+                                  name="geographies"
+                                  placeholder="Target regions"
+                                />
+                              </div>
+                              <div className="field-block">
+                                <label htmlFor="icp-roles">
+                                  Decision-maker roles
+                                </label>
+                                <Input
+                                  id="icp-roles"
+                                  name="buyerRoles"
+                                  placeholder="Decision-maker roles"
+                                />
+                              </div>
+                              <div className="field-block">
+                                <label htmlFor="icp-signals">
+                                  High-value signals
+                                </label>
+                                <Textarea
+                                  id="icp-signals"
+                                  name="mustHaveSignals"
+                                  placeholder="Comma separated"
+                                />
+                              </div>
+                              <div className="field-block">
+                                <label htmlFor="icp-disqualifiers">
+                                  Disqualifiers
+                                </label>
+                                <Textarea
+                                  id="icp-disqualifiers"
+                                  name="disqualifiers"
+                                  placeholder="Comma separated"
+                                />
+                              </div>
+                            </div>
+                          </details>
                           <Button type="submit">Add ideal customer profile</Button>
                         </form>
                       </DialogContent>
