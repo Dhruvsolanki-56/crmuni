@@ -1212,6 +1212,7 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState('');
+  const [leadScope, setLeadScope] = useState('all');
   const [knowledgeDialog, setKnowledgeDialog] = useState<string | null>(
     null,
   );
@@ -4109,6 +4110,17 @@ export default function Home() {
     1,
     Math.ceil(auditEvents.length / AUDIT_PAGE_SIZE),
   );
+  /* The dashboard showed every conversation, which made the home page read
+     as the Conversations page. Six is enough to act on; the rest are one
+     click away. */
+  const scopedLeads = capturedLeads.filter((lead) =>
+    leadScope === 'mine'
+      ? lead.ownerId === appContext?.user.id
+      : leadScope === 'event'
+        ? Boolean(activeEventId) && lead.eventId === activeEventId
+        : true,
+  );
+  const dashboardLeads = scopedLeads.slice(0, 6);
   const opportunityCandidates = capturedLeads.filter(
     (lead) =>
       (!activeEventId || lead.eventId === activeEventId) &&
@@ -6086,9 +6098,23 @@ export default function Home() {
                     <p className="eyebrow">Live from the booth</p>
                     <h2>Recent conversations</h2>
                   </div>
-                  <button>
-                    See all leads <ArrowRight />
-                  </button>
+                  <div className="panel-head-actions">
+                    <select
+                      className="scope-select"
+                      aria-label="Filter conversations"
+                      value={leadScope}
+                      onChange={(event) =>
+                        setLeadScope(event.currentTarget.value)
+                      }
+                    >
+                      <option value="all">All leads</option>
+                      <option value="mine">My leads</option>
+                      <option value="event">This event</option>
+                    </select>
+                    <button onClick={() => go('people')}>
+                      View all conversations <ArrowRight />
+                    </button>
+                  </div>
                 </div>
                 <div className="lead-table" aria-label="Recent conversations">
                   <div className="lead-row lead-header">
@@ -6097,7 +6123,7 @@ export default function Home() {
                     <span>AI score</span>
                     <span>Captured</span>
                   </div>
-                  {capturedLeads.map((lead) => (
+                  {dashboardLeads.map((lead) => (
                     <button
                       className="lead-row new-lead"
                       key={lead.id}
@@ -6149,9 +6175,13 @@ export default function Home() {
                       </span>
                     </button>
                   ))}
-                  {!capturedLeads.length ? (
+                  {!dashboardLeads.length ? (
                     <div className="empty-state">
-                      No conversations captured in this workspace yet.
+                      {!capturedLeads.length
+                        ? 'No conversations captured in this workspace yet.'
+                        : leadScope === 'event'
+                          ? `No conversations captured against ${activeEvent?.name || 'this event'} yet.`
+                          : 'No conversations assigned to you yet.'}
                     </div>
                   ) : null}
                 </div>

@@ -29,7 +29,7 @@
 
   /* ============ NEUTRALS — green-tinted, never pure grey ============ */
   --neutral-0: #ffffff; --neutral-25: #f7f9f8; --neutral-50: #f2f5f3; --neutral-100: #f1f5f3;
-  --neutral-150: #eaf2ef; --neutral-200: #e3e8e5; --neutral-300: #d5ddd9; --neutral-400: #98a19e;
+  --neutral-150: #eaf2ef; --neutral-200: #e3e8e5; --neutral-300: #d5ddd9; --neutral-400: #74807b;
   --neutral-500: #677370; --neutral-600: #53605c; --neutral-800: #2b3a35; --neutral-900: #17211e;
 
   /* ============ SEMANTIC SURFACES ============ */
@@ -666,3 +666,27 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .knowledge-layout { grid-template-columns: 1fr; }
   .knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form { grid-template-columns: 1fr; }
 }
+
+/* ---- Home dashboard refinements ---- */
+
+/* Pull the dashboard up under the top bar. */
+.content { padding-top: 28px; }
+
+/* The CTA sat on the subtitle's baseline, reading as a separate element.
+   Aligning it to the heading block ties it to the title it acts on. */
+.welcome-row { align-items: center; margin-bottom: 24px; }
+
+/* The briefing held the strongest colour on the page and out-shouted the
+   metrics. Deeper, less saturated ground and a quieter orb keep the brand
+   moment without it winning the hierarchy. */
+.briefing-panel {
+  border-color: var(--brand-800);
+  background: radial-gradient(circle at 88% 10%, var(--brand-700) 0, transparent 42%), var(--brand-900);
+}
+.briefing-orb { right: -58px; bottom: -84px; opacity: .6; }
+.briefing-orb span:nth-child(3) { box-shadow: none; opacity: .85; }
+
+/* Scope filter beside the section action — one contextual control, not a
+   filter bar. */
+.panel-head-actions { display: flex; align-items: center; gap: 8px; }
+.scope-select { height: 30px; padding: 0 26px 0 9px; border: 1px solid var(--color-line); border-radius: var(--radius-xs); background-color: var(--color-surface); color: var(--color-text-secondary); font-size: var(--text-label); line-height: var(--lh-label); background-position: right 7px center; }
