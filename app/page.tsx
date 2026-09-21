@@ -1167,7 +1167,9 @@ export default function Home() {
   const [operations, setOperations] = useState<OperationsData | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const topbarActionsRef = useRef<HTMLDivElement>(null);
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const [leadComments, setLeadComments] = useState<LeadComment[]>([]);
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [postingComment, setPostingComment] = useState(false);
@@ -1587,13 +1589,19 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [notice]);
   useEffect(() => {
-    if (!notificationsOpen && !profileOpen) return;
+    if (!notificationsOpen && !profileOpen && !workspaceMenuOpen) return;
     const dismiss = () => {
       setNotificationsOpen(false);
       setProfileOpen(false);
+      setWorkspaceMenuOpen(false);
     };
     const onPointerDown = (event: MouseEvent) => {
-      if (!topbarActionsRef.current?.contains(event.target as Node)) dismiss();
+      const target = event.target as Node;
+      if (
+        !topbarActionsRef.current?.contains(target) &&
+        !workspaceMenuRef.current?.contains(target)
+      )
+        dismiss();
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') dismiss();
@@ -1604,7 +1612,7 @@ export default function Home() {
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [notificationsOpen, profileOpen]);
+  }, [notificationsOpen, profileOpen, workspaceMenuOpen]);
   useEffect(() => {
     const sync = () => {
       void flushOutbox();
@@ -3998,19 +4006,64 @@ export default function Home() {
           </span>
           <span>Revenue OS</span>
         </div>
-        <div className="workspace-switcher">
-          <span className="workspace-logo">
-            {appContext?.workspace.name
-              .split(' ')
-              .map((word) => word[0])
-              .join('')
-              .slice(0, 2) || 'NA'}
-          </span>
-          <span>
-            <strong>{appContext?.workspace.name || 'Nova Automation'}</strong>
-            <small>{appContext?.workspace.plan || 'Trial'} workspace</small>
-          </span>
-          <ChevronDown size={15} />
+        <div className="workspace-switcher-wrap" ref={workspaceMenuRef}>
+          <button
+            type="button"
+            className="workspace-switcher"
+            aria-expanded={workspaceMenuOpen}
+            onClick={() => setWorkspaceMenuOpen((value) => !value)}
+          >
+            <span className="workspace-logo">
+              {appContext?.workspace.name
+                .split(' ')
+                .map((word) => word[0])
+                .join('')
+                .slice(0, 2) || 'NA'}
+            </span>
+            <span>
+              <strong>{appContext?.workspace.name || 'Nova Automation'}</strong>
+              <small>{appContext?.workspace.plan || 'Trial'} workspace</small>
+            </span>
+            <ChevronDown size={15} />
+          </button>
+          {workspaceMenuOpen ? (
+            <div className="workspace-menu">
+              {availableWorkspaces.map((workspace) => (
+                <button
+                  key={workspace.id}
+                  type="button"
+                  className={
+                    workspace.id === appContext?.workspace.id ? 'selected' : ''
+                  }
+                  onClick={() => {
+                    setWorkspaceMenuOpen(false);
+                    if (workspace.id !== appContext?.workspace.id)
+                      void switchWorkspace(workspace.id);
+                  }}
+                >
+                  <span>
+                    <strong>{workspace.name}</strong>
+                    <small>
+                      {workspace.kind === 'visitor' ? 'Personal' : workspace.plan}
+                    </small>
+                  </span>
+                  {workspace.id === appContext?.workspace.id ? (
+                    <Check size={14} />
+                  ) : null}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="workspace-menu-foot"
+                onClick={() => {
+                  setWorkspaceMenuOpen(false);
+                  go('settings');
+                }}
+              >
+                Manage workspaces
+              </button>
+            </div>
+          ) : null}
         </div>
         <nav aria-label="Main navigation">
           {appContext?.workspace.kind === 'visitor' ? (
@@ -4150,15 +4203,6 @@ export default function Home() {
               <span>Online · All synced</span>
             </div>
           )}
-          <div className="profile-row">
-            <span className="profile-avatar">
-              {(appContext?.user.email || 'AS').slice(0, 2).toUpperCase()}
-            </span>
-            <span>
-              <strong>{appContext?.user.email || 'Local tester'}</strong>
-              <small>{appContext?.role || 'Loading role'}</small>
-            </span>
-          </div>
         </div>
       </aside>
 
