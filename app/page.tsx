@@ -741,6 +741,20 @@ function apiFetch(path: string, init?: RequestInit) {
   return fetch(path, { ...init, headers });
 }
 
+/* Timestamps were rendered with the locale default, which includes seconds —
+   precision no one reads, and it clashed with the plain dates beside them. */
+function dateTime(value: number | string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Not set';
+  return parsed.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function roiTone(value: number | null | undefined) {
   if (value == null) return 'roi-value';
   return `roi-value ${value < 0 ? 'negative' : 'positive'}`;
@@ -4292,7 +4306,7 @@ export default function Home() {
                           <strong>{item.title}</strong>
                           <span>{item.body}</span>
                           <small>
-                            {new Date(item.createdAt).toLocaleString()}
+                            {dateTime(item.createdAt)}
                           </small>
                         </button>
                       ))
@@ -5540,7 +5554,7 @@ export default function Home() {
                                   <span className="handoff-note">
                                     <Check size={13} /> Handed off
                                     {draft.handedOffAt
-                                      ? ` · ${new Date(draft.handedOffAt).toLocaleString()}`
+                                      ? ` · ${dateTime(draft.handedOffAt)}`
                                       : ''}{' '}
                                     — not confirmed sent
                                   </span>
@@ -5591,9 +5605,8 @@ export default function Home() {
                                   <strong>
                                     {comment.authorName}{' '}
                                     <small>
-                                      {new Date(
-                                        comment.createdAt,
-                                      ).toLocaleString()}
+                                      {dateTime(comment.createdAt,
+                                      )}
                                     </small>
                                   </strong>
                                   <p>{comment.body}</p>
@@ -5795,7 +5808,7 @@ export default function Home() {
                                 <small>
                                   {task.fullName} · {task.company}
                                   {task.reminderAt
-                                    ? ` · ${reminderDue ? 'Reminder due' : `Reminder ${new Date(task.reminderAt).toLocaleString()}`}`
+                                    ? ` · ${reminderDue ? 'Reminder due' : `Reminder ${dateTime(task.reminderAt)}`}`
                                     : ''}
                                 </small>
                               </span>
@@ -6408,7 +6421,7 @@ export default function Home() {
                               <small>Owner SLA</small>
                               <strong>
                                 {item.ownerDueAt
-                                  ? new Date(item.ownerDueAt).toLocaleString()
+                                  ? dateTime(item.ownerDueAt)
                                   : 'Not set'}
                               </strong>
                             </span>
@@ -6970,13 +6983,13 @@ export default function Home() {
                             <span>
                               <small>Starts</small>
                               <strong>
-                                {new Date(meeting.startsAt).toLocaleString()}
+                                {dateTime(meeting.startsAt)}
                               </strong>
                             </span>
                             <span>
                               <small>Ends</small>
                               <strong>
-                                {new Date(meeting.endsAt).toLocaleString()}
+                                {dateTime(meeting.endsAt)}
                               </strong>
                             </span>
                           </div>
@@ -7875,7 +7888,7 @@ export default function Home() {
                             .excludedOutsideAttributionWindow || 0}
                         </li>
                       </ul>
-                      <div className="task-actions">
+                      <div className="export-actions">
                         {[
                           'summary',
                           'leads',
@@ -8036,7 +8049,7 @@ export default function Home() {
                               <strong>Profile version {item.version}</strong>
                               <small>
                                 {item.changeReason} ·{' '}
-                                {new Date(item.createdAt).toLocaleString()}
+                                {dateTime(item.createdAt)}
                               </small>
                             </span>
                             <b>v{item.version}</b>
@@ -8128,28 +8141,53 @@ export default function Home() {
                     >
                       <input type="hidden" name="action" value="add_product" />
                       <div className="field-grid">
-                        <Input
-                          name="name"
-                          required
-                          placeholder="Product or service name"
-                        />
-                        <select name="kind" defaultValue="product">
-                          <option value="product">Product</option>
-                          <option value="service">Service</option>
-                        </select>
+                        <div className="field-block">
+                          <label htmlFor="product-name">Name</label>
+                          <Input
+                            id="product-name"
+                            name="name"
+                            required
+                            placeholder="Product or service name"
+                          />
+                        </div>
+                        <div className="field-block">
+                          <label htmlFor="product-kind">Type</label>
+                          <select
+                            id="product-kind"
+                            name="kind"
+                            defaultValue="product"
+                          >
+                            <option value="product">Product</option>
+                            <option value="service">Service</option>
+                          </select>
+                        </div>
                       </div>
-                      <Textarea
-                        name="description"
-                        placeholder="What it does and the outcome it creates"
-                      />
-                      <Input
-                        name="buyerRoles"
-                        placeholder="Buyer roles, comma separated"
-                      />
-                      <Input
-                        name="painPoints"
-                        placeholder="Pain points solved, comma separated"
-                      />
+                      <div className="field-block">
+                        <label htmlFor="product-description">
+                          What it does
+                        </label>
+                        <Textarea
+                          id="product-description"
+                          name="description"
+                          placeholder="What it does and the outcome it creates"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="product-roles">Buyer roles</label>
+                        <Input
+                          id="product-roles"
+                          name="buyerRoles"
+                          placeholder="Comma separated"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="product-pains">Pain points solved</label>
+                        <Input
+                          id="product-pains"
+                          name="painPoints"
+                          placeholder="Comma separated"
+                        />
+                      </div>
                       <Button type="submit">Add offering</Button>
                     </form>
                     <div className="knowledge-records">
@@ -8189,32 +8227,63 @@ export default function Home() {
                       onSubmit={submitKnowledge}
                     >
                       <input type="hidden" name="action" value="add_icp" />
-                      <Input
-                        name="name"
-                        required
-                        placeholder="e.g. Multi-site pharmaceutical plants"
-                      />
-                      <Input
-                        name="industries"
-                        placeholder="Industries, comma separated"
-                      />
-                      <Input
-                        name="companySizes"
-                        placeholder="Company sizes, e.g. 200–5,000 employees"
-                      />
-                      <Input name="geographies" placeholder="Target regions" />
-                      <Input
-                        name="buyerRoles"
-                        placeholder="Decision-maker roles"
-                      />
-                      <Textarea
-                        name="mustHaveSignals"
-                        placeholder="High-value signals, comma separated"
-                      />
-                      <Textarea
-                        name="disqualifiers"
-                        placeholder="Disqualifiers, comma separated"
-                      />
+                      <div className="field-block">
+                        <label htmlFor="icp-name">Profile name</label>
+                        <Input
+                          id="icp-name"
+                          name="name"
+                          required
+                          placeholder="e.g. Multi-site pharmaceutical plants"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="icp-industries">Industries</label>
+                        <Input
+                          id="icp-industries"
+                          name="industries"
+                          placeholder="Industries, comma separated"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="icp-sizes">Company sizes</label>
+                        <Input
+                          id="icp-sizes"
+                          name="companySizes"
+                          placeholder="e.g. 200–5,000 employees"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="icp-geographies">Target regions</label>
+                        <Input
+                          id="icp-geographies"
+                          name="geographies"
+                          placeholder="Target regions"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="icp-roles">Decision-maker roles</label>
+                        <Input
+                          id="icp-roles"
+                          name="buyerRoles"
+                          placeholder="Decision-maker roles"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="icp-signals">High-value signals</label>
+                        <Textarea
+                          id="icp-signals"
+                          name="mustHaveSignals"
+                          placeholder="Comma separated"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="icp-disqualifiers">Disqualifiers</label>
+                        <Textarea
+                          id="icp-disqualifiers"
+                          name="disqualifiers"
+                          placeholder="Comma separated"
+                        />
+                      </div>
                       <Button type="submit">Add ideal customer profile</Button>
                     </form>
                     <div className="knowledge-records">
@@ -8461,7 +8530,7 @@ export default function Home() {
                                 {merge.sourceName} → {merge.targetName}
                               </strong>
                               <small>
-                                {new Date(merge.mergedAt).toLocaleString()}
+                                {dateTime(merge.mergedAt)}
                               </small>
                             </span>
                             <Button
@@ -8850,7 +8919,7 @@ export default function Home() {
                               <strong>{grant.supportEmail}</strong>
                               <small>
                                 {grant.status} · expires{' '}
-                                {new Date(grant.expiresAt).toLocaleString()}
+                                {dateTime(grant.expiresAt)}
                                 {grant.ticketReference
                                   ? ` · ${grant.ticketReference}`
                                   : ''}
@@ -8986,14 +9055,14 @@ export default function Home() {
                   </article>
                   <h3 className="settings-group">Security and data</h3>
                   {appContext?.role === 'owner' ? (
-                    <article className="panel settings-card">
+                    <article className="panel settings-card danger-card">
                       <div className="settings-heading">
                         <Trash2 />
                         <div>
                           <h2>Workspace deletion</h2>
                           <p>
                             {deletionRequest
-                              ? `Scheduled for ${new Date(deletionRequest.scheduledFor).toLocaleString()}. You can cancel until that time.`
+                              ? `Scheduled for ${dateTime(deletionRequest.scheduledFor)}. You can cancel until that time.`
                               : 'Schedule permanent deletion with a seven-day recovery period.'}
                           </p>
                         </div>
@@ -9038,7 +9107,7 @@ export default function Home() {
                             type="submit"
                             name="action"
                             value="request_deletion"
-                            variant="outline"
+                            variant="destructive"
                           >
                             Schedule deletion
                           </Button>
@@ -9063,7 +9132,7 @@ export default function Home() {
                           <span>{item.action.replaceAll('.', ' ')}</span>
                           <small>
                             {item.entityType} ·{' '}
-                            {new Date(item.createdAt).toLocaleString()}
+                            {dateTime(item.createdAt)}
                           </small>
                         </div>
                       ))
@@ -9223,7 +9292,7 @@ export default function Home() {
                               <br />
                               <small>
                                 {item.startsAt
-                                  ? new Date(item.startsAt).toLocaleString()
+                                  ? dateTime(item.startsAt)
                                   : 'No time set'}{' '}
                                 ·{' '}
                                 {item.status === 'in_progress'
@@ -9777,7 +9846,7 @@ export default function Home() {
                                   <span className="handoff-note">
                                     <Check size={13} /> Handed off
                                     {draft.handedOffAt
-                                      ? ` · ${new Date(draft.handedOffAt).toLocaleString()}`
+                                      ? ` · ${dateTime(draft.handedOffAt)}`
                                       : ''}{' '}
                                     — not confirmed sent
                                   </span>
