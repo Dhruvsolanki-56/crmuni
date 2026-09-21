@@ -6230,9 +6230,10 @@ export default function Home() {
                         <b>{rfqs.length} total</b>
                         <Button
                           type="button"
+                          className="capture-button"
                           onClick={() => setRfqDialogOpen(true)}
                         >
-                          Receive an RFQ
+                          <Plus /> Receive an RFQ
                         </Button>
                       </div>
                     </div>
@@ -6344,9 +6345,10 @@ export default function Home() {
                       <b>{quotations.length} total</b>
                       <Button
                         type="button"
+                        className="capture-button"
                         onClick={() => setQuotationDialogOpen(true)}
                       >
-                        New quotation
+                        <Plus /> New quotation
                       </Button>
                     </div>
                   </div>
@@ -6791,9 +6793,10 @@ export default function Home() {
                         <b>{meetings.length} total</b>
                         <Button
                           type="button"
+                          className="capture-button"
                           onClick={() => setMeetingDialogOpen(true)}
                         >
-                          Schedule meeting
+                          <Plus /> Schedule meeting
                         </Button>
                       </div>
                     </div>
@@ -7242,8 +7245,12 @@ export default function Home() {
                           }{' '}
                           activated
                         </b>
-                        <Button type="button" onClick={newEvent}>
-                          New event
+                        <Button
+                          type="button"
+                          className="capture-button"
+                          onClick={newEvent}
+                        >
+                          <Plus /> New event
                         </Button>
                       </div>
                     </div>
@@ -9774,9 +9781,6 @@ export default function Home() {
                 multiple
                 defaultValue={opportunityLead ? [opportunityLead.id] : []}
               >
-                <option value="" disabled>
-                  Select one or more contacts
-                </option>
                 {capturedLeads
                   .filter(
                     (lead) =>
