@@ -3655,6 +3655,28 @@ export default function Home() {
     setQuickFixTarget(null);
     setEditingEventId(null);
   }
+  function openKnowledgeFix(checkKey: string) {
+    go('knowledge');
+    const dialogByCheck: Record<string, string> = {
+      active_offering: 'add_product',
+      ideal_customer: 'add_icp',
+      qualification_rules: 'add_rule',
+    };
+    const dialog = dialogByCheck[checkKey];
+    if (dialog) {
+      setKnowledgeDialog(dialog);
+      return;
+    }
+    const anchorId =
+      checkKey === 'approved_evidence'
+        ? 'knowledge-sources'
+        : 'knowledge-company-profile';
+    setTimeout(() => {
+      document
+        .getElementById(anchorId)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }
   function newEvent() {
     setEditingEventId(null);
     setSimilarEventMatches([]);
@@ -3931,7 +3953,7 @@ export default function Home() {
               title={`${check.detail} Click to fix this in ${fixesInKnowledge ? 'Company knowledge' : 'this event'}.`}
               onClick={() =>
                 fixesInKnowledge
-                  ? go('knowledge')
+                  ? openKnowledgeFix(check.key)
                   : openEventQuickFix(item, check)
               }
             >
@@ -9566,7 +9588,10 @@ export default function Home() {
                     </div>
                   </article>
                   <h3 className="settings-group">Company profile</h3>
-                  <article className="panel knowledge-card">
+                  <article
+                    id="knowledge-company-profile"
+                    className="panel knowledge-card"
+                  >
                     <h2>Business profile</h2>
                     <form
                       className="lead-form profile-form"
@@ -10146,7 +10171,10 @@ export default function Home() {
                     </div>
                   </article>
                   <h3 className="settings-group">Evidence</h3>
-                  <article className="panel knowledge-card knowledge-sources">
+                  <article
+                    id="knowledge-sources"
+                    className="panel knowledge-card knowledge-sources"
+                  >
                     <h2>Knowledge sources</h2>
                     <p>
                       Store approved evidence used to ground future AI answers.
