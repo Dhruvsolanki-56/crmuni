@@ -54,6 +54,25 @@ import {
   type ContactCandidates,
 } from '@/lib/client-card-ocr';
 
+type AskField = {
+  name: string;
+  label: string;
+  type?: 'text' | 'number' | 'date' | 'textarea';
+  defaultValue?: string;
+  placeholder?: string;
+  required?: boolean;
+};
+type AskConfig = {
+  title: string;
+  description?: string;
+  fields?: AskField[];
+  confirmLabel?: string;
+  destructive?: boolean;
+};
+type AskRequest = AskConfig & {
+  resolve: (values: Record<string, string> | null) => void;
+};
+
 type SavedLead = {
   id: string;
   eventId?: string;
@@ -755,6 +774,8 @@ function dateTime(value: number | string) {
   });
 }
 
+const AUDIT_PAGE_SIZE = 8;
+
 function roiTone(value: number | null | undefined) {
   if (value == null) return 'roi-value';
   return `roi-value ${value < 0 ? 'negative' : 'positive'}`;
@@ -1166,6 +1187,7 @@ export default function Home() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [supportGrants, setSupportGrants] = useState<SupportGrant[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditPage, setAuditPage] = useState(0);
   const [availableWorkspaces, setAvailableWorkspaces] = useState<
     Array<AppContext['workspace'] & { role: string }>
   >([]);
@@ -1190,6 +1212,17 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState('');
+  /* window.prompt/confirm are unsupported in this runtime, so the flows that
+     relied on them threw instead of asking. One dialog serves them all. */
+  const [askState, setAskState] = useState<AskRequest | null>(null);
+  const askUser = (config: AskConfig) =>
+    new Promise<Record<string, string> | null>((resolve) =>
+      setAskState({ ...config, resolve }),
+    );
+  function closeAsk(values: Record<string, string> | null) {
+    askState?.resolve(values);
+    setAskState(null);
+  }
   const topbarActionsRef = useRef<HTMLDivElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const [leadComments, setLeadComments] = useState<LeadComment[]>([]);
@@ -2310,13 +2343,13 @@ export default function Home() {
     );
   }
   async function mergeDuplicateLead(source: SavedLead) {
-    if (
-      !source.duplicateLeadId ||
-      !window.confirm(
-        `Merge ${source.fullName} into ${source.duplicateLeadName || 'the existing contact'}? You can undo this from People.`,
-      )
-    )
-      return;
+    if (!source.duplicateLeadId) return;
+    const confirmed = await askUser({
+      title: 'Merge duplicate contact',
+      description: `Merge ${source.fullName} into ${source.duplicateLeadName || 'the existing contact'}? You can undo this from People.`,
+      confirmLabel: 'Merge contacts',
+    });
+    if (!confirmed) return;
     const response = await apiFetch('/api/workspace', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -2528,13 +2561,14 @@ export default function Home() {
   }
 
   async function eraseLead() {
-    if (
-      !reviewLead ||
-      !window.confirm(
-        `Erase personal data for ${reviewLead.fullName}? Conversation notes, tasks, AI facts, drafts, and capture files will be permanently removed. Company-level revenue records will remain.`,
-      )
-    )
-      return;
+    if (!reviewLead) return;
+    const confirmed = await askUser({
+      title: 'Erase personal data',
+      description: `Erase personal data for ${reviewLead.fullName}? Conversation notes, tasks, AI facts, drafts, and capture files will be permanently removed. Company-level revenue records will remain.`,
+      confirmLabel: 'Erase permanently',
+      destructive: true,
+    });
+    if (!confirmed) return;
     const id = reviewLead.id;
     const response = await apiFetch('/api/workspace', {
       method: 'POST',
@@ -2608,17 +2642,30 @@ export default function Home() {
     value = item.value,
   ) {
     let reason = '';
-    if (stage === 'lost')
-      reason =
-        window
-          .prompt(
-            'Why was this opportunity lost? This reason will be retained in history.',
-            item.lossReason || '',
-          )
-          ?.trim() || '';
-    else if (['won', 'lost'].includes(item.stage) && stage !== item.stage)
-      reason =
-        window.prompt('Why is this closed opportunity changing?')?.trim() || '';
+    const needsReason =
+      stage === 'lost' ||
+      (['won', 'lost'].includes(item.stage) && stage !== item.stage);
+    if (needsReason) {
+      const answer = await askUser({
+        title:
+          stage === 'lost'
+            ? 'Why was this opportunity lost?'
+            : 'Why is this closed opportunity changing?',
+        description: 'This reason is retained in the opportunity history.',
+        fields: [
+          {
+            name: 'reason',
+            label: 'Reason',
+            type: 'textarea',
+            defaultValue: stage === 'lost' ? item.lossReason || '' : '',
+            required: true,
+          },
+        ],
+        confirmLabel: 'Save reason',
+      });
+      if (answer === null) return;
+      reason = answer.reason;
+    }
     if (
       (stage === 'lost' ||
         (['won', 'lost'].includes(item.stage) && stage !== item.stage)) &&
@@ -2671,12 +2718,21 @@ export default function Home() {
   }
 
   async function changeOpportunityValue(item: Opportunity) {
-    const answer = window.prompt(
-      `Update opportunity value (${item.currency})`,
-      String(item.value),
-    );
+    const answer = await askUser({
+      title: 'Update opportunity value',
+      fields: [
+        {
+          name: 'value',
+          label: `Value (${item.currency})`,
+          type: 'number',
+          defaultValue: String(item.value),
+          required: true,
+        },
+      ],
+      confirmLabel: 'Update value',
+    });
     if (answer === null) return;
-    const value = Number(answer);
+    const value = Number(answer.value);
     if (!Number.isFinite(value) || value < 0) {
       setNotice('Enter a valid non-negative value.');
       return;
@@ -3274,8 +3330,13 @@ export default function Home() {
     id: string,
     label: string,
   ) {
-    if (!window.confirm(`Remove ${label}? This change cannot be undone.`))
-      return;
+    const confirmed = await askUser({
+      title: 'Remove ' + label,
+      description: 'This change cannot be undone.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!confirmed) return;
     const response = await apiFetch('/api/company-intelligence', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -3824,26 +3885,46 @@ export default function Home() {
     await loadQuotations();
   }
   async function reviseQuotation(item: Quotation) {
-    const amountValue = window.prompt(
-      `New amount (${item.currency})`,
-      String(item.amount),
-    );
-    if (amountValue === null) return;
+    const revision = await askUser({
+      title: 'Revise quotation',
+      description:
+        'A new version is created for internal approval. The previous version is retained.',
+      fields: [
+        {
+          name: 'amount',
+          label: `New amount (${item.currency})`,
+          type: 'number',
+          defaultValue: String(item.amount),
+          required: true,
+        },
+        {
+          name: 'validUntil',
+          label: 'Valid until',
+          type: 'date',
+          defaultValue: item.validUntil || '',
+        },
+        {
+          name: 'note',
+          label: 'Why is this being revised?',
+          type: 'textarea',
+          required: true,
+        },
+      ],
+      confirmLabel: 'Create revision',
+    });
+    if (revision === null) return;
+    const amountValue = revision.amount;
     const amount = Number(amountValue);
     if (!Number.isFinite(amount) || amount <= 0) {
       setNotice('Enter a positive quotation amount.');
       return;
     }
-    const validUntil =
-      window
-        .prompt('New valid-until date (YYYY-MM-DD)', item.validUntil || '')
-        ?.trim() ?? '';
+    const validUntil = revision.validUntil;
     if (validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)) {
       setNotice('Use YYYY-MM-DD for the valid-until date.');
       return;
     }
-    const note =
-      window.prompt('Why is this quotation being revised?')?.trim() || '';
+    const note = revision.note;
     if (!note) return;
     const response = await apiFetch('/api/quotations', {
       method: 'POST',
@@ -3916,8 +3997,23 @@ export default function Home() {
   }
 
   async function voidEventCost(item: EventCost) {
-    const reason =
-      window.prompt('Why should this cost line be voided?')?.trim() || '';
+    const answer = await askUser({
+      title: 'Void cost line',
+      description:
+        'The line is kept with an immutable reason and version history.',
+      fields: [
+        {
+          name: 'reason',
+          label: 'Why should this cost line be voided?',
+          type: 'textarea',
+          required: true,
+        },
+      ],
+      confirmLabel: 'Void cost line',
+      destructive: true,
+    });
+    if (answer === null) return;
+    const reason = answer.reason;
     if (!reason) return;
     const response = await apiFetch('/api/reports', {
       method: 'POST',
@@ -4005,6 +4101,15 @@ export default function Home() {
   const capturableEvents = events.filter((item) => item.status === 'active');
   const reviewCaptureExtraction = captureExtraction(reviewLead?.extractedJson);
   const filteredAccount = accounts.find((item) => item.id === accountFilter);
+  const auditPageCount = Math.max(
+    1,
+    Math.ceil(auditEvents.length / AUDIT_PAGE_SIZE),
+  );
+  const opportunityCandidates = capturedLeads.filter(
+    (lead) =>
+      (!activeEventId || lead.eventId === activeEventId) &&
+      (!opportunityLead || lead.company === opportunityLead.company),
+  );
   const visibleContacts = accountFilter
     ? capturedLeads.filter((lead) => lead.accountId === accountFilter)
     : capturedLeads;
@@ -6242,38 +6347,51 @@ export default function Home() {
                                   {contact.fullName} ×
                                 </button>
                               ))}
-                              <select
-                                aria-label={`Add stakeholder to ${item.title}`}
-                                defaultValue=""
-                                onChange={(event) => {
-                                  if (event.target.value) {
-                                    void changeOpportunityContact(
-                                      item,
-                                      event.target.value,
-                                      'add',
-                                    );
-                                    event.target.value = '';
-                                  }
-                                }}
-                              >
-                                <option value="">+ Add stakeholder</option>
-                                {capturedLeads
-                                  .filter(
-                                    (lead) =>
-                                      lead.company === item.company &&
-                                      !item.contacts.some(
-                                        (contact) => contact.leadId === lead.id,
-                                      ),
-                                  )
-                                  .map((lead) => (
-                                    <option key={lead.id} value={lead.id}>
-                                      {lead.fullName} ·{' '}
-                                      {lead.buyingRole ||
-                                        lead.role ||
-                                        'Contact'}
-                                    </option>
-                                  ))}
-                              </select>
+                              {(() => {
+                                const candidates = capturedLeads.filter(
+                                  (lead) =>
+                                    lead.company === item.company &&
+                                    !item.contacts.some(
+                                      (contact) => contact.leadId === lead.id,
+                                    ),
+                                );
+                                /* The picker used to render with nothing but
+                                   its placeholder, so it looked actionable and
+                                   did nothing. Say why instead. */
+                                if (!candidates.length)
+                                  return (
+                                    <span className="stakeholder-empty">
+                                      No other {item.company} contacts captured
+                                      yet
+                                    </span>
+                                  );
+                                return (
+                                  <select
+                                    aria-label={`Add stakeholder to ${item.title}`}
+                                    defaultValue=""
+                                    onChange={(event) => {
+                                      if (event.target.value) {
+                                        void changeOpportunityContact(
+                                          item,
+                                          event.target.value,
+                                          'add',
+                                        );
+                                        event.target.value = '';
+                                      }
+                                    }}
+                                  >
+                                    <option value="">+ Add stakeholder</option>
+                                    {candidates.map((lead) => (
+                                      <option key={lead.id} value={lead.id}>
+                                        {lead.fullName} ·{' '}
+                                        {lead.buyingRole ||
+                                          lead.role ||
+                                          'Contact'}
+                                      </option>
+                                    ))}
+                                  </select>
+                                );
+                              })()}
                             </span>
                           </span>
                           <select
@@ -7921,31 +8039,39 @@ export default function Home() {
                           'per-event configuration'}{' '}
                         days after the event.
                       </p>
-                      <ul>
-                        <li>
-                          Accepted quotation value:{' '}
-                          {money(
-                            revenueReport?.reconciliation
-                              .acceptedQuotationValue || 0,
-                            appContext?.workspace.currency,
-                          )}
-                        </li>
-                        <li>
-                          Won without accepted quotation:{' '}
-                          {revenueReport?.reconciliation
-                            .wonWithoutAcceptedQuotation || 0}
-                        </li>
-                        <li>
-                          Accepted quotation without won opportunity:{' '}
-                          {revenueReport?.reconciliation
-                            .acceptedQuotationWithoutWonOpportunity || 0}
-                        </li>
-                        <li>
-                          Outside attribution window:{' '}
-                          {revenueReport?.reconciliation
-                            .excludedOutsideAttributionWindow || 0}
-                        </li>
-                      </ul>
+                      <dl className="reconcile-list">
+                        <div>
+                          <dt>Accepted quotation value</dt>
+                          <dd>
+                            {money(
+                              revenueReport?.reconciliation
+                                .acceptedQuotationValue || 0,
+                              appContext?.workspace.currency,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Won without accepted quotation</dt>
+                          <dd>
+                            {revenueReport?.reconciliation
+                              .wonWithoutAcceptedQuotation || 0}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Accepted quotation without won opportunity</dt>
+                          <dd>
+                            {revenueReport?.reconciliation
+                              .acceptedQuotationWithoutWonOpportunity || 0}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Outside attribution window</dt>
+                          <dd>
+                            {revenueReport?.reconciliation
+                              .excludedOutsideAttributionWindow || 0}
+                          </dd>
+                        </div>
+                      </dl>
                       <div className="export-actions">
                         {[
                           'summary',
@@ -9185,15 +9311,59 @@ export default function Home() {
                       </div>
                     </div>
                     {auditEvents.length ? (
-                      auditEvents.map((item) => (
-                        <div className="audit-row" key={item.id}>
-                          <span>{item.action.replaceAll('.', ' ')}</span>
-                          <small>
-                            {item.entityType} ·{' '}
-                            {dateTime(item.createdAt)}
-                          </small>
-                        </div>
-                      ))
+                      <>
+                        {auditEvents
+                          .slice(
+                            auditPage * AUDIT_PAGE_SIZE,
+                            auditPage * AUDIT_PAGE_SIZE + AUDIT_PAGE_SIZE,
+                          )
+                          .map((item) => (
+                            <div className="audit-row" key={item.id}>
+                              <span>{item.action.replaceAll('.', ' ')}</span>
+                              <small>
+                                {item.entityType} ·{' '}
+                                {dateTime(item.createdAt)}
+                              </small>
+                            </div>
+                          ))}
+                        {auditPageCount > 1 ? (
+                          <nav className="pager" aria-label="Security activity pages">
+                            <button
+                              type="button"
+                              disabled={auditPage === 0}
+                              onClick={() => setAuditPage((p) => p - 1)}
+                            >
+                              Previous
+                            </button>
+                            <span className="pager-pages">
+                              {Array.from({ length: auditPageCount }).map(
+                                (_, index) => (
+                                  <button
+                                    key={index}
+                                    type="button"
+                                    className={
+                                      index === auditPage ? 'current' : ''
+                                    }
+                                    aria-current={
+                                      index === auditPage ? 'page' : undefined
+                                    }
+                                    onClick={() => setAuditPage(index)}
+                                  >
+                                    {index + 1}
+                                  </button>
+                                ),
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={auditPage >= auditPageCount - 1}
+                              onClick={() => setAuditPage((p) => p + 1)}
+                            >
+                              Next
+                            </button>
+                          </nav>
+                        ) : null}
+                      </>
                     ) : (
                       <div className="empty-state">
                         No recorded workspace changes yet.
@@ -9940,6 +10110,73 @@ export default function Home() {
         </div>
         {notice ? <output className="toast">{notice}</output> : null}
       </section>
+      <Dialog
+        open={Boolean(askState)}
+        onOpenChange={(open) => {
+          if (!open) closeAsk(null);
+        }}
+      >
+        <DialogContent className="capture-dialog ask-dialog">
+          <DialogHeader>
+            <DialogTitle>{askState?.title}</DialogTitle>
+            {askState?.description ? (
+              <DialogDescription>{askState.description}</DialogDescription>
+            ) : null}
+          </DialogHeader>
+          <form
+            className="lead-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              const values: Record<string, string> = {};
+              for (const field of askState?.fields || []) {
+                const raw = data.get(field.name);
+                values[field.name] = typeof raw === 'string' ? raw.trim() : '';
+              }
+              closeAsk(values);
+            }}
+          >
+            {(askState?.fields || []).map((field) => (
+              <div className="field-block" key={field.name}>
+                <label htmlFor={`ask-${field.name}`}>{field.label}</label>
+                {field.type === 'textarea' ? (
+                  <Textarea
+                    id={`ask-${field.name}`}
+                    name={field.name}
+                    required={field.required}
+                    placeholder={field.placeholder}
+                    defaultValue={field.defaultValue}
+                  />
+                ) : (
+                  <Input
+                    id={`ask-${field.name}`}
+                    name={field.name}
+                    type={field.type || 'text'}
+                    required={field.required}
+                    placeholder={field.placeholder}
+                    defaultValue={field.defaultValue}
+                  />
+                )}
+              </div>
+            ))}
+            <div className="ask-actions">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => closeAsk(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant={askState?.destructive ? 'destructive' : 'default'}
+              >
+                {askState?.confirmLabel || 'Confirm'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="search-dialog">
           <DialogHeader>
@@ -10070,30 +10307,48 @@ export default function Home() {
             </div>
             <div className="field-block">
               <label htmlFor="opp-contacts">Opportunity stakeholders</label>
-              <select
-                id="opp-contacts"
-                name="contactIds"
-                multiple
-                defaultValue={opportunityLead ? [opportunityLead.id] : []}
-              >
-                {capturedLeads
-                  .filter(
-                    (lead) =>
-                      (!activeEventId || lead.eventId === activeEventId) &&
-                      (!opportunityLead ||
-                        lead.company === opportunityLead.company),
-                  )
-                  .map((lead) => (
-                    <option key={lead.id} value={lead.id}>
-                      {lead.fullName} · {lead.company} ·{' '}
-                      {lead.buyingRole || lead.role || 'Contact'}
-                    </option>
-                  ))}
-              </select>
-              <small className="field-help">
-                Use Ctrl or Command to select multiple stakeholders. Contacts
-                must belong to the same account and event.
-              </small>
+              {opportunityCandidates.length ? (
+                <>
+                  <select
+                    id="opp-contacts"
+                    name="contactIds"
+                    multiple
+                    defaultValue={opportunityLead ? [opportunityLead.id] : []}
+                  >
+                    {opportunityCandidates.map((lead) => (
+                      <option key={lead.id} value={lead.id}>
+                        {lead.fullName} · {lead.company} ·{' '}
+                        {lead.buyingRole || lead.role || 'Contact'}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="field-help">
+                    Use Ctrl or Command to select multiple stakeholders.
+                    Contacts must belong to the same account and event.
+                  </small>
+                </>
+              ) : (
+                /* An empty multi-select looked broken and gave no way
+                   forward. Explain, and offer the action that fixes it. */
+                <div className="field-empty">
+                  <p>
+                    No captured contacts for{' '}
+                    {activeEvent ? activeEvent.name : 'this event'} yet.
+                    Stakeholders come from contacts captured against the
+                    active event.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setOpportunityOpen(false);
+                      setCaptureOpen(true);
+                    }}
+                  >
+                    Capture a contact
+                  </Button>
+                </div>
+              )}
             </div>
             <Button className="save-button" type="submit">
               Create opportunity

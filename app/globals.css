@@ -590,3 +590,42 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   font-size: inherit; font-weight: inherit; background-position: right 5px center;
 }
 .event-context-switch:hover { border-color: var(--color-line); background-color: var(--color-surface); }
+
+/* Shared confirm/prompt dialog. */
+.ask-dialog { width: min(460px, calc(100% - 28px)); }
+.ask-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+/* Empty-state inside a form field: say why, and offer the way forward. */
+.field-empty { display: grid; justify-items: start; gap: 10px; padding: 16px; border: 1px dashed var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-surface-secondary); }
+.field-empty p { margin: 0; color: var(--color-text-secondary); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.stakeholder-empty { color: var(--color-text-subtle); font-size: var(--text-label); line-height: var(--lh-label); }
+
+/* Reconciliation figures as scannable rows rather than running prose. */
+.reconcile-list { margin: 4px 0 0; display: grid; }
+.reconcile-list > div { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; padding: 10px 0; border-top: 1px solid var(--color-line); }
+.reconcile-list dt { color: var(--color-text-secondary); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.reconcile-list dd { margin: 0; color: var(--color-text-primary); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+
+/* The count stacked "4" over "/4" in a 50px square. One baseline reads as
+   the ratio it is, and the bar below already carries the progress. */
+.onboarding-progress>div:first-child>span {
+  width: auto; height: auto; min-width: 54px; padding: 6px 12px;
+  display: inline-flex; align-items: baseline; justify-content: center; gap: 1px;
+  border-radius: var(--radius-pill); font-size: var(--text-md); line-height: var(--lh-md);
+  font-variant-numeric: tabular-nums;
+}
+.onboarding-progress>div:first-child>span small { color: var(--brand-400); font-weight: var(--weight-medium); }
+
+/* Status pills sat on the text baseline and stretched to the row height,
+   so they read as a slab beside the title rather than a tag on it. */
+.event-status { align-self: flex-start; flex-shrink: 0; padding: 3px 9px; font-weight: var(--weight-medium); letter-spacing: .01em; }
+.rfq-extraction > div { align-items: flex-start; }
+.rfq-extraction > div > span { min-width: 0; }
+
+/* Pager — shared by any long list that should stay a fixed height. */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--color-line); }
+.pager-pages { display: flex; flex-wrap: wrap; gap: 4px; }
+.pager button { min-width: 30px; height: 30px; padding: 0 9px; border: 1px solid var(--color-line); border-radius: var(--radius-xs); color: var(--color-text-secondary); background: var(--color-surface); font-size: var(--text-label); line-height: var(--lh-label); font-variant-numeric: tabular-nums; cursor: pointer; transition: color var(--ease-ui), border-color var(--ease-ui), background var(--ease-ui); }
+.pager button:hover:not(:disabled) { border-color: var(--brand-300); color: var(--color-brand); background: var(--brand-50); }
+.pager button.current { border-color: var(--color-brand); color: var(--color-text-on-brand); background: var(--color-brand); }
+.pager button:disabled { opacity: .45; cursor: not-allowed; }
