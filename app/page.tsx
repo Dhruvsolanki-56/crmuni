@@ -1958,7 +1958,9 @@ export default function Home() {
           }
           setCaptureOutcome(
             extractionData.code === 'AI_NOT_CONFIGURED'
-              ? 'The original is saved. Automatic reading needs an OpenAI API key in this local environment, so you can review and enter the details manually.'
+              ? attachment.kind === 'audio'
+                ? 'Audio recorded ✓ — transcription is unavailable in this test environment. The recording is saved; enter the conversation details manually.'
+                : 'The original is saved. AI assistance is unavailable in this test environment, so you can review and enter the details manually.'
               : extractionData.error ||
                   'The original is saved, but automatic reading did not finish. You can review the contact manually.',
           );
@@ -10171,8 +10173,8 @@ export default function Home() {
                         <h2>AI capability</h2>
                         <p>
                           {capabilities.aiConfigured
-                            ? 'OCR, transcription, conversation analysis, RFQ extraction and follow-up drafting are configured.'
-                            : 'Manual workflows are ready. AI workflows need a production API key before client testing.'}
+                            ? 'Transcription, conversation analysis, RFQ extraction and follow-up drafting are configured. Card, badge and QR reading always work locally and never need this.'
+                            : 'AI assistance is unavailable in this environment. Card, badge and QR reading run entirely on-device and are unaffected. Transcription, conversation analysis, RFQ extraction and follow-up drafting need an AI provider key, which is not configured here.'}
                         </p>
                       </div>
                     </div>

@@ -10,6 +10,11 @@ export type RevenueEnv = {
   OPENAI_VISION_MODEL?: string;
   OPENAI_TRANSCRIBE_MODEL?: string;
   AUTOMATION_SECRET?: string;
+  // Development/test identity - see requestUser() below. Never read outside
+  // of that explicit opt-in check.
+  CRMUNI_LOCAL_TEST?: string;
+  CRMUNI_TEST_USER_ID?: string;
+  CRMUNI_TEST_USER_EMAIL?: string;
 };
 
 export function database(): D1Database {
@@ -40,14 +45,25 @@ export function storageUnavailableResponse(action: string) {
 }
 
 export function requestUser(request: Request) {
-  const local = new URL(request.url).hostname === 'localhost';
+  // Production identity always comes from the hosted runtime's headers,
+  // regardless of hostname - a request can arrive from any forwarded
+  // domain (Codespaces, a custom domain, etc.), so hostname was never a
+  // sound signal for "this is safe to treat as authenticated."
+  //
+  // The one exception is explicit: CRMUNI_LOCAL_TEST must be set (it is
+  // never set in a real deployment - see .env.example and README) before a
+  // request without those headers is allowed through at all, and even then
+  // it is answered with a clearly-labelled local test identity, never a
+  // header pretending to be the trusted provider.
   const id = request.headers.get('oai-authenticated-user-id');
   const email = request.headers.get('oai-authenticated-user-email');
-  if ((!id || !email) && !local)
+  if (id && email) return { id, email };
+  const testMode = revenueEnv().CRMUNI_LOCAL_TEST === 'true';
+  if (!testMode)
     throw new Response('Authentication required.', { status: 401 });
   return {
-    id: id || 'local-preview-user',
-    email: email || 'preview@revenue-os.local',
+    id: revenueEnv().CRMUNI_TEST_USER_ID || 'test-user',
+    email: revenueEnv().CRMUNI_TEST_USER_EMAIL || 'tester@crm.local',
   };
 }
 

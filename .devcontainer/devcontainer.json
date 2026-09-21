@@ -1,0 +1,34 @@
+{
+  "name": "CRMUNI / Revenue OS (test environment)",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
+
+  // Explicit test-environment identity and flag. This is the ONLY place
+  // that sets CRMUNI_LOCAL_TEST=true for Codespaces - production never sets
+  // it, and the app never infers it from hostname or anything else. See
+  // lib/db.ts requestUser() and README.md.
+  "containerEnv": {
+    "CRMUNI_LOCAL_TEST": "true",
+    "CRMUNI_TEST_USER_ID": "test-user",
+    "CRMUNI_TEST_USER_EMAIL": "tester@crm.local"
+  },
+
+  // npm ci for a reproducible install, then create .env and initialize the
+  // local D1 schema. Nothing here touches the network beyond the npm
+  // registry, and nothing here can reach the production Cloudflare account
+  // - see scripts/local-cloudflare-config.mjs for why.
+  "postCreateCommand": "npm ci && npm run setup:test",
+
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "CRMUNI Preview",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}

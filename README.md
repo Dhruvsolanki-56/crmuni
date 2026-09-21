@@ -34,21 +34,43 @@ Revenue OS turns exhibition conversations into reviewable sales records, commitm
 - Contact erasure immediately masks direct identifiers, durably retries file/database cleanup, verifies personal derivatives are gone, and records completion before reporting success.
 - Revenue reporting separates open and weighted pipeline, revenue ROI, profit ROI, and conservative cost reconciliation.
 
-## Local development
+## GitHub Codespaces
+
+The fastest way to run and click through the whole application without installing anything locally.
+
+1. Code → Codespaces → Create codespace on `main`.
+2. Wait for the container to build (installs dependencies and initializes the local database automatically).
+3. If you ever need to redo setup by hand: `npm run setup:test`
+4. Run:
+   ```bash
+   npm run dev
+   ```
+5. Open the **Ports** tab, find port **3000** (labeled "CRMUNI Preview"), and set its visibility to **Public** if you want to open it from another device.
+6. Open the generated `https://xxxxx-3000.app.github.dev` URL — it works the same from a laptop, phone, or another computer.
+
+This is a **test environment only**, completely separate from production:
+
+- **Local database only.** The Codespace uses its own local D1 database (Cloudflare's SQLite-compatible store, emulated entirely on the container's disk by Miniflare). It is created fresh by `npm run setup:test` from the migrations in `drizzle/` — schema, tables, indexes, and constraints, with zero leads, accounts, events, RFQs, quotations, or users. Nothing in this repository's default configuration can resolve to the real production `crmuni-db`; see `scripts/local-cloudflare-config.mjs` for the safeguards.
+- **Reset the database** at any time with `npm run db:local:reset` (wipes and reapplies every migration) or `npm run db:local:init` (creates it only if missing, leaves existing local data alone).
+- **Test identity.** Requests are attributed to a clearly-labelled local identity (`test-user` / `tester@crm.local` by default) instead of the production authentication headers. This only activates when `CRMUNI_LOCAL_TEST=true` is set — the devcontainer sets it automatically for Codespaces; it is never set in production, and the app never infers it from hostname.
+- **File storage.** The Codespace also gets its own local-only R2-compatible bucket (again fully emulated on disk, never the real Cloudflare account), so capture images, audio notes, brochures, and other uploads work end-to-end while testing.
+- **AI features are intentionally unavailable.** No OpenAI (or other AI provider) key is configured, and none is required. Card, badge, and QR reading run entirely on-device and are unaffected. Audio transcription, conversation analysis, RFQ document extraction, and AI follow-up drafting show a plain "AI assistance is unavailable in this test environment" message and leave the underlying record safely stored — they never fail silently, hang, or fabricate output. See "AI capability" in Workspace settings for the same status at a glance.
+
+## Local development (outside Codespaces)
 
 Requirements: Node.js 22.13 or newer and npm.
 
 ```bash
 npm ci
-copy .env.example .env.local
+npm run setup:test
 npm run dev
 ```
 
-Open `http://localhost:3000`. Local preview uses a development identity; deployed Sites use authenticated user headers.
+`setup:test` verifies your Node version and dependencies, creates `.env` from `.env.example` (enabling the same local test identity Codespaces uses), and initializes the local database. Open `http://localhost:3000`.
 
-Card, badge, and QR OCR does not require an API key, paid OCR service, or runtime CDN. The worker, WebAssembly core, and English recognition model are bundled under `public/tesseract*` and run on the user's device. Optional audio transcription, conversation analysis, document extraction, and follow-up drafting still require `OPENAI_API_KEY`; their model defaults can be overridden with `OPENAI_MODEL`, `OPENAI_VISION_MODEL`, and `OPENAI_TRANSCRIBE_MODEL`.
+Card, badge, and QR OCR does not require an API key, paid OCR service, or runtime CDN. The worker, WebAssembly core, and English recognition model are bundled under `public/tesseract*` and run on the user's device. Optional audio transcription, conversation analysis, document extraction, and follow-up drafting use an external AI provider when one is configured through the hosted runtime; without it, those specific features report themselves unavailable and everything else keeps working.
 
-Production background processing also requires a long random `AUTOMATION_SECRET` and an approved scheduler that calls the protected worker endpoint every minute. See `docs/OPERATIONS_RUNBOOK.md`.
+Production background processing also requires a long random `AUTOMATION_SECRET` and an approved scheduler that calls the protected worker endpoint every minute — configured through the hosted runtime, not needed for local/Codespaces testing. See `docs/OPERATIONS_RUNBOOK.md`.
 
 ## Validation
 
@@ -64,9 +86,11 @@ This runs TypeScript, strict lint over the application and runtime code, and the
 
 ## Deployment
 
-The project is configured for OpenAI Sites with logical D1 (`DB`) and R2 (`FILES`) bindings. Generated migrations in `drizzle/` are the production schema history and must remain immutable after deployment.
+The project is configured for OpenAI Sites with logical D1 (`DB`) and R2 (`FILES`) bindings. The current production deployment runs with the R2 binding disabled (`r2_buckets: []`); routes that store files detect this and degrade the specific feature instead of failing the request - see `filesAvailable()` in `lib/db.ts`. Generated migrations in `drizzle/` are the production schema history and must remain immutable after deployment.
 
-Configure secrets through the hosted runtime; never commit `.env.local`, API keys, local D1/R2 state, or generated deployment output.
+A real build/deploy must set `CLOUDFLARE_D1_DATABASE_ID` to the production database id explicitly. Without it, `npm run build` (and therefore Codespaces/local `npm run dev`) always resolves to a fixed, obviously-fake local placeholder id and can never produce an artifact pointing at production — see `vite.config.ts` and `scripts/local-cloudflare-config.mjs`.
+
+Configure secrets through the hosted runtime; never commit `.env`, `.dev.vars`, API keys, local D1/R2 state, or generated deployment output.
 
 ## Honest MVP boundaries
 

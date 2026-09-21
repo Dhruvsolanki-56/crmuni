@@ -14,6 +14,9 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test && npm run lint && npm run build",
     "verify:migrations": "node scripts/verify-migrations.mjs",
+    "db:local:init": "node scripts/db-local-init.mjs",
+    "db:local:reset": "node scripts/db-local-init.mjs --reset",
+    "setup:test": "node scripts/setup-test.mjs",
     "load:smoke": "node scripts/load-smoke.mjs",
     "format": "oxfmt"
   },
@@ -52,6 +55,7 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "^0.31.10",
+    "miniflare": "4.20260515.0",
     "oxfmt": "0.61.0",
     "oxlint": "1.76.0",
     "oxlint-tsgolint": "7.0.2001",
