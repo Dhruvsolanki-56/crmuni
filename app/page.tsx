@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   BarChart3,
   Bell,
@@ -1293,6 +1294,13 @@ export default function Home() {
   const [rfqs, setRfqs] = useState<RfqItem[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [processingRfq, setProcessingRfq] = useState('');
+  /* The RFQ workspace has no URL route of its own - every view in this app is
+     state driven - so the open RFQ is held by id and always re-read from the
+     loaded list, never from a snapshot captured at click time. */
+  const [openRfqId, setOpenRfqId] = useState('');
+  const [rfqState, setRfqState] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    'idle',
+  );
   const [attachment, setAttachment] = useState<{
     name: string;
     url: string;
@@ -1513,11 +1521,15 @@ export default function Home() {
     if (response.ok) setKnowledge((await response.json()) as KnowledgeData);
   }
   async function loadRfqs() {
+    setRfqState((current) => (current === 'ready' ? current : 'loading'));
     const response = await apiFetch('/api/rfqs');
-    if (response.ok) {
-      const data = (await response.json()) as { rfqs: RfqItem[] };
-      setRfqs(data.rfqs);
+    if (!response.ok) {
+      setRfqState('error');
+      return;
     }
+    const data = (await response.json()) as { rfqs: RfqItem[] };
+    setRfqs(data.rfqs);
+    setRfqState('ready');
   }
   async function loadQuotations() {
     const response = await apiFetch('/api/quotations');
@@ -3716,30 +3728,41 @@ export default function Home() {
     await loadRfqs();
   }
   async function updateRfqStatus(item: RfqItem, status: string) {
-    let note = '';
-    if (status === 'clarification')
-      note =
-        window
-          .prompt('What clarification is required from the customer?')
-          ?.trim() || '';
-    else if (
+    const needsReason =
+      status === 'clarification' ||
       status === 'lost' ||
-      (['won', 'lost'].includes(item.status) && status !== item.status)
-    )
-      note =
-        window
-          .prompt(
-            status === 'lost'
-              ? 'Why was this RFQ lost?'
-              : 'Why is this closed RFQ changing?',
-          )
-          ?.trim() || '';
-    if (
-      (status === 'clarification' ||
-        status === 'lost' ||
-        (['won', 'lost'].includes(item.status) && status !== item.status)) &&
-      !note
-    ) {
+      (['won', 'lost'].includes(item.status) && status !== item.status);
+    let note = '';
+    if (needsReason) {
+      const answer = await askUser({
+        title:
+          status === 'clarification'
+            ? 'Request clarification'
+            : status === 'lost'
+              ? 'Mark this RFQ lost'
+              : 'Change a closed RFQ',
+        description:
+          'The reason is stored in RFQ history and the server rejects an empty one.',
+        fields: [
+          {
+            name: 'note',
+            label:
+              status === 'clarification'
+                ? 'What clarification is required from the customer?'
+                : status === 'lost'
+                  ? 'Why was this RFQ lost?'
+                  : 'Why is this closed RFQ changing?',
+            type: 'textarea',
+            required: true,
+          },
+        ],
+        confirmLabel: 'Save status',
+        destructive: status === 'lost',
+      });
+      if (answer === null) return;
+      note = answer.note.trim();
+    }
+    if (needsReason && !note) {
       setNotice('A reason is required for this RFQ change.');
       return;
     }
@@ -3764,12 +3787,23 @@ export default function Home() {
     await loadRfqs();
   }
   async function recordRfqSubmission(item: RfqItem) {
-    const note =
-      window
-        .prompt(
-          'What was submitted? Include the quotation or proposal reference.',
-        )
-        ?.trim() || '';
+    const answer = await askUser({
+      title: 'Record submission',
+      description:
+        'This stores a new submission version and moves the RFQ to quoted.',
+      fields: [
+        {
+          name: 'note',
+          label:
+            'What was submitted? Include the quotation or proposal reference.',
+          type: 'textarea',
+          required: true,
+        },
+      ],
+      confirmLabel: 'Record submission',
+    });
+    if (answer === null) return;
+    const note = answer.note.trim();
     if (!note) return;
     const response = await apiFetch('/api/rfqs', {
       method: 'POST',
@@ -3792,6 +3826,100 @@ export default function Home() {
     }
     setNotice(`RFQ submission v${data.submissionVersion} recorded`);
     await loadRfqs();
+  }
+  /* One extraction form, rendered by the RFQ list section and the RFQ detail
+     page. Every branch below reflects a real rfq_ai_extractions.status. */
+  function renderRfqExtraction(item: RfqItem, extraction: RfqExtraction | null) {
+    return item.extractionStatus === 'completed' && extraction ? (
+      <form
+        className="rfq-review-form"
+        onSubmit={(event) =>
+          confirmRfqExtraction(event, item)
+        }
+      >
+        <p>{extraction.summary}</p>
+        <div className="field-grid">
+          <div className="field-block">
+            <label htmlFor={`rfq-location-${item.id}`}>
+              Delivery location
+            </label>
+            <Input
+              id={`rfq-location-${item.id}`}
+              name="deliveryLocation"
+              defaultValue={
+                extraction.deliveryLocation || ''
+              }
+            />
+          </div>
+          <div className="field-block">
+            <label htmlFor={`rfq-deadline-${item.id}`}>
+              Submission deadline
+            </label>
+            <Input
+              id={`rfq-deadline-${item.id}`}
+              name="submissionDeadline"
+              type="date"
+              defaultValue={
+                extraction.submissionDeadline || ''
+              }
+            />
+          </div>
+        </div>
+        {extraction.items.map((line, index) => (
+          <fieldset key={`${line.product}-${index}`}>
+            <legend>Requirement {index + 1}</legend>
+            <Input
+              name="product"
+              required
+              defaultValue={line.product}
+              aria-label={`Product ${index + 1}`}
+            />
+            <Input
+              name="quantity"
+              defaultValue={line.quantity || ''}
+              placeholder="Quantity"
+              aria-label={`Quantity ${index + 1}`}
+            />
+            <Textarea
+              name="specifications"
+              defaultValue={line.specifications || ''}
+              placeholder="Specifications"
+              aria-label={`Specifications ${index + 1}`}
+            />
+            <small>Evidence: {line.evidence}</small>
+          </fieldset>
+        ))}
+        {extraction.warnings.length ? (
+          <small>
+            {extraction.warnings.join(' · ')}
+          </small>
+        ) : null}
+        <Button
+          type="submit"
+          disabled={processingRfq === item.id}
+        >
+          {processingRfq === item.id
+            ? 'Confirming…'
+            : 'Confirm reviewed requirements'}
+        </Button>
+      </form>
+    ) : item.extractionStatus === 'confirmed' ? (
+      <p>
+        Human-reviewed requirements are now part of the
+        RFQ workflow.
+      </p>
+    ) : (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => analyzeRfq(item.id)}
+        disabled={processingRfq === item.id}
+      >
+        {processingRfq === item.id
+          ? 'Extracting…'
+          : 'Extract requirements'}
+      </Button>
+    );
   }
   async function analyzeRfq(id: string) {
     setProcessingRfq(id);
@@ -4115,6 +4243,16 @@ export default function Home() {
   const capturableEvents = events.filter((item) => item.status === 'active');
   const reviewCaptureExtraction = captureExtraction(reviewLead?.extractedJson);
   const filteredAccount = accounts.find((item) => item.id === accountFilter);
+  /* Mirrors requireRole on every RFQ mutation route. The server stays the
+     authority; this only decides whether a dead control is rendered. */
+  const canManageRfq = ['owner', 'admin', 'manager', 'salesperson'].includes(
+    appContext?.role || '',
+  );
+  const openRfq = rfqs.find((item) => item.id === openRfqId);
+  const openRfqQuotations = quotations.filter(
+    (quote) => quote.rfqId === openRfqId,
+  );
+  const openRfqExtraction = rfqExtraction(openRfq?.extractionJson);
   /* People workspace. Every field below exists on the current Account and
      SavedLead records — no new columns or filters were invented. */
   /* Accounts come in two shapes: real rows the lead links to by id, and
@@ -6727,6 +6865,118 @@ export default function Home() {
                 </article>
               ) : null}
               {activeView === 'rfqs' ? (
+                <Dialog
+                  open={quotationDialogOpen}
+                  onOpenChange={setQuotationDialogOpen}
+                >
+                  <DialogContent className="capture-dialog">
+                  <div className="settings-heading">
+                    <FileText />
+                    <div>
+                      <DialogTitle>Create a quotation</DialogTitle>
+                      <DialogDescription>
+                        Issue the commercial document and track it through
+                        customer acceptance.
+                      </DialogDescription>
+                    </div>
+                  </div>
+                  <form className="lead-form" onSubmit={submitQuotation}>
+                    <input type="hidden" name="action" value="create" />
+                    <div className="field-grid">
+                      <div className="field-block">
+                        <label htmlFor="quote-number">
+                          Quotation number
+                        </label>
+                        <Input
+                          id="quote-number"
+                          name="quoteNumber"
+                          required
+                          placeholder="Q-2026-001"
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="quote-customer">Customer</label>
+                        <Input
+                          id="quote-customer"
+                          name="customer"
+                          required
+                          placeholder="ABC Pharma"
+                        />
+                      </div>
+                    </div>
+                    <div className="field-grid">
+                      <div className="field-block">
+                        <label htmlFor="quote-amount">
+                          Amount ({appContext?.workspace.currency || 'INR'})
+                        </label>
+                        <Input
+                          id="quote-amount"
+                          name="amount"
+                          type="number"
+                          min="1"
+                          required
+                        />
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="quote-valid">Valid until</label>
+                        <Input
+                          id="quote-valid"
+                          name="validUntil"
+                          type="date"
+                        />
+                      </div>
+                    </div>
+                    <div className="field-grid">
+                      <div className="field-block">
+                        <label htmlFor="quote-rfq">Related RFQ</label>
+                        <select
+                          id="quote-rfq"
+                          name="rfqId"
+                          defaultValue={openRfqId}
+                        >
+                          <option value="">No RFQ selected</option>
+                          {rfqs.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="field-block">
+                        <label htmlFor="quote-opportunity">
+                          Related opportunity
+                        </label>
+                        <select
+                          id="quote-opportunity"
+                          name="opportunityId"
+                          defaultValue=""
+                        >
+                          <option value="">No opportunity selected</option>
+                          {opportunities.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.title} · {item.company}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <label className="upload-control rfq-upload">
+                      <FileText />
+                      Attach PDF or DOCX
+                      <input
+                        name="document"
+                        type="file"
+                        accept=".pdf,.docx"
+                      />
+                    </label>
+                    <Button type="submit" className="save-button">
+                      Create quotation
+                    </Button>
+                  </form>
+                  </DialogContent>
+                </Dialog>
+              ) : null}
+              {activeView === 'rfqs' && !openRfqId ? (
                 <div className="rfq-layout">
                   <Dialog
                     open={rfqDialogOpen}
@@ -6856,7 +7106,11 @@ export default function Home() {
                     {rfqs.length ? (
                       rfqs.map((item) => (
                         <article className="panel rfq-record" key={item.id}>
-                          <div>
+                          <button
+                            type="button"
+                            className="rfq-record-open"
+                            onClick={() => setOpenRfqId(item.id)}
+                          >
                             <span>
                               <strong>{item.title}</strong>
                               <small>
@@ -6867,7 +7121,7 @@ export default function Home() {
                             <b className="stage-chip">
                               {item.status.replaceAll('_', ' ')}
                             </b>
-                          </div>
+                          </button>
                           <div className="event-meta">
                             <span>
                               <small>Customer deadline</small>
@@ -6947,7 +7201,7 @@ export default function Home() {
                   </section>
                 </div>
               ) : null}
-              {activeView === 'rfqs' ? (
+              {activeView === 'rfqs' && !openRfqId ? (
                 <section className="quotation-section">
                   <div className="event-list-heading">
                     <div>
@@ -6969,112 +7223,6 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="quotation-layout">
-                    <Dialog
-                      open={quotationDialogOpen}
-                      onOpenChange={setQuotationDialogOpen}
-                    >
-                      <DialogContent className="capture-dialog">
-                      <div className="settings-heading">
-                        <FileText />
-                        <div>
-                          <DialogTitle>Create a quotation</DialogTitle>
-                          <DialogDescription>
-                            Issue the commercial document and track it through
-                            customer acceptance.
-                          </DialogDescription>
-                        </div>
-                      </div>
-                      <form className="lead-form" onSubmit={submitQuotation}>
-                        <input type="hidden" name="action" value="create" />
-                        <div className="field-grid">
-                          <div className="field-block">
-                            <label htmlFor="quote-number">
-                              Quotation number
-                            </label>
-                            <Input
-                              id="quote-number"
-                              name="quoteNumber"
-                              required
-                              placeholder="Q-2026-001"
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="quote-customer">Customer</label>
-                            <Input
-                              id="quote-customer"
-                              name="customer"
-                              required
-                              placeholder="ABC Pharma"
-                            />
-                          </div>
-                        </div>
-                        <div className="field-grid">
-                          <div className="field-block">
-                            <label htmlFor="quote-amount">
-                              Amount ({appContext?.workspace.currency || 'INR'})
-                            </label>
-                            <Input
-                              id="quote-amount"
-                              name="amount"
-                              type="number"
-                              min="1"
-                              required
-                            />
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="quote-valid">Valid until</label>
-                            <Input
-                              id="quote-valid"
-                              name="validUntil"
-                              type="date"
-                            />
-                          </div>
-                        </div>
-                        <div className="field-grid">
-                          <div className="field-block">
-                            <label htmlFor="quote-rfq">Related RFQ</label>
-                            <select id="quote-rfq" name="rfqId" defaultValue="">
-                              <option value="">No RFQ selected</option>
-                              {rfqs.map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.title}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="field-block">
-                            <label htmlFor="quote-opportunity">
-                              Related opportunity
-                            </label>
-                            <select
-                              id="quote-opportunity"
-                              name="opportunityId"
-                              defaultValue=""
-                            >
-                              <option value="">No opportunity selected</option>
-                              {opportunities.map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.title} · {item.company}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        <label className="upload-control rfq-upload">
-                          <FileText />
-                          Attach PDF or DOCX
-                          <input
-                            name="document"
-                            type="file"
-                            accept=".pdf,.docx"
-                          />
-                        </label>
-                        <Button type="submit" className="save-button">
-                          Create quotation
-                        </Button>
-                      </form>
-                      </DialogContent>
-                    </Dialog>
                     <div className="quotation-list">
                       {quotations.length ? (
                         quotations.map((item) => (
@@ -7160,6 +7308,7 @@ export default function Home() {
                 </section>
               ) : null}
               {activeView === 'rfqs' &&
+              !openRfqId &&
               rfqs.some((item) => item.documentCount) ? (
                 <section className="rfq-extraction-section">
                   <div className="event-list-heading">
@@ -7193,101 +7342,238 @@ export default function Home() {
                                   'not processed'}
                               </b>
                             </div>
-                            {item.extractionStatus === 'completed' &&
-                            extracted ? (
-                              <form
-                                className="rfq-review-form"
-                                onSubmit={(event) =>
-                                  confirmRfqExtraction(event, item)
-                                }
-                              >
-                                <p>{extracted.summary}</p>
-                                <div className="field-grid">
-                                  <div className="field-block">
-                                    <label htmlFor={`rfq-location-${item.id}`}>
-                                      Delivery location
-                                    </label>
-                                    <Input
-                                      id={`rfq-location-${item.id}`}
-                                      name="deliveryLocation"
-                                      defaultValue={
-                                        extracted.deliveryLocation || ''
-                                      }
-                                    />
-                                  </div>
-                                  <div className="field-block">
-                                    <label htmlFor={`rfq-deadline-${item.id}`}>
-                                      Submission deadline
-                                    </label>
-                                    <Input
-                                      id={`rfq-deadline-${item.id}`}
-                                      name="submissionDeadline"
-                                      type="date"
-                                      defaultValue={
-                                        extracted.submissionDeadline || ''
-                                      }
-                                    />
-                                  </div>
-                                </div>
-                                {extracted.items.map((line, index) => (
-                                  <fieldset key={`${line.product}-${index}`}>
-                                    <legend>Requirement {index + 1}</legend>
-                                    <Input
-                                      name="product"
-                                      required
-                                      defaultValue={line.product}
-                                      aria-label={`Product ${index + 1}`}
-                                    />
-                                    <Input
-                                      name="quantity"
-                                      defaultValue={line.quantity || ''}
-                                      placeholder="Quantity"
-                                      aria-label={`Quantity ${index + 1}`}
-                                    />
-                                    <Textarea
-                                      name="specifications"
-                                      defaultValue={line.specifications || ''}
-                                      placeholder="Specifications"
-                                      aria-label={`Specifications ${index + 1}`}
-                                    />
-                                    <small>Evidence: {line.evidence}</small>
-                                  </fieldset>
-                                ))}
-                                {extracted.warnings.length ? (
-                                  <small>
-                                    {extracted.warnings.join(' · ')}
-                                  </small>
-                                ) : null}
-                                <Button
-                                  type="submit"
-                                  disabled={processingRfq === item.id}
-                                >
-                                  {processingRfq === item.id
-                                    ? 'Confirming…'
-                                    : 'Confirm reviewed requirements'}
-                                </Button>
-                              </form>
-                            ) : item.extractionStatus === 'confirmed' ? (
-                              <p>
-                                Human-reviewed requirements are now part of the
-                                RFQ workflow.
-                              </p>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => analyzeRfq(item.id)}
-                                disabled={processingRfq === item.id}
-                              >
-                                {processingRfq === item.id
-                                  ? 'Extracting…'
-                                  : 'Extract requirements'}
-                              </Button>
-                            )}
+                            {renderRfqExtraction(item, extracted)}
                           </article>
                         );
                       })}
                   </div>
+                </section>
+              ) : null}
+              {activeView === 'rfqs' && openRfqId ? (
+                <section className="rfq-detail">
+                  <button
+                    type="button"
+                    className="detail-back"
+                    onClick={() => setOpenRfqId('')}
+                  >
+                    <ArrowLeft size={14} /> RFQs &amp; quotations
+                  </button>
+                  {!openRfq && rfqState === 'error' ? (
+                    <article className="panel empty-state large">
+                      <AlertTriangle />
+                      <h2>Could not load this RFQ</h2>
+                      <p>The request to the workspace failed.</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void loadRfqs()}
+                      >
+                        Retry
+                      </Button>
+                    </article>
+                  ) : !openRfq && rfqState === 'ready' ? (
+                    <article className="panel empty-state large">
+                      <FileText />
+                      <h2>RFQ not found</h2>
+                      <p>
+                        It no longer exists, or it belongs to an event you
+                        cannot access.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setOpenRfqId('')}
+                      >
+                        Back to RFQs
+                      </Button>
+                    </article>
+                  ) : !openRfq ? (
+                    <article className="panel empty-state large">
+                      <p>Loading RFQ…</p>
+                    </article>
+                  ) : (
+                    <>
+                      <header className="rfq-detail-head">
+                        <div>
+                          <h2>{openRfq.title}</h2>
+                          <p>
+                            {openRfq.requesterCompany}
+                            {openRfq.reference
+                              ? ` · ${openRfq.reference}`
+                              : ''}
+                          </p>
+                        </div>
+                        <div className="rfq-detail-status">
+                          {/* One control, not a badge beside a duplicate of
+                              itself: the select shows the status and changes
+                              it. Read-only members get the badge instead. */}
+                          {canManageRfq ? (
+                            <select
+                              aria-label="RFQ status"
+                              value={openRfq.status}
+                              onChange={(event) =>
+                                updateRfqStatus(openRfq, event.target.value)
+                              }
+                            >
+                              <option value="received">Received</option>
+                              <option value="reviewing">Reviewing</option>
+                              <option value="clarification">
+                                Clarification needed
+                              </option>
+                              <option value="ready_to_quote">
+                                Ready to quote
+                              </option>
+                              <option value="quoted">Quoted</option>
+                              <option value="won">Won</option>
+                              <option value="lost">Lost</option>
+                            </select>
+                          ) : (
+                            <b className="stage-chip">
+                              {openRfq.status.replaceAll('_', ' ')}
+                            </b>
+                          )}
+                        </div>
+                      </header>
+                      {openRfq.clarificationNote ? (
+                        <p className="rfq-detail-flag">
+                          Clarification: {openRfq.clarificationNote}
+                        </p>
+                      ) : null}
+                      <div className="rfq-detail-grid">
+                        <span>
+                          <small>Customer deadline</small>
+                          <strong>
+                            {openRfq.submissionDeadline || 'Not set'}
+                          </strong>
+                        </span>
+                        <span>
+                          <small>Owner</small>
+                          <strong>
+                            {openRfq.ownerName || openRfq.ownerId}
+                          </strong>
+                        </span>
+                        <span>
+                          <small>Owner SLA</small>
+                          <strong>
+                            {openRfq.ownerDueAt
+                              ? dateTime(openRfq.ownerDueAt)
+                              : 'Not set'}
+                          </strong>
+                        </span>
+                        <span>
+                          <small>Received</small>
+                          <strong>{dateTime(openRfq.createdAt)}</strong>
+                        </span>
+                        <span>
+                          <small>Contact</small>
+                          <strong>
+                            {openRfq.contactName || 'Not recorded'}
+                          </strong>
+                        </span>
+                        <span>
+                          <small>Delivery location</small>
+                          <strong>
+                            {openRfq.deliveryLocation || 'Not recorded'}
+                          </strong>
+                        </span>
+                      </div>
+                      <div className="rfq-detail-panels">
+                        <article className="panel rfq-detail-panel">
+                          <div className="rfq-detail-panel-head">
+                            <h3>Requirements</h3>
+                            <b>
+                              {openRfq.itemCount}{' '}
+                              {openRfq.itemCount === 1 ? 'item' : 'items'}
+                            </b>
+                          </div>
+                          <p className="rfq-detail-note">
+                            {openRfq.documentCount
+                              ? `Original stored securely · ${openRfq.documentCount} file${openRfq.documentCount === 1 ? '' : 's'}`
+                              : 'Manual structured intake · no original document attached'}
+                          </p>
+                          {openRfq.documentCount ? (
+                            <>
+                              <p className="rfq-detail-note">
+                                Extraction:{' '}
+                                {openRfq.extractionStatus?.replaceAll(
+                                  '_',
+                                  ' ',
+                                ) || 'not processed'}
+                              </p>
+                              {canManageRfq
+                                ? renderRfqExtraction(
+                                    openRfq,
+                                    openRfqExtraction,
+                                  )
+                                : null}
+                            </>
+                          ) : null}
+                        </article>
+                        <article className="panel rfq-detail-panel">
+                          <div className="rfq-detail-panel-head">
+                            <h3>Submissions</h3>
+                            <b>{openRfq.submissionCount || 0} recorded</b>
+                          </div>
+                          <p className="rfq-detail-note">
+                            {openRfq.latestSubmissionNote
+                              ? `Latest: ${openRfq.latestSubmissionNote}`
+                              : 'No submissions recorded.'}
+                          </p>
+                          {canManageRfq &&
+                          ['ready_to_quote', 'quoted'].includes(
+                            openRfq.status,
+                          ) ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => recordRfqSubmission(openRfq)}
+                            >
+                              <Plus /> Record submission
+                            </Button>
+                          ) : null}
+                        </article>
+                        <article className="panel rfq-detail-panel">
+                          <div className="rfq-detail-panel-head">
+                            <h3>Quotations</h3>
+                            <b>{openRfqQuotations.length} linked</b>
+                          </div>
+                          {openRfqQuotations.length ? (
+                            <ul className="rfq-quote-list">
+                              {openRfqQuotations.map((quote) => (
+                                <li key={quote.id}>
+                                  <span>
+                                    <strong>{quote.quoteNumber}</strong>
+                                    <small>
+                                      {quote.customer} · v{quote.version}
+                                    </small>
+                                  </span>
+                                  <span className="rfq-quote-amount">
+                                    {money(quote.amount, quote.currency)}
+                                  </span>
+                                  <b className="stage-chip">
+                                    {quote.status.replaceAll('_', ' ')}
+                                  </b>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="rfq-detail-note">
+                              No quotations yet.
+                            </p>
+                          )}
+                          {canManageRfq ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setQuotationDialogOpen(true)}
+                            >
+                              <Plus /> Create quotation
+                            </Button>
+                          ) : null}
+                        </article>
+                      </div>
+                    </>
+                  )}
                 </section>
               ) : null}
               {activeView === 'meetings' ? (

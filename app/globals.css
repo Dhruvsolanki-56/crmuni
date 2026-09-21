@@ -768,3 +768,54 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .entity-row > span[data-label]::before { content: attr(data-label) ': '; color: var(--color-text-subtle); }
   .contact-grid > :nth-child(3), .account-grid > :nth-child(4) { display: block; }
 }
+
+/* RFQ detail: one focused workspace for a single RFQ. Neutral surfaces,
+   forest for headings, lime only on the active status indicator. */
+.rfq-detail { display: grid; gap: 16px; align-content: start; }
+.detail-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 0; border: 0; background: none; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--lh-sm); cursor: pointer; transition: color var(--ease-ui); }
+.detail-back:hover { color: var(--color-brand); }
+.rfq-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding-bottom: 15px; border-bottom: 1px solid var(--color-line); }
+.rfq-detail-head > div { min-width: 0; }
+/* Titles, references and delivery locations are free text, so they wrap
+   rather than pushing the status control off the page. */
+.rfq-detail-head h2 { margin: 0; color: var(--color-brand); font-size: var(--text-xl); line-height: var(--lh-xl); overflow-wrap: anywhere; }
+.rfq-detail-head p { margin: 5px 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--lh-sm); overflow-wrap: anywhere; }
+.rfq-detail-status { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.rfq-detail-status .stage-chip { border: 1px solid var(--accent-500); }
+.rfq-detail-status select { height: 34px; padding: 0 10px; border: 1px solid var(--green-450); border-radius: var(--radius-pill); background: var(--green-50); color: var(--green-700); font-size: var(--text-sm); line-height: var(--lh-sm); font-weight: var(--weight-medium); text-transform: capitalize; cursor: pointer; }
+.rfq-detail-status select:hover { border-color: var(--accent-500); }
+/* Panel actions size to their label instead of stretching into empty bars. */
+.rfq-detail-panel > button, .rfq-detail-panel .rfq-review-form > button { width: fit-content; }
+.rfq-detail-flag { margin: 0; padding: 10px 13px; border-radius: var(--radius-sm); background: var(--warn-bg); color: var(--warn-750); font-size: var(--text-sm); line-height: var(--leading-relaxed); }
+.rfq-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-line); overflow: hidden; }
+.rfq-detail-grid > span { padding: 12px 15px; background: var(--color-surface); }
+.rfq-detail-grid small { display: block; color: var(--color-text-subtle); font-size: var(--text-micro); line-height: var(--lh-micro); text-transform: uppercase; letter-spacing: .05em; }
+.rfq-detail-grid strong { display: block; margin-top: 4px; color: var(--color-text-primary); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.rfq-detail-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.rfq-detail-panels > .rfq-detail-panel:first-child { grid-column: 1 / -1; }
+.rfq-detail-panel { display: grid; gap: 11px; padding: 17px 18px; align-content: start; }
+.rfq-detail-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rfq-detail-panel-head h3 { margin: 0; color: var(--color-brand); font-size: var(--text-md); line-height: var(--lh-md); }
+.rfq-detail-panel-head b { padding: 2px 8px; border-radius: var(--radius-pill); background: var(--color-surface-secondary); color: var(--color-text-muted); font-size: var(--text-micro); line-height: var(--lh-micro); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.rfq-detail-note { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--leading-relaxed); }
+.rfq-detail-panel > .rfq-review-form { margin-top: 2px; }
+.rfq-quote-list { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-line); overflow: hidden; }
+.rfq-quote-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 13px; background: var(--color-surface); }
+.rfq-quote-list li > span:first-child { min-width: 0; }
+.rfq-quote-list strong { display: block; color: var(--color-text-primary); font-size: var(--text-sm); line-height: var(--lh-sm); overflow-wrap: anywhere; }
+.rfq-quote-list small { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: var(--text-micro); line-height: var(--lh-micro); }
+.rfq-quote-amount { color: var(--color-text-primary); font-size: var(--text-sm); line-height: var(--lh-sm); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.rfq-record-open { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; }
+.rfq-record-open strong, .rfq-record-open small { display: block; }
+.rfq-record-open strong { color: var(--color-text-primary); font-size: var(--text-base); line-height: var(--lh-base); }
+.rfq-record-open:hover strong { color: var(--color-brand); }
+.rfq-record-open small { margin-top: 4px; color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--lh-label); }
+@media (max-width: 900px) {
+  .rfq-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rfq-detail-panels { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .rfq-detail-grid { grid-template-columns: 1fr; }
+  .rfq-detail-head { flex-direction: column; }
+  .rfq-quote-list li { grid-template-columns: minmax(0, 1fr) auto; }
+}
