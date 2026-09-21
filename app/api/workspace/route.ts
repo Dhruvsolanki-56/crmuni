@@ -569,6 +569,35 @@ export async function POST(request: Request) {
       lead: { id, fullName, company, role, email, phone },
     });
   }
+  if (action === 'confirm_contact') {
+    // Confirming who the contact is (name, company, role) must not require
+    // a conversation note to analyze - a card scan with nothing said yet is
+    // still a real contact the salesperson may want to draft a follow-up
+    // to. Conversation analysis remains the richer, separate path for
+    // qualification scoring and commitments when a note exists.
+    requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
+    const id = clean(body.id, 80);
+    if (!id)
+      return Response.json({ error: 'Lead id is required.' }, { status: 400 });
+    await requireLeadAccess(context, id);
+    const now = Date.now();
+    const db = database();
+    const result = await db
+      .prepare(
+        `UPDATE leads SET review_status='confirmed',updated_at=? WHERE id=? AND workspace_id=? AND review_status='needs_review'`,
+      )
+      .bind(now, id, context.workspace.id)
+      .run();
+    if (!result.meta.changes)
+      return Response.json(
+        { error: 'This contact is already reviewed or cannot be confirmed.' },
+        { status: 409 },
+      );
+    await db.batch([
+      auditStatement(context, 'lead.contact_confirmed', 'lead', id),
+    ]);
+    return Response.json({ ok: true, reviewStatus: 'confirmed' });
+  }
   if (action === 'erase_lead') {
     requireRole(context, ['owner', 'admin']);
     const id = clean(body.id, 80);

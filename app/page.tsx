@@ -1341,6 +1341,7 @@ export default function Home() {
   const [followups, setFollowups] = useState<FollowupDraft[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [drafting, setDrafting] = useState('');
+  const [confirmingContact, setConfirmingContact] = useState(false);
   const [extractingCapture, setExtractingCapture] = useState(false);
   const [readingAttachment, setReadingAttachment] = useState(false);
   const [localOcrFields, setLocalOcrFields] = useState<string[]>([]);
@@ -3048,6 +3049,35 @@ export default function Home() {
         data.error || 'Could not confirm this analysis. Please try again.',
       );
     }
+  }
+
+  // Confirming a follow-up-ready contact does not require a conversation
+  // note - scanning a card and verifying the extracted name, company and
+  // role is itself a real review. Conversation analysis (above) remains
+  // the deeper, separate path for qualification scoring and commitments
+  // when a note or audio transcript exists.
+  async function confirmContact() {
+    if (!reviewLead) return;
+    setConfirmingContact(true);
+    setAnalysisError('');
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'confirm_contact', id: reviewLead.id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not confirm this contact.');
+      setConfirmingContact(false);
+      return;
+    }
+    const next = { ...reviewLead, reviewStatus: 'confirmed' };
+    setReviewLead(next);
+    setCapturedLeads((current) =>
+      current.map((lead) => (lead.id === next.id ? next : lead)),
+    );
+    setNotice('Contact confirmed · ready for a personalized follow-up');
+    setConfirmingContact(false);
   }
 
   async function updateTask(
@@ -5921,6 +5951,18 @@ export default function Home() {
                             ? 'Confirm review and save'
                             : 'Save verified details'}
                         </Button>
+                        {reviewLead.reviewStatus === 'needs_review' ? (
+                          <Button
+                            type="button"
+                            className="save-button"
+                            onClick={confirmContact}
+                            disabled={confirmingContact}
+                          >
+                            {confirmingContact
+                              ? 'Confirming…'
+                              : 'Confirm contact · ready for follow-up'}
+                          </Button>
+                        ) : null}
                         <div className="field-grid">
                           <div className="consent-cell">
                             <small>
@@ -6729,7 +6771,12 @@ export default function Home() {
                       ? `${metrics.openTasks} customer commitment${metrics.openTasks === 1 ? '' : 's'} ${metrics.openTasks === 1 ? 'remains' : 'remain'} open. Prioritize dated tasks first.`
                       : 'There are no open customer commitments. The briefing only reports current workspace data.'}
                   </p>
-                  <button onClick={() => go('people')}>
+                  <button
+                    onClick={() => {
+                      setPeopleTab('accounts');
+                      go('people');
+                    }}
+                  >
                     Review accounts <ArrowRight />
                   </button>
                   <div className="briefing-orb" aria-hidden="true">
