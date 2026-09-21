@@ -8275,31 +8275,6 @@ export default function Home() {
                           />
                         </div>
                       </div>
-                      <div className="event-three">
-                        <div className="field-block">
-                          <label htmlFor="event-hall">Hall</label>
-                          <Input id="event-hall" name="hall" placeholder="2" />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-booth">Booth</label>
-                          <Input
-                            id="event-booth"
-                            name="booth"
-                            placeholder="B-18"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-zone">Timezone</label>
-                          <Input
-                            id="event-zone"
-                            name="timezone"
-                            defaultValue={
-                              appContext?.workspace.timezone || 'Asia/Kolkata'
-                            }
-                            required
-                          />
-                        </div>
-                      </div>
                       <div className="field-grid">
                         <div className="field-block">
                           <label htmlFor="event-start">Starts</label>
@@ -8319,186 +8294,246 @@ export default function Home() {
                             required
                           />
                         </div>
-                      <h3 className="form-group-label">Playbook</h3>
                       </div>
-                      <div className="field-block">
-                        <label htmlFor="event-objective-detail">
-                          Business objective
-                        </label>
-                        <Textarea
-                          id="event-objective-detail"
-                          name="objective"
-                          placeholder="Book 30 qualified demos and create a measurable sales pipeline."
-                        />
-                      </div>
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="event-products">
-                            Products or services
-                          </label>
-                          <Input
-                            id="event-products"
-                            name="products"
-                            placeholder="MachineSight, Integration assessment"
-                          />
+                      {/* Only 4 fields have to be typed to create a draft
+                          event - everything below either has a working
+                          default or is genuinely optional at creation time.
+                          The readiness checklist already names exactly what's
+                          still missing (Venue and booth, Event objective,
+                          Event offerings, ...) with a working link back here,
+                          so hiding them costs nothing and the wall of 14
+                          fields doesn't have to be read to create something.
+                          Editing an existing event opens it by default - nothing
+                          already configured should look like it went missing. */}
+                      <details
+                        className="more-details"
+                        open={Boolean(editingEventId)}
+                      >
+                        <summary>
+                          <span>More details</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="more-details-body">
+                          <div className="event-three">
+                            <div className="field-block">
+                              <label htmlFor="event-hall">Hall</label>
+                              <Input
+                                id="event-hall"
+                                name="hall"
+                                placeholder="2"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-booth">Booth</label>
+                              <Input
+                                id="event-booth"
+                                name="booth"
+                                placeholder="B-18"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-zone">Timezone</label>
+                              <Input
+                                id="event-zone"
+                                name="timezone"
+                                defaultValue={
+                                  appContext?.workspace.timezone ||
+                                  'Asia/Kolkata'
+                                }
+                                required
+                              />
+                            </div>
+                          </div>
+                          <h3 className="form-group-label">Playbook</h3>
+                          <div className="field-block">
+                            <label htmlFor="event-objective-detail">
+                              Business objective
+                            </label>
+                            <Textarea
+                              id="event-objective-detail"
+                              name="objective"
+                              placeholder="Book 30 qualified demos and create a measurable sales pipeline."
+                            />
+                          </div>
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="event-products">
+                                Products or services
+                              </label>
+                              <Input
+                                id="event-products"
+                                name="products"
+                                placeholder="MachineSight, Integration assessment"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-targets">
+                                Target accounts
+                              </label>
+                              <Input
+                                id="event-targets"
+                                name="targetAccounts"
+                                placeholder="ABC Pharma, Prime Polymers"
+                              />
+                            </div>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="event-questions">
+                              Qualification questions
+                            </label>
+                            <Textarea
+                              id="event-questions"
+                              name="qualificationQuestions"
+                              placeholder="How many machines?, Which ERP?, When does budget open? (comma separated)"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="event-lead-fields">
+                              Custom lead fields
+                            </label>
+                            <Textarea
+                              id="event-lead-fields"
+                              name="leadFieldSchema"
+                              placeholder="Budget, Timeline, Machine count (comma separated)"
+                            />
+                            <small className="field-help">
+                              Each label becomes an extra field on this
+                              event&apos;s capture form.
+                            </small>
+                          </div>
+                          <h3 className="form-group-label">Commercial</h3>
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="event-budget">
+                                Event budget (
+                                {appContext?.workspace.currency || 'INR'})
+                              </label>
+                              <Input
+                                id="event-budget"
+                                name="budget"
+                                type="number"
+                                min="0"
+                                defaultValue="0"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-attribution-window">
+                                Attribution window (days)
+                              </label>
+                              <Input
+                                id="event-attribution-window"
+                                name="attributionWindowDays"
+                                type="number"
+                                min="0"
+                                max="730"
+                                defaultValue="180"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-margin">
+                                Expected gross margin (%)
+                              </label>
+                              <Input
+                                id="event-margin"
+                                name="grossMarginPercent"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.1"
+                                defaultValue="40"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-badge">
+                                Badge or QR provider
+                              </label>
+                              <Input
+                                id="event-badge"
+                                name="badgeProvider"
+                                placeholder="Manual / provider name"
+                              />
+                            </div>
+                          </div>
+                          <h3 className="form-group-label">
+                            Routing and follow-up
+                          </h3>
+                          <div className="event-three">
+                            <div className="field-block">
+                              <label htmlFor="event-route">Lead owner</label>
+                              <select
+                                id="event-route"
+                                name="leadRoutingRule"
+                                defaultValue="capturer"
+                              >
+                                <option value="capturer">
+                                  Person who captures
+                                </option>
+                                <option value="round_robin">
+                                  Round robin
+                                </option>
+                                <option value="manager_review">
+                                  Manager assigns
+                                </option>
+                              </select>
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-sla">
+                                Follow-up SLA (hours)
+                              </label>
+                              <Input
+                                id="event-sla"
+                                name="followupSlaHours"
+                                type="number"
+                                min="1"
+                                max="720"
+                                defaultValue="24"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="event-target">
+                                Daily lead target
+                              </label>
+                              <Input
+                                id="event-target"
+                                name="dailyLeadTarget"
+                                type="number"
+                                min="1"
+                                defaultValue="25"
+                              />
+                            </div>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="event-team">
+                              Assigned team members
+                            </label>
+                            <select
+                              id="event-team"
+                              name="teamMemberIds"
+                              multiple
+                              size={Math.min(4, Math.max(2, members.length))}
+                            >
+                              {members
+                                .filter((member) => member.status === 'active')
+                                .map((member) => (
+                                  <option
+                                    key={member.id}
+                                    value={member.userId}
+                                  >
+                                    {member.displayName ||
+                                      member.email ||
+                                      'Team member'}{' '}
+                                    · {member.role}
+                                  </option>
+                                ))}
+                            </select>
+                            <small className="field-help">
+                              Hold Ctrl or Command to select more than one
+                              person. The creator is assigned automatically;
+                              owners and admins retain workspace oversight.
+                            </small>
+                          </div>
                         </div>
-                        <div className="field-block">
-                          <label htmlFor="event-targets">Target accounts</label>
-                          <Input
-                            id="event-targets"
-                            name="targetAccounts"
-                            placeholder="ABC Pharma, Prime Polymers"
-                          />
-                        </div>
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="event-questions">
-                          Qualification questions
-                        </label>
-                        <Textarea
-                          id="event-questions"
-                          name="qualificationQuestions"
-                          placeholder="How many machines?, Which ERP?, When does budget open? (comma separated)"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="event-lead-fields">
-                          Custom lead fields
-                        </label>
-                        <Textarea
-                          id="event-lead-fields"
-                          name="leadFieldSchema"
-                          placeholder="Budget, Timeline, Machine count (comma separated)"
-                        />
-                        <small className="field-help">
-                          Each label becomes an extra field on this
-                          event&apos;s capture form.
-                        </small>
-                      </div>
-                      <h3 className="form-group-label">Commercial</h3>
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="event-budget">
-                            Event budget (
-                            {appContext?.workspace.currency || 'INR'})
-                          </label>
-                          <Input
-                            id="event-budget"
-                            name="budget"
-                            type="number"
-                            min="0"
-                            defaultValue="0"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-attribution-window">
-                            Attribution window (days)
-                          </label>
-                          <Input
-                            id="event-attribution-window"
-                            name="attributionWindowDays"
-                            type="number"
-                            min="0"
-                            max="730"
-                            defaultValue="180"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-margin">
-                            Expected gross margin (%)
-                          </label>
-                          <Input
-                            id="event-margin"
-                            name="grossMarginPercent"
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            defaultValue="40"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-badge">
-                            Badge or QR provider
-                          </label>
-                          <Input
-                            id="event-badge"
-                            name="badgeProvider"
-                            placeholder="Manual / provider name"
-                          />
-                        </div>
-                      </div>
-                      <h3 className="form-group-label">Routing and follow-up</h3>
-                      <div className="event-three">
-                        <div className="field-block">
-                          <label htmlFor="event-route">Lead owner</label>
-                          <select
-                            id="event-route"
-                            name="leadRoutingRule"
-                            defaultValue="capturer"
-                          >
-                            <option value="capturer">
-                              Person who captures
-                            </option>
-                            <option value="round_robin">Round robin</option>
-                            <option value="manager_review">
-                              Manager assigns
-                            </option>
-                          </select>
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-sla">
-                            Follow-up SLA (hours)
-                          </label>
-                          <Input
-                            id="event-sla"
-                            name="followupSlaHours"
-                            type="number"
-                            min="1"
-                            max="720"
-                            defaultValue="24"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-target">
-                            Daily lead target
-                          </label>
-                          <Input
-                            id="event-target"
-                            name="dailyLeadTarget"
-                            type="number"
-                            min="1"
-                            defaultValue="25"
-                          />
-                        </div>
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="event-team">
-                          Assigned team members
-                        </label>
-                        <select
-                          id="event-team"
-                          name="teamMemberIds"
-                          multiple
-                          size={Math.min(4, Math.max(2, members.length))}
-                        >
-                          {members
-                            .filter((member) => member.status === 'active')
-                            .map((member) => (
-                              <option key={member.id} value={member.userId}>
-                                {member.displayName ||
-                                  member.email ||
-                                  'Team member'}{' '}
-                                · {member.role}
-                              </option>
-                            ))}
-                        </select>
-                        <small className="field-help">
-                          Hold Ctrl or Command to select more than one person.
-                          The creator is assigned automatically; owners and
-                          admins retain workspace oversight.
-                        </small>
-                      </div>
+                      </details>
                       <Button
                         className="save-button"
                         type="submit"
