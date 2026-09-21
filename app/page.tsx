@@ -882,6 +882,44 @@ function countFilledFields(candidates: ContactCandidates) {
   return Object.values(candidates).filter(Boolean).length;
 }
 
+// Measured live: creating and terminating a fresh Tesseract worker per scan
+// cost 8-12s of WASM/language-data setup on every single capture, which was
+// most of the wait between pressing Scan and seeing prefilled fields - and
+// it repeated on every visitor, including "Scan next". Tesseract's own
+// guidance is to keep one worker alive across recognize() calls; this holds
+// exactly one for the page's lifetime instead of one per scan.
+let ocrWorkerPromise: ReturnType<
+  typeof import('tesseract.js').createWorker
+> | null = null;
+// tesseract.js only accepts a logger at worker-creation time, and this
+// worker is created once for the whole page session - so the logger it's
+// given must forward to whichever scan is currently running, not whichever
+// scan happened to be first.
+let ocrProgressSink: ((progress: number) => void) | null = null;
+async function ocrWorker(
+  createWorker: typeof import('tesseract.js').createWorker,
+) {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = createWorker('eng', 1, {
+      workerPath: '/tesseract/worker.min.js',
+      corePath: '/tesseract-core',
+      langPath: '/tessdata',
+      logger: (message) => {
+        if (message.status === 'recognizing text')
+          ocrProgressSink?.(
+            Math.max(0, Math.min(1, Number(message.progress) || 0)),
+          );
+      },
+    }).catch((error: unknown) => {
+      // Don't cache a failed init - the next scan should retry cleanly
+      // rather than fail forever for the rest of the session.
+      ocrWorkerPromise = null;
+      throw error;
+    });
+  }
+  return ocrWorkerPromise;
+}
+
 async function readContactImageLocally(
   file: File,
   onProgress: (progress: number) => void,
@@ -921,15 +959,11 @@ async function readContactImageLocally(
   }
   paintGrayscale(context, contrasted, width, height);
 
-  const worker = await createWorker('eng', 1, {
-    workerPath: '/tesseract/worker.min.js',
-    corePath: '/tesseract-core',
-    langPath: '/tessdata',
-    logger: (message) => {
-      if (message.status === 'recognizing text')
-        onProgress(Math.max(0, Math.min(1, Number(message.progress) || 0)) * 0.6);
-    },
-  });
+  const worker = await ocrWorker(createWorker);
+  // Route the shared worker's progress events to this call's onProgress
+  // for as long as this scan is the one running, and hand the sink back
+  // whether this call succeeds, fails, or a newer scan preempts it.
+  ocrProgressSink = (fraction) => onProgress(fraction * 0.6);
   try {
     await worker.setParameters({
       tessedit_pageseg_mode: PSM.SPARSE_TEXT,
@@ -938,9 +972,10 @@ async function readContactImageLocally(
     const firstPass = await worker.recognize(canvas);
     let ocr = extractContactCandidates(firstPass.data.text);
 
-    // Pass 2: Otsu-binarized image, run only if the first pass came up short.
-    // This tends to recover text on colored/gradient card backgrounds that
-    // a fixed contrast curve doesn't fully separate from the ink.
+    // Pass 2: Otsu-binarized image, run only if the first pass came up
+    // short. This tends to recover text on colored/gradient card
+    // backgrounds that a fixed contrast curve doesn't fully separate from
+    // the ink.
     if (countFilledFields(ocr) < 3) {
       const threshold = otsuThreshold(gray);
       const binarized = new Uint8ClampedArray(gray.length);
@@ -949,6 +984,7 @@ async function readContactImageLocally(
       }
       paintGrayscale(context, binarized, width, height);
       await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+      ocrProgressSink = (fraction) => onProgress(0.6 + fraction * 0.4);
       const secondPass = await worker.recognize(canvas);
       onProgress(1);
       const secondOcr = extractContactCandidates(secondPass.data.text);
@@ -962,7 +998,7 @@ async function readContactImageLocally(
       : extractContactCandidates('');
     return mergeContactCandidates(encoded, ocr);
   } finally {
-    await worker.terminate();
+    ocrProgressSink = null;
   }
 }
 
@@ -1854,6 +1890,7 @@ export default function Home() {
       const data = (await response.json()) as {
         lead?: SavedLead;
         error?: string;
+        warning?: string | null;
       };
       if (!response.ok || !data.lead) {
         setSaveError(data.error || 'Unable to save this lead.');
@@ -1862,7 +1899,13 @@ export default function Home() {
       setSavedLead(data.lead);
       setCapturedLeads((current) => [data.lead!, ...current]);
       void loadWorkspace();
-      if (attachment && localOcrFields.length) {
+      if (data.warning) {
+        // File storage is unavailable in this environment - the backend
+        // already fell back to saving the contact fields only. Say so
+        // plainly rather than the normal "original saved" messaging, which
+        // would be false here.
+        setCaptureOutcome(data.warning);
+      } else if (attachment && localOcrFields.length) {
         setCaptureOutcome(
           'The on-device OCR fields and original image are saved. You can correct the contact at any time from People.',
         );

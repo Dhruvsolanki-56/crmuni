@@ -20,6 +20,25 @@ export function revenueEnv(): RevenueEnv {
   return env as unknown as RevenueEnv;
 }
 
+// The production Cloudflare deployment currently runs with r2_buckets: []
+// (see vite.config.ts) - env.FILES is undefined there, not a working but
+// empty bucket. Every call site that stores or reads a file must check this
+// first: calling .put/.get/.delete on undefined throws a raw TypeError that
+// takes down the whole request instead of degrading the feature.
+export function filesAvailable(): boolean {
+  return Boolean((env as unknown as RevenueEnv).FILES);
+}
+
+export function storageUnavailableResponse(action: string) {
+  return Response.json(
+    {
+      error: `${action} is not available in this environment. File storage is not configured.`,
+      code: 'STORAGE_UNAVAILABLE',
+    },
+    { status: 503 },
+  );
+}
+
 export function requestUser(request: Request) {
   const local = new URL(request.url).hostname === 'localhost';
   const id = request.headers.get('oai-authenticated-user-id');

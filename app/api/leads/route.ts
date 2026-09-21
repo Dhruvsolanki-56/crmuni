@@ -2,11 +2,13 @@ import {
   auditStatement,
   database,
   eventAccessClause,
+  filesAvailable,
   requireEventAccess,
   requireLeadAccess,
   requireRole,
   requireWorkspace,
   revenueEnv,
+  storageUnavailableResponse,
 } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
 import { accountIdentity } from '@/lib/accounts';
@@ -127,6 +129,13 @@ export async function POST(request: Request) {
       return Response.json(
         { error: 'Choose a recording or file to attach.' },
         { status: 400 },
+      );
+    // This action has no fallback: it has nothing to persist except the
+    // file. Fail with a clear reason rather than let a missing binding
+    // throw mid-request.
+    if (!filesAvailable())
+      return storageUnavailableResponse(
+        kind === 'audio' ? 'Audio notes' : 'Brochure attachments',
       );
     if (kind === 'audio' && !file.type.startsWith('audio/'))
       return Response.json(
@@ -289,7 +298,26 @@ export async function POST(request: Request) {
       { error: 'Conversation recordings must be audio files.' },
       { status: 400 },
     );
-  if (file)
+  // R2 is unbound in the current production deployment (r2_buckets: []).
+  // Local OCR/QR reading already happens entirely in the browser before
+  // this request is sent, so a scan that found a name and company still
+  // saves normally - only the original file and any server-side
+  // extraction (which needs to read that file back) are unavailable.
+  // A file with nothing else to go on can't become a useful lead without
+  // one of those, so that specific case is rejected with an actionable
+  // message instead of silently saving an "Unidentified visitor" record
+  // no one can ever recover the real details for.
+  const storageOk = filesAvailable();
+  if (file && !storageOk && (!suppliedFullName || !suppliedCompany))
+    return Response.json(
+      {
+        error:
+          'Automatic reading of images and recordings is unavailable in this environment. Enter the visitor’s name and company to save this lead.',
+        code: 'STORAGE_UNAVAILABLE',
+      },
+      { status: 503 },
+    );
+  if (file && storageOk)
     await enforceStorageEntitlement(
       database(),
       context.workspace.id,
@@ -363,7 +391,7 @@ export async function POST(request: Request) {
     ? requestedAttachmentKind
     : 'document';
   const source = file ? attachmentKind : 'manual';
-  const assetId = file ? crypto.randomUUID() : null;
+  const assetId = file && storageOk ? crypto.randomUUID() : null;
   let storageKey: string | null = null;
   if (file && assetId) {
     const safeName =
@@ -606,6 +634,16 @@ export async function POST(request: Request) {
               : 'stored_pending_extraction',
           }
         : null,
+      // Only set when a file was supplied but storage isn't available. The
+      // contact fields - whatever was typed, or filled by on-device OCR,
+      // which never touches storage - were saved normally either way; this
+      // is purely about the original file and server-side extraction.
+      warning:
+        file && !storageOk
+          ? localOcrConfirmed
+            ? 'File storage is unavailable in this environment, so the original could not be kept. The on-device reading of the contact fields is unaffected.'
+            : 'File storage is unavailable in this environment, so the original could not be kept and automatic reading could not run. The lead was saved with the details entered.'
+          : null,
     },
     { status: 201 },
   );

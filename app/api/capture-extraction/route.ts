@@ -3,10 +3,12 @@ import {
   auditStatement,
   database,
   enforceRateLimit,
+  filesAvailable,
   requireLeadAccess,
   requireRole,
   requireWorkspace,
   revenueEnv,
+  storageUnavailableResponse,
 } from '@/lib/db';
 import { entitlementsFor } from '@/lib/entitlements';
 
@@ -424,6 +426,12 @@ export async function POST(request: Request) {
       },
       { status: 413 },
     );
+  // An asset row only exists here if it was stored successfully at capture
+  // time (POST /api/leads now refuses to create one without a working FILES
+  // binding), so this should be unreachable in the current static per-
+  // deployment binding model. Guarded anyway rather than let a missing
+  // binding throw a raw TypeError instead of a clean response.
+  if (!filesAvailable()) return storageUnavailableResponse('Capture extraction');
   const object = await configured.FILES.get(String(asset.storageKey));
   if (!object)
     return Response.json(
