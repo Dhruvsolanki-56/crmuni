@@ -739,6 +739,11 @@ function apiFetch(path: string, init?: RequestInit) {
   return fetch(path, { ...init, headers });
 }
 
+function roiTone(value: number | null | undefined) {
+  if (value == null) return 'roi-value';
+  return `roi-value ${value < 0 ? 'negative' : 'positive'}`;
+}
+
 function money(value: number, currency = 'INR') {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -1161,6 +1166,8 @@ export default function Home() {
     useState<DeletionRequest | null>(null);
   const [operations, setOperations] = useState<OperationsData | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const topbarActionsRef = useRef<HTMLDivElement>(null);
   const [leadComments, setLeadComments] = useState<LeadComment[]>([]);
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [postingComment, setPostingComment] = useState(false);
@@ -1579,6 +1586,25 @@ export default function Home() {
     const timer = window.setTimeout(() => setNotice(''), 4000);
     return () => window.clearTimeout(timer);
   }, [notice]);
+  useEffect(() => {
+    if (!notificationsOpen && !profileOpen) return;
+    const dismiss = () => {
+      setNotificationsOpen(false);
+      setProfileOpen(false);
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      if (!topbarActionsRef.current?.contains(event.target as Node)) dismiss();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismiss();
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [notificationsOpen, profileOpen]);
   useEffect(() => {
     const sync = () => {
       void flushOutbox();
@@ -4146,7 +4172,9 @@ export default function Home() {
             <Menu />
           </button>
           <div className="event-context">
-            <span className="live-dot" />{' '}
+            <span
+              className={`live-dot ${activeEvent ? '' : 'idle'}`}
+            />{' '}
             {activeEvent?.name || 'No active event'}{' '}
             <span>
               ·{' '}
@@ -4155,7 +4183,7 @@ export default function Home() {
                 : 'Select one in Events'}
             </span>
           </div>
-          <div className="topbar-actions">
+          <div className="topbar-actions" ref={topbarActionsRef}>
             <button
               className="search-button"
               aria-label="Search"
@@ -4169,7 +4197,11 @@ export default function Home() {
               <button
                 className="icon-button"
                 aria-label="Notifications"
-                onClick={() => setNotificationsOpen((value) => !value)}
+                aria-expanded={notificationsOpen}
+                onClick={() => {
+                  setProfileOpen(false);
+                  setNotificationsOpen((value) => !value);
+                }}
               >
                 <Bell size={19} />
                 {operations?.notifications.some((item) => !item.readAt) ? (
@@ -4214,16 +4246,45 @@ export default function Home() {
                 </div>
               ) : null}
             </div>
-            <button
-              className="icon-button"
-              aria-label="Profile"
-              onClick={() => {
-                setNotice('Signed in as Arjun Singh');
-                setTimeout(() => setNotice(''), 1800);
-              }}
-            >
-              <CircleUserRound size={21} />
-            </button>
+            <div className="notification-bell">
+              <button
+                className="icon-button"
+                aria-label="Profile"
+                aria-expanded={profileOpen}
+                onClick={() => {
+                  setNotificationsOpen(false);
+                  setProfileOpen((value) => !value);
+                }}
+              >
+                <CircleUserRound size={21} />
+              </button>
+              {profileOpen ? (
+                <div className="notification-panel profile-panel">
+                  <div className="profile-panel-head">
+                    <span className="initial-avatar">
+                      {(appContext?.user.email || 'AS').slice(0, 2).toUpperCase()}
+                    </span>
+                    <span>
+                      <strong>
+                        {appContext?.user.email || 'Local tester'}
+                      </strong>
+                      <small>{appContext?.role || 'Loading role'}</small>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="notification-row"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      go('settings');
+                    }}
+                  >
+                    <strong>Workspace settings</strong>
+                    <span>Identity, members, plan and data export</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
 
@@ -4705,7 +4766,7 @@ export default function Home() {
                         {reviewLead?.captureStatus ===
                           'completed_pending_review'
                           ? `Review ${reviewLead.captureKind || 'uploaded'} capture`
-                          : `Review ${reviewLead?.fullName}`}
+                          : `Review ${reviewLead?.fullName ?? 'contact'}`}
                       </DialogTitle>
                       <DialogDescription>
                         AI suggestions remain separate from confirmed customer
@@ -4973,7 +5034,7 @@ export default function Home() {
                             : 'Save verified details'}
                         </Button>
                         <div className="field-grid">
-                          <div>
+                          <div className="consent-cell">
                             <small>
                               Email permission:{' '}
                               {reviewLead.emailConsentStatus || 'not recorded'}
@@ -4995,7 +5056,7 @@ export default function Home() {
                                 : 'Record email permission'}
                             </Button>
                           </div>
-                          <div>
+                          <div className="consent-cell">
                             <small>
                               WhatsApp permission:{' '}
                               {reviewLead.whatsappConsentStatus ||
@@ -5111,11 +5172,7 @@ export default function Home() {
                                 </option>
                               ))}
                           </select>
-                          <Input
-                            name="reason"
-                            placeholder="Assignment reason"
-                            defaultValue="manager_assignment"
-                          />
+                          <Input name="reason" placeholder="Assignment reason" />
                         </div>
                         <Button type="submit" variant="outline">
                           Assign owner
@@ -7545,7 +7602,9 @@ export default function Home() {
                     </article>
                     <article className="panel roi-card">
                       <small>Revenue ROI</small>
-                      <strong>
+                      <strong
+                        className={roiTone(revenueReport?.revenueRoiPercent)}
+                      >
                         {revenueReport?.revenueRoiPercent == null
                           ? 'Not available'
                           : `${revenueReport.revenueRoiPercent.toFixed(1)}%`}
@@ -7568,7 +7627,9 @@ export default function Home() {
                     </article>
                     <article className="panel roi-card">
                       <small>Profit ROI</small>
-                      <strong>
+                      <strong
+                        className={roiTone(revenueReport?.profitRoiPercent)}
+                      >
                         {revenueReport?.profitRoiPercent == null
                           ? 'Not available'
                           : `${revenueReport.profitRoiPercent.toFixed(1)}%`}
@@ -7659,6 +7720,12 @@ export default function Home() {
                         <Button type="submit" disabled={!activeEventId}>
                           Add cost line
                         </Button>
+                        {!activeEventId ? (
+                          <p className="field-help">
+                            Costs attach to an event. Select an active event in
+                            Events to record one.
+                          </p>
+                        ) : null}
                       </form>
                       <div className="action-list">
                         {eventCosts.map((cost) => (
@@ -9482,7 +9549,7 @@ export default function Home() {
                         </p>
                       ) : null}
                       <div className="field-grid">
-                        <div>
+                        <div className="consent-cell">
                           <small>
                             Email permission:{' '}
                             {reviewLead.emailConsentStatus || 'not recorded'}
@@ -9504,7 +9571,7 @@ export default function Home() {
                               : 'Record email permission'}
                           </Button>
                         </div>
-                        <div>
+                        <div className="consent-cell">
                           <small>
                             WhatsApp permission:{' '}
                             {reviewLead.whatsappConsentStatus ||
