@@ -1177,6 +1177,9 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [rfqDialogOpen, setRfqDialogOpen] = useState(false);
+  const [quotationDialogOpen, setQuotationDialogOpen] = useState(false);
+  const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
   const [similarEventMatches, setSimilarEventMatches] = useState<
     EventItem[]
   >([]);
@@ -2803,6 +2806,7 @@ export default function Home() {
     }
     setMeetings((current) => [data.meeting!, ...current]);
     form.reset();
+    setMeetingDialogOpen(false);
     setNotice('Meeting scheduled');
   }
 
@@ -3576,6 +3580,7 @@ export default function Home() {
       return;
     }
     form.reset();
+    setRfqDialogOpen(false);
     setNotice('RFQ intake created');
     await loadRfqs();
   }
@@ -3728,6 +3733,7 @@ export default function Home() {
       return;
     }
     form.reset();
+    setQuotationDialogOpen(false);
     setNotice('Quotation created');
     await loadQuotations();
   }
@@ -6106,15 +6112,19 @@ export default function Home() {
               ) : null}
               {activeView === 'rfqs' ? (
                 <div className="rfq-layout">
-                  <article className="panel rfq-intake">
+                  <Dialog
+                    open={rfqDialogOpen}
+                    onOpenChange={setRfqDialogOpen}
+                  >
+                    <DialogContent className="capture-dialog">
                     <div className="settings-heading">
                       <FileText />
                       <div>
-                        <h2>Receive an RFQ</h2>
-                        <p>
+                        <DialogTitle>Receive an RFQ</DialogTitle>
+                        <DialogDescription>
                           Store the original document and create accountable
                           response deadlines.
-                        </p>
+                        </DialogDescription>
                       </div>
                     </div>
                     <form className="lead-form" onSubmit={submitRfq}>
@@ -6208,14 +6218,23 @@ export default function Home() {
                         Create RFQ workflow
                       </Button>
                     </form>
-                  </article>
+                    </DialogContent>
+                  </Dialog>
                   <section className="rfq-list">
                     <div className="event-list-heading">
                       <div>
                         <h2>RFQ pipeline</h2>
                         <p>Earliest submission deadlines appear first.</p>
                       </div>
-                      <b>{rfqs.length} total</b>
+                      <div className="event-list-heading-actions">
+                        <b>{rfqs.length} total</b>
+                        <Button
+                          type="button"
+                          onClick={() => setRfqDialogOpen(true)}
+                        >
+                          Receive an RFQ
+                        </Button>
+                      </div>
                     </div>
                     {rfqs.length ? (
                       rfqs.map((item) => (
@@ -6321,10 +6340,32 @@ export default function Home() {
                         customer acceptance.
                       </p>
                     </div>
-                    <b>{quotations.length} total</b>
+                    <div className="event-list-heading-actions">
+                      <b>{quotations.length} total</b>
+                      <Button
+                        type="button"
+                        onClick={() => setQuotationDialogOpen(true)}
+                      >
+                        New quotation
+                      </Button>
+                    </div>
                   </div>
                   <div className="quotation-layout">
-                    <article className="panel rfq-intake">
+                    <Dialog
+                      open={quotationDialogOpen}
+                      onOpenChange={setQuotationDialogOpen}
+                    >
+                      <DialogContent className="capture-dialog">
+                      <div className="settings-heading">
+                        <FileText />
+                        <div>
+                          <DialogTitle>Create a quotation</DialogTitle>
+                          <DialogDescription>
+                            Issue the commercial document and track it through
+                            customer acceptance.
+                          </DialogDescription>
+                        </div>
+                      </div>
                       <form className="lead-form" onSubmit={submitQuotation}>
                         <input type="hidden" name="action" value="create" />
                         <div className="field-grid">
@@ -6414,7 +6455,8 @@ export default function Home() {
                           Create quotation
                         </Button>
                       </form>
-                    </article>
+                      </DialogContent>
+                    </Dialog>
                     <div className="quotation-list">
                       {quotations.length ? (
                         quotations.map((item) => (
@@ -6630,15 +6672,19 @@ export default function Home() {
               ) : null}
               {activeView === 'meetings' ? (
                 <div className="meetings-layout">
-                  <article className="panel meeting-intake">
+                  <Dialog
+                    open={meetingDialogOpen}
+                    onOpenChange={setMeetingDialogOpen}
+                  >
+                    <DialogContent className="capture-dialog">
                     <div className="settings-heading">
                       <CalendarDays />
                       <div>
-                        <h2>Schedule a meeting</h2>
-                        <p>
+                        <DialogTitle>Schedule a meeting</DialogTitle>
+                        <DialogDescription>
                           Create an accountable calendar record without sending
                           anything automatically.
-                        </p>
+                        </DialogDescription>
                       </div>
                     </div>
                     <form className="lead-form" onSubmit={createMeeting}>
@@ -6730,7 +6776,8 @@ export default function Home() {
                         </p>
                       ) : null}
                     </form>
-                  </article>
+                    </DialogContent>
+                  </Dialog>
                   <section className="meeting-list">
                     <div className="event-list-heading">
                       <div>
@@ -6740,7 +6787,15 @@ export default function Home() {
                           does not claim an invitation was delivered.
                         </p>
                       </div>
-                      <b>{meetings.length} total</b>
+                      <div className="event-list-heading-actions">
+                        <b>{meetings.length} total</b>
+                        <Button
+                          type="button"
+                          onClick={() => setMeetingDialogOpen(true)}
+                        >
+                          Schedule meeting
+                        </Button>
+                      </div>
                     </div>
                     {meetings.length ? (
                       meetings.map((meeting) => (
@@ -7356,49 +7411,53 @@ export default function Home() {
                                 Run readiness
                               </Button>
                             ) : null}
-                            {item.status === 'active' ? (
+                            <div className="event-actions-secondary">
+                              {item.status === 'active' ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    eventAction('assess_readiness', item.id)
+                                  }
+                                >
+                                  Recheck
+                                </button>
+                              ) : null}
+                              {item.status === 'active' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDirectoryVisibility(item)}
+                                >
+                                  {item.directoryVisibility === 'published'
+                                    ? 'Unpublish'
+                                    : 'Publish'}
+                                </button>
+                              ) : null}
+                              {item.status !== 'archived' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => editEvent(item)}
+                                >
+                                  Edit
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() =>
-                                  eventAction('assess_readiness', item.id)
+                                  eventAction('duplicate', item.id)
                                 }
                               >
-                                Recheck
+                                Duplicate
                               </button>
-                            ) : null}
-                            {item.status === 'active' ? (
-                              <button
-                                type="button"
-                                onClick={() => toggleDirectoryVisibility(item)}
-                              >
-                                {item.directoryVisibility === 'published'
-                                  ? 'Unpublish from directory'
-                                  : 'Publish to directory'}
-                              </button>
-                            ) : null}
-                            {item.status !== 'archived' ? (
-                              <button
-                                type="button"
-                                onClick={() => editEvent(item)}
-                              >
-                                Edit
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => eventAction('duplicate', item.id)}
-                            >
-                              Duplicate
-                            </button>
-                            {item.status !== 'archived' ? (
-                              <button
-                                className="danger-link"
-                                type="button"
-                                onClick={() => eventAction('archive', item.id)}
-                              >
-                                Archive
-                              </button>
-                            ) : null}
+                              {item.status !== 'archived' ? (
+                                <button
+                                  className="danger-link"
+                                  type="button"
+                                  onClick={() => eventAction('archive', item.id)}
+                                >
+                                  Archive
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         </article>
                       ))
