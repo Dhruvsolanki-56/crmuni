@@ -649,22 +649,28 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
    while Business profile stayed tall, so a two-column grid paired a tall
    card with a nearly empty one. The page now runs full-width profile,
    a row of equal item cards, then evidence. */
-.knowledge-layout { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; }
+/* Two, not four: at four the record lines inside each module wrapped onto
+   three lines and the modules read as cramped tiles. */
+.knowledge-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 .knowledge-layout > .settings-group,
 .knowledge-layout > .onboarding-progress,
 .knowledge-layout > .knowledge-sources { grid-column: 1 / -1; }
 /* Business profile is the page's substantial content — give it the width
    and lay its fields out across it rather than down a narrow column. */
 .knowledge-layout > .knowledge-card:has(> h2 + .lead-form) { grid-column: 1 / -1; }
-.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
-.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form > .field-grid { display: contents; }
-.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form > .save-button,
-.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form > input[type='hidden'] { grid-column: 1; }
+/* Four tracks, not three equal ones: a company name needs one, the
+   description and the objective need two. */
+.profile-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
+.profile-form > .field-grid { display: contents; }
+.profile-form > .field-block:has(> #company-description),
+.profile-form > .field-block:has(> #event-objective),
+.profile-form > .field-block:has(> #profile-change-reason) { grid-column: span 2; }
+.profile-form > .save-button { grid-column: 1; }
 
-@media (max-width: 1180px) { .knowledge-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 900px) {
+/* Two modules across a ~660px content column left each record line wrapping,
+   so below this the modules take the full width instead. */
+@media (max-width: 1080px) {
   .knowledge-layout { grid-template-columns: 1fr; }
-  .knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form { grid-template-columns: 1fr; }
 }
 
 /* ---- Home dashboard refinements ---- */
@@ -882,4 +888,40 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .event-row-name { flex: 1 1 100%; }
   .event-row-actions { justify-content: flex-start; flex: 1 1 100%; margin-top: 3px; }
   .event-grid > span[data-label]::before { content: attr(data-label) ": "; color: var(--color-text-subtle); }
+}
+
+/* Company knowledge refinements. The page reads company context → commercial
+   knowledge → qualification logic → evidence, so the profile form gets real
+   room and everything else stays compact. */
+.knowledge-layout > .workspace-intro { grid-column: 1 / -1; margin: -6px 0 2px; }
+.knowledge-layout > .empty-state { grid-column: 1 / -1; }
+/* Complete is a confirmation, not an onboarding wizard: one quiet line. */
+.onboarding-progress.complete { padding: 14px 18px; gap: 11px; }
+.onboarding-progress.complete > div:first-child > span { width: 40px; height: 40px; font-size: var(--text-base); line-height: var(--lh-base); }
+.onboarding-progress.complete h2 { font-size: var(--text-base); line-height: var(--lh-base); }
+.onboarding-progress.complete .progress-track { height: 3px; margin-top: 0; }
+/* "What do you sell?" is a paragraph; a company name is six words. Sizing
+   them identically for symmetry wasted the width on one and starved the other. */
+.profile-form > .field-block > textarea { min-height: 84px; }
+.profile-version { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 13px; border-top: 1px solid var(--color-line); }
+.profile-version strong { display: block; color: var(--color-text-primary); font-size: var(--text-sm); line-height: var(--lh-sm); font-weight: var(--weight-medium); }
+.profile-version small { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--lh-label); }
+.profile-version b { padding: 3px 8px; border-radius: var(--radius-pill); background: var(--color-surface-secondary); color: var(--color-text-muted); font-size: var(--text-micro); line-height: var(--lh-micro); font-weight: var(--weight-medium); }
+.profile-history { margin-top: -6px; }
+.profile-history summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--lh-label); cursor: pointer; list-style: none; }
+.profile-history summary::-webkit-details-marker { display: none; }
+.profile-history summary:hover { color: var(--color-brand); }
+.profile-history[open] summary svg { transform: rotate(180deg); }
+.knowledge-empty { margin: 0; padding: 3px 0 1px; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--lh-sm); }
+/* Provenance stays available, one step quieter than the human summary. */
+.source-technical { color: var(--color-text-subtle) !important; font-size: var(--text-micro) !important; line-height: var(--lh-micro) !important; overflow-wrap: anywhere; }
+.knowledge-records > div > span { overflow-wrap: anywhere; }
+@media (max-width: 1080px) {
+  .profile-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .profile-form { grid-template-columns: 1fr; }
+  .profile-form > .field-block:has(> #company-description),
+  .profile-form > .field-block:has(> #event-objective),
+  .profile-form > .field-block:has(> #profile-change-reason) { grid-column: span 1; }
 }

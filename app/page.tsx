@@ -384,6 +384,7 @@ type KnowledgeData = {
     reviewNote?: string;
     reviewedBy?: string;
     reviewedAt?: number;
+    createdAt: number;
   }>;
   claims: Array<{
     id: string;
@@ -1307,6 +1308,9 @@ export default function Home() {
      state driven - so the open RFQ is held by id and always re-read from the
      loaded list, never from a snapshot captured at click time. */
   const [openRfqId, setOpenRfqId] = useState('');
+  const [knowledgeState, setKnowledgeState] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
   const [eventTab, setEventTab] = useState('all');
   const [eventQuery, setEventQuery] = useState('');
   const [eventSort, setEventSort] = useState('recent');
@@ -1529,8 +1533,16 @@ export default function Home() {
     });
   }
   async function loadKnowledge() {
+    setKnowledgeState((current) => (current === 'ready' ? current : 'loading'));
     const response = await apiFetch('/api/company-intelligence');
-    if (response.ok) setKnowledge((await response.json()) as KnowledgeData);
+    if (!response.ok) {
+      /* A failed load used to fall through to the empty arrays, so a broken
+         request looked exactly like an unconfigured workspace. */
+      setKnowledgeState('error');
+      return;
+    }
+    setKnowledge((await response.json()) as KnowledgeData);
+    setKnowledgeState('ready');
   }
   async function loadRfqs() {
     setRfqState((current) => (current === 'ready' ? current : 'loading'));
@@ -4340,6 +4352,15 @@ export default function Home() {
   const canManageEvents = ['owner', 'admin', 'manager'].includes(
     appContext?.role || '',
   );
+  /* Same four signals the banner always counted, named once so the figure and
+     the progress line cannot drift apart. */
+  const knowledgeSetupDone = [
+    knowledge.profile,
+    knowledge.products.length,
+    knowledge.icps.length,
+    knowledge.sources.length,
+  ].filter(Boolean).length;
+  const currentProfileVersion = knowledge.profileVersions[0];
   /* The event chosen for capture leads the page; everything else is listed
      below it, so the two never show the same record twice. */
   const otherEvents = events.filter((item) => item.id !== activeEvent?.id);
@@ -8902,43 +8923,74 @@ export default function Home() {
                   </section>
                 </div>
               ) : null}
-              {activeView === 'knowledge' ? (
+              {activeView === 'knowledge' &&
+              knowledgeState === 'error' &&
+              !knowledge.profile ? (
                 <div className="knowledge-layout">
-                  <article className="panel onboarding-progress">
+                  <p className="workspace-intro">
+                    Define the company context used across Revenue OS.
+                  </p>
+                  <article className="panel empty-state large">
+                    <AlertTriangle />
+                    <h2>Could not load company knowledge</h2>
+                    <p>The request to the workspace failed.</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void loadKnowledge()}
+                    >
+                      Retry
+                    </Button>
+                  </article>
+                </div>
+              ) : null}
+              {activeView === 'knowledge' &&
+              knowledgeState !== 'ready' &&
+              knowledgeState !== 'error' &&
+              !knowledge.profile ? (
+                <div className="knowledge-layout">
+                  <p className="workspace-intro">
+                    Define the company context used across Revenue OS.
+                  </p>
+                  <article className="panel empty-state large">
+                    <p>Loading company knowledge…</p>
+                  </article>
+                </div>
+              ) : null}
+              {activeView === 'knowledge' &&
+              (knowledgeState === 'ready' || knowledge.profile) ? (
+                <div className="knowledge-layout">
+                  <p className="workspace-intro">
+                    Define the company context used across Revenue OS.
+                  </p>
+                  <article
+                    className={`panel onboarding-progress ${knowledgeSetupDone === 4 ? 'complete' : ''}`}
+                  >
                     <div>
                       <span>
-                        {
-                          [
-                            knowledge.profile,
-                            knowledge.products.length,
-                            knowledge.icps.length,
-                            knowledge.sources.length,
-                          ].filter(Boolean).length
-                        }
+                        {knowledgeSetupDone}
                         <small>/4</small>
                       </span>
                       <div>
                         <h2>Company intelligence setup</h2>
                         <p>
-                          {knowledge.profile
-                            ? 'Profile saved. Add products, target customers and evidence.'
-                            : 'Start by explaining what the company sells and whom it serves.'}
+                          {knowledgeSetupDone === 4
+                            ? 'All required company context is configured.'
+                            : knowledge.profile
+                              ? 'Profile saved. Add products, target customers and evidence.'
+                              : 'Start by explaining what the company sells and whom it serves.'}
                         </p>
                       </div>
                     </div>
                     <div className="progress-track">
-                      <i
-                        style={{
-                          width: `${[knowledge.profile, knowledge.products.length, knowledge.icps.length, knowledge.sources.length].filter(Boolean).length * 25}%`,
-                        }}
-                      />
+                      <i style={{ width: `${knowledgeSetupDone * 25}%` }} />
                     </div>
                   </article>
                   <h3 className="settings-group">Company profile</h3>
                   <article className="panel knowledge-card">
                     <h2>Business profile</h2>
                     <form
-                      className="lead-form"
+                      className="lead-form profile-form"
                       key={`${appContext?.workspace.id || 'loading'}:${knowledge.profile?.legalName || 'new'}`}
                       onSubmit={submitKnowledge}
                     >
@@ -9033,21 +9085,48 @@ export default function Home() {
                         Save business profile
                       </Button>
                     </form>
-                    {knowledge.profileVersions.length ? (
-                      <div className="knowledge-records">
-                        {knowledge.profileVersions.slice(0, 3).map((item) => (
-                          <div key={item.id}>
-                            <span>
-                              <strong>Profile version {item.version}</strong>
-                              <small>
-                                {item.changeReason} ·{' '}
-                                {dateTime(item.createdAt)}
-                              </small>
-                            </span>
-                            <b>v{item.version}</b>
-                          </div>
-                        ))}
+                    {currentProfileVersion ? (
+                      /* Version history is metadata about the form above it,
+                         not a third content section. */
+                      <div className="profile-version">
+                        <span>
+                          <strong>
+                            Profile version {currentProfileVersion.version}
+                          </strong>
+                          <small>
+                            {currentProfileVersion.changeReason} ·{' '}
+                            {dateTime(currentProfileVersion.createdAt)}
+                          </small>
+                        </span>
+                        <b>v{currentProfileVersion.version}</b>
                       </div>
+                    ) : null}
+                    {knowledge.profileVersions.length > 1 ? (
+                      <details className="profile-history">
+                        <summary>
+                          <span>
+                            {knowledge.profileVersions.length - 1} earlier{' '}
+                            {knowledge.profileVersions.length === 2
+                              ? 'version'
+                              : 'versions'}
+                          </span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="knowledge-records">
+                          {knowledge.profileVersions.slice(1).map((item) => (
+                            <div key={item.id}>
+                              <span>
+                                <strong>Profile version {item.version}</strong>
+                                <small>
+                                  {item.changeReason} ·{' '}
+                                  {dateTime(item.createdAt)}
+                                </small>
+                              </span>
+                              <b>v{item.version}</b>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
                     ) : null}
                   </article>
                   <h3 className="settings-group">Knowledge base</h3>
@@ -9105,6 +9184,9 @@ export default function Home() {
                       </DialogContent>
                     </Dialog>
                     <div className="knowledge-records">
+                      {!knowledge.claims.length ? (
+                        <p className="knowledge-empty">No approved claims yet.</p>
+                      ) : null}
                       {knowledge.claims.map((claim) => (
                         <div key={claim.id}>
                           <span>
@@ -9229,6 +9311,9 @@ export default function Home() {
                       </DialogContent>
                     </Dialog>
                     <div className="knowledge-records">
+                      {!knowledge.products.length ? (
+                        <p className="knowledge-empty">No offerings added yet.</p>
+                      ) : null}
                       {knowledge.products.map((item) => (
                         <div key={item.id}>
                           <span>
@@ -9348,6 +9433,9 @@ export default function Home() {
                       </DialogContent>
                     </Dialog>
                     <div className="knowledge-records">
+                      {!knowledge.icps.length ? (
+                        <p className="knowledge-empty">No customer profiles added yet.</p>
+                      ) : null}
                       {knowledge.icps.map((item) => (
                         <div key={item.id}>
                           <span>
@@ -9444,6 +9532,9 @@ export default function Home() {
                       </DialogContent>
                     </Dialog>
                     <div className="knowledge-records">
+                      {!knowledge.rules.length ? (
+                        <p className="knowledge-empty">No qualification rules added yet.</p>
+                      ) : null}
                       {knowledge.rules.map((item) => (
                         <div key={item.id}>
                           <span>
@@ -9503,19 +9594,29 @@ export default function Home() {
                       </form>
                     </div>
                     <div className="knowledge-records">
+                      {!knowledge.sources.length ? (
+                        <p className="knowledge-empty">No knowledge sources added yet.</p>
+                      ) : null}
                       {knowledge.sources.map((item) => (
                         <div key={item.id}>
                           <span>
                             <strong>{item.name}</strong>
+                            {/* What the source is, then how it was ingested.
+                                The hash matters for provenance but should not
+                                be the first thing read. */}
                             <small>
-                              {item.sourceType} · {item.status}
+                              {item.status.replaceAll('_', ' ')} ·{' '}
+                              {item.sourceType}
                               {item.sizeBytes
                                 ? ` · ${Math.ceil(item.sizeBytes / 1024)} KB`
                                 : ''}
+                              {item.createdAt
+                                ? ` · added ${dateTime(item.createdAt)}`
+                                : ''}
                             </small>
                             {item.ingestionStatus ? (
-                              <small>
-                                Ingestion:{' '}
+                              <small className="source-technical">
+                                Ingestion{' '}
                                 {item.ingestionStatus.replaceAll('_', ' ')}
                                 {item.extractionMethod
                                   ? ` · ${item.extractionMethod.replaceAll('_', ' ')}`
