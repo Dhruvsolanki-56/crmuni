@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -1825,32 +1831,6 @@ export default function Home() {
     }, 120);
     return () => window.clearTimeout(timer);
   }, [reviewLead]);
-  function go(view: View) {
-    setActiveView(view);
-    setMobileNav(false);
-    if (view === 'settings') {
-      void loadSettings();
-      void loadOperations();
-    }
-    if (view === 'knowledge') void loadKnowledge();
-    if (view === 'rfqs') {
-      void loadRfqs();
-      void loadQuotations();
-    }
-    if (view === 'meetings') void loadMeetings();
-    if (view === 'roi') {
-      void loadEvents();
-      void loadReports();
-    }
-    if (view === 'events') {
-      void loadEvents();
-      void loadSettings();
-    }
-    if (view === 'visitor-discover') void searchDirectory(directoryQuery);
-    if (view === 'visitor-plan' && activeEventId)
-      void loadItinerary(activeEventId);
-  }
-
   async function saveLead(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeEvent) {
@@ -2036,7 +2016,32 @@ export default function Home() {
       setSaving(false);
     }
   }
-  function resetCapture(open: boolean) {
+  // Typed name/contact details or a scanned photo/recording that never got
+  // saved are exactly what a busy booth rep can't afford to retype - only
+  // ask before throwing them away, never for an already-saved capture.
+  function captureHasUnsavedInput() {
+    if (attachment) return true;
+    const form = leadForm.current;
+    if (!form) return false;
+    return ['fullName', 'company', 'email', 'phone', 'note'].some((name) => {
+      const control = form.elements.namedItem(name);
+      return control instanceof HTMLInputElement ||
+        control instanceof HTMLTextAreaElement
+        ? control.value.trim().length > 0
+        : false;
+    });
+  }
+  async function resetCapture(open: boolean) {
+    if (!open && !saved && captureHasUnsavedInput()) {
+      const confirmed = await askUser({
+        title: 'Discard this capture?',
+        description:
+          'The name, contact details, or recording entered here have not been saved yet and will be lost.',
+        confirmLabel: 'Discard',
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
     setCaptureOpen(open);
     if (!open) {
       leadDraftRef.current = null;
@@ -2237,7 +2242,7 @@ export default function Home() {
   // next visitor. This is the fast path the whole capture flow is built
   // around: confirm one person, immediately be ready for the next.
   function scanNext() {
-    resetCapture(false);
+    void resetCapture(false);
     window.setTimeout(() => setCaptureOpen(true), 200);
   }
 
@@ -3018,7 +3023,7 @@ export default function Home() {
   // rather than read back from state, since state from openReview() hasn't
   // committed yet when this runs.
   function prepareFollowup(lead: SavedLead) {
-    resetCapture(false);
+    void resetCapture(false);
     window.setTimeout(() => {
       openReview(lead);
       if (lead.note) void analyzeConversation(lead);
@@ -3859,6 +3864,70 @@ export default function Home() {
       setItineraryItems(data.items);
     }
   }
+  // Split so the browser back/forward handler below can re-apply a view's
+  // side effects (reload its data) without pushing another history entry -
+  // only go() does that, since it's the one call site that means "the user
+  // chose to navigate somewhere new."
+  function syncView(view: View) {
+    setActiveView(view);
+    setMobileNav(false);
+    if (view === 'settings') {
+      void loadSettings();
+      void loadOperations();
+    }
+    if (view === 'knowledge') void loadKnowledge();
+    if (view === 'rfqs') {
+      void loadRfqs();
+      void loadQuotations();
+    }
+    if (view === 'meetings') void loadMeetings();
+    if (view === 'roi') {
+      void loadEvents();
+      void loadReports();
+    }
+    if (view === 'events') {
+      void loadEvents();
+      void loadSettings();
+    }
+    if (view === 'visitor-discover') void searchDirectory(directoryQuery);
+    if (view === 'visitor-plan' && activeEventId)
+      void loadItinerary(activeEventId);
+  }
+  function go(view: View) {
+    syncView(view);
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', view);
+    window.history.pushState({ view }, '', url);
+  }
+  // Without this, the browser Back button has nothing of ours to land on
+  // and exits the app entirely on the very first press, to whatever page
+  // was open before it. Establishing this tab's starting history entry as
+  // "today" gives go()'s later pushState calls somewhere safe to pop back
+  // to. Deliberately empty deps: this baseline must be written exactly
+  // once, at mount - never again, or it would stomp the current entry's
+  // view every time syncView's identity changes below.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'today');
+    window.history.replaceState({ view: 'today' }, '', url);
+  }, []);
+  // A ref instead of a dependency: syncView closes over view-specific
+  // loaders declared above, so it's a new function every render, and
+  // re-subscribing this listener on every render would fire it once per
+  // render during rapid state changes. The ref always reads the current
+  // syncView without that churn.
+  const syncViewRef = useRef(syncView);
+  useLayoutEffect(() => {
+    syncViewRef.current = syncView;
+  });
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as { view?: View } | null;
+      syncViewRef.current(state?.view || 'today');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   async function addItineraryItem(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeEvent) return;
@@ -5185,7 +5254,7 @@ export default function Home() {
                             className="pending-review-pill"
                             onClick={() => {
                               const lead = pendingReviewLeads[0];
-                              resetCapture(false);
+                              void resetCapture(false);
                               window.setTimeout(() => openReview(lead), 180);
                             }}
                           >
@@ -5603,7 +5672,7 @@ export default function Home() {
                               variant="outline"
                               onClick={() => {
                                 const lead = savedLead;
-                                resetCapture(false);
+                                void resetCapture(false);
                                 setTimeout(() => openReview(lead), 180);
                               }}
                             >
@@ -6550,11 +6619,6 @@ export default function Home() {
                   <small>
                     {metrics.qualifiedLeads} confirmed conversations
                   </small>
-                  <div className="spark-bars" aria-hidden="true">
-                    {[32, 44, 37, 58, 49, 70, 63, 82, 76, 91].map((h, i) => (
-                      <i key={i} style={{ height: `${h}%` }} />
-                    ))}
-                  </div>
                 </article>
                 <article className="signal-card">
                   <div className="signal-head">
