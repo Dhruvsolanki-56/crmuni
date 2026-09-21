@@ -423,6 +423,7 @@ type EventItem = {
   targetAccounts: string[];
   qualificationQuestions: string[];
   leadFieldSchema: string[];
+  teamMemberIds: string[];
   leadRoutingRule: string;
   followupSlaHours: number;
   dailyLeadTarget: number;
@@ -1300,6 +1301,17 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  // Clicking a failed readiness check opens a tiny form with only the
+  // field(s) that check actually validates, instead of the full event
+  // form. Everything else the event already has is carried forward as
+  // hidden inputs with its current value, since the update endpoint
+  // overwrites every column on every save - nothing is dropped.
+  const [quickFixTarget, setQuickFixTarget] = useState<{
+    item: EventItem;
+    checkKey: string;
+    label: string;
+    detail: string;
+  } | null>(null);
   const [rfqDialogOpen, setRfqDialogOpen] = useState(false);
   const [quotationDialogOpen, setQuotationDialogOpen] = useState(false);
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
@@ -3623,7 +3635,25 @@ export default function Home() {
         ? 'Event updated · run readiness again before activating'
         : 'Event created · run readiness, then activate it for capture',
     );
+    setQuickFixTarget(null);
     await loadEvents();
+  }
+  function openEventQuickFix(
+    item: EventItem,
+    check: { key: string; label: string; detail: string },
+  ) {
+    setEditingEventId(item.id);
+    setQuickFixTarget({
+      item,
+      checkKey: check.key,
+      label: check.label,
+      detail: check.detail,
+    });
+  }
+  function closeEventQuickFix(open: boolean) {
+    if (open) return;
+    setQuickFixTarget(null);
+    setEditingEventId(null);
   }
   function newEvent() {
     setEditingEventId(null);
@@ -3902,7 +3932,7 @@ export default function Home() {
               onClick={() =>
                 fixesInKnowledge
                   ? go('knowledge')
-                  : editEvent(item)
+                  : openEventQuickFix(item, check)
               }
             >
               {content}
@@ -8548,6 +8578,282 @@ export default function Home() {
                           : 'Create event workspace'}
                       </Button>
                     </form>
+                    </DialogContent>
+                  </Dialog>
+                  <Dialog
+                    open={Boolean(quickFixTarget)}
+                    onOpenChange={closeEventQuickFix}
+                  >
+                    <DialogContent className="capture-dialog">
+                      {quickFixTarget ? (
+                        <>
+                          <div className="settings-heading">
+                            <CalendarDays />
+                            <div>
+                              <DialogTitle>
+                                Fix: {quickFixTarget.label}
+                              </DialogTitle>
+                              <DialogDescription>
+                                {quickFixTarget.detail} Only this saves —
+                                everything else about {quickFixTarget.item.name}{' '}
+                                stays exactly as it is.
+                              </DialogDescription>
+                            </div>
+                          </div>
+                          <form
+                            className="lead-form"
+                            key={quickFixTarget.item.id + quickFixTarget.checkKey}
+                            onSubmit={submitEvent}
+                          >
+                            {quickFixTarget.checkKey === 'event_location' ? (
+                              <div className="field-grid">
+                                <div className="field-block">
+                                  <label htmlFor="quickfix-venue">
+                                    Venue
+                                  </label>
+                                  <Input
+                                    id="quickfix-venue"
+                                    name="venue"
+                                    required
+                                    defaultValue={
+                                      quickFixTarget.item.venue || ''
+                                    }
+                                    placeholder="Bombay Exhibition Centre"
+                                  />
+                                </div>
+                                <div className="field-block">
+                                  <label htmlFor="quickfix-booth">
+                                    Booth
+                                  </label>
+                                  <Input
+                                    id="quickfix-booth"
+                                    name="booth"
+                                    required
+                                    defaultValue={
+                                      quickFixTarget.item.booth || ''
+                                    }
+                                    placeholder="B-18"
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+                            {quickFixTarget.checkKey === 'event_objective' ? (
+                              <div className="field-block">
+                                <label htmlFor="quickfix-objective">
+                                  Business objective
+                                </label>
+                                <Textarea
+                                  id="quickfix-objective"
+                                  name="objective"
+                                  required
+                                  defaultValue={
+                                    quickFixTarget.item.objective || ''
+                                  }
+                                  placeholder="Book 30 qualified demos and create a measurable sales pipeline."
+                                />
+                              </div>
+                            ) : null}
+                            {quickFixTarget.checkKey === 'event_products' ? (
+                              <div className="field-block">
+                                <label htmlFor="quickfix-products">
+                                  Products or services
+                                </label>
+                                <Input
+                                  id="quickfix-products"
+                                  name="products"
+                                  required
+                                  defaultValue={quickFixTarget.item.products.join(
+                                    ', ',
+                                  )}
+                                  placeholder="MachineSight, Integration assessment"
+                                />
+                              </div>
+                            ) : null}
+                            {quickFixTarget.checkKey ===
+                            'qualification_questions' ? (
+                              <div className="field-block">
+                                <label htmlFor="quickfix-questions">
+                                  Qualification questions
+                                </label>
+                                <Textarea
+                                  id="quickfix-questions"
+                                  name="qualificationQuestions"
+                                  required
+                                  defaultValue={quickFixTarget.item.qualificationQuestions.join(
+                                    ', ',
+                                  )}
+                                  placeholder="How many machines?, Which ERP?, When does budget open? (comma separated)"
+                                />
+                              </div>
+                            ) : null}
+                            {quickFixTarget.checkKey === 'assigned_team' ? (
+                              <div className="field-block">
+                                <label htmlFor="quickfix-team">
+                                  Assigned team members
+                                </label>
+                                <select
+                                  id="quickfix-team"
+                                  name="teamMemberIds"
+                                  multiple
+                                  required
+                                  defaultValue={quickFixTarget.item.teamMemberIds}
+                                  size={Math.min(4, Math.max(2, members.length))}
+                                >
+                                  {members
+                                    .filter(
+                                      (member) => member.status === 'active',
+                                    )
+                                    .map((member) => (
+                                      <option
+                                        key={member.id}
+                                        value={member.userId}
+                                      >
+                                        {member.displayName ||
+                                          member.email ||
+                                          'Team member'}{' '}
+                                        · {member.role}
+                                      </option>
+                                    ))}
+                                </select>
+                                <small className="field-help">
+                                  Hold Ctrl or Command to select more than one
+                                  person.
+                                </small>
+                              </div>
+                            ) : null}
+                            {/* Carry forward every other field unedited so
+                                the backend's full-row update can't drop
+                                anything this dialog doesn't show. */}
+                            <input
+                              type="hidden"
+                              name="name"
+                              value={quickFixTarget.item.name}
+                            />
+                            {quickFixTarget.checkKey !== 'event_location' ? (
+                              <>
+                                <input
+                                  type="hidden"
+                                  name="venue"
+                                  value={quickFixTarget.item.venue || ''}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="booth"
+                                  value={quickFixTarget.item.booth || ''}
+                                />
+                              </>
+                            ) : null}
+                            <input
+                              type="hidden"
+                              name="hall"
+                              value={quickFixTarget.item.hall || ''}
+                            />
+                            <input
+                              type="hidden"
+                              name="startsOn"
+                              value={quickFixTarget.item.startsOn}
+                            />
+                            <input
+                              type="hidden"
+                              name="endsOn"
+                              value={quickFixTarget.item.endsOn}
+                            />
+                            <input
+                              type="hidden"
+                              name="timezone"
+                              value={quickFixTarget.item.timezone}
+                            />
+                            <input
+                              type="hidden"
+                              name="budget"
+                              value={quickFixTarget.item.budget}
+                            />
+                            <input
+                              type="hidden"
+                              name="attributionWindowDays"
+                              value={quickFixTarget.item.attributionWindowDays}
+                            />
+                            <input
+                              type="hidden"
+                              name="grossMarginPercent"
+                              value={Math.round(
+                                quickFixTarget.item.grossMarginBps / 100,
+                              )}
+                            />
+                            {quickFixTarget.checkKey !== 'event_objective' ? (
+                              <input
+                                type="hidden"
+                                name="objective"
+                                value={quickFixTarget.item.objective || ''}
+                              />
+                            ) : null}
+                            {quickFixTarget.checkKey !== 'event_products' ? (
+                              <input
+                                type="hidden"
+                                name="products"
+                                value={quickFixTarget.item.products.join(', ')}
+                              />
+                            ) : null}
+                            <input
+                              type="hidden"
+                              name="targetAccounts"
+                              value={quickFixTarget.item.targetAccounts.join(
+                                ', ',
+                              )}
+                            />
+                            {quickFixTarget.checkKey !==
+                            'qualification_questions' ? (
+                              <input
+                                type="hidden"
+                                name="qualificationQuestions"
+                                value={quickFixTarget.item.qualificationQuestions.join(
+                                  ', ',
+                                )}
+                              />
+                            ) : null}
+                            <input
+                              type="hidden"
+                              name="leadFieldSchema"
+                              value={quickFixTarget.item.leadFieldSchema.join(
+                                ', ',
+                              )}
+                            />
+                            {quickFixTarget.checkKey !== 'assigned_team'
+                              ? quickFixTarget.item.teamMemberIds.map((id) => (
+                                  <input
+                                    key={id}
+                                    type="hidden"
+                                    name="teamMemberIds"
+                                    value={id}
+                                  />
+                                ))
+                              : null}
+                            <input
+                              type="hidden"
+                              name="leadRoutingRule"
+                              value={quickFixTarget.item.leadRoutingRule}
+                            />
+                            <input
+                              type="hidden"
+                              name="followupSlaHours"
+                              value={quickFixTarget.item.followupSlaHours}
+                            />
+                            <input
+                              type="hidden"
+                              name="dailyLeadTarget"
+                              value={quickFixTarget.item.dailyLeadTarget}
+                            />
+                            <input
+                              type="hidden"
+                              name="badgeProvider"
+                              value={quickFixTarget.item.badgeProvider || ''}
+                            />
+                            <Button className="save-button" type="submit">
+                              Save and re-check readiness
+                            </Button>
+                          </form>
+                        </>
+                      ) : null}
                     </DialogContent>
                   </Dialog>
                   <section
