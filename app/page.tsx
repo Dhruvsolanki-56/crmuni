@@ -7336,19 +7336,29 @@ export default function Home() {
                         />
                       </div>
                     </div>
+                    <div className="field-block">
+                      <label htmlFor="quote-amount">
+                        Amount ({appContext?.workspace.currency || 'INR'})
+                      </label>
+                      <Input
+                        id="quote-amount"
+                        name="amount"
+                        type="number"
+                        min="1"
+                        required
+                      />
+                    </div>
+                    {/* Only number, customer and amount are required. Linking
+                        stays open by default when this dialog is opened from
+                        inside an RFQ, since that link is the point; otherwise
+                        it's optional context that can wait. */}
+                    <details className="more-details" open={Boolean(openRfqId)}>
+                      <summary>
+                        <span>More details</span>
+                        <ChevronDown size={14} />
+                      </summary>
+                      <div className="more-details-body">
                     <div className="field-grid">
-                      <div className="field-block">
-                        <label htmlFor="quote-amount">
-                          Amount ({appContext?.workspace.currency || 'INR'})
-                        </label>
-                        <Input
-                          id="quote-amount"
-                          name="amount"
-                          type="number"
-                          min="1"
-                          required
-                        />
-                      </div>
                       <div className="field-block">
                         <label htmlFor="quote-valid">Valid until</label>
                         <Input
@@ -7357,8 +7367,6 @@ export default function Home() {
                           type="date"
                         />
                       </div>
-                    </div>
-                    <div className="field-grid">
                       <div className="field-block">
                         <label htmlFor="quote-rfq">Related RFQ</label>
                         <select
@@ -7392,6 +7400,8 @@ export default function Home() {
                         </select>
                       </div>
                     </div>
+                      </div>
+                    </details>
                     <label className="upload-control rfq-upload">
                       <FileText />
                       Attach PDF or DOCX
@@ -7438,54 +7448,12 @@ export default function Home() {
                           />
                         </div>
                         <div className="field-block">
-                          <label htmlFor="rfq-reference">
-                            Customer reference
-                          </label>
-                          <Input
-                            id="rfq-reference"
-                            name="reference"
-                            placeholder="RFQ/2026/184"
-                          />
-                        </div>
-                      </div>
-                      <div className="field-grid">
-                        <div className="field-block">
                           <label htmlFor="rfq-company">Requester company</label>
                           <Input
                             id="rfq-company"
                             name="requesterCompany"
                             required
                             placeholder="ABC Pharma"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="rfq-contact">Contact</label>
-                          <Input
-                            id="rfq-contact"
-                            name="contactName"
-                            placeholder="Rajesh Mehta"
-                          />
-                        </div>
-                      </div>
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="rfq-location">
-                            Delivery location
-                          </label>
-                          <Input
-                            id="rfq-location"
-                            name="deliveryLocation"
-                            placeholder="Ahmedabad, Gujarat"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="rfq-deadline">
-                            Submission deadline
-                          </label>
-                          <Input
-                            id="rfq-deadline"
-                            name="submissionDeadline"
-                            type="date"
                           />
                         </div>
                       </div>
@@ -7503,6 +7471,60 @@ export default function Home() {
                           original text retained as evidence.
                         </small>
                       </div>
+                      {/* Only title and requester company are required to
+                          receive an RFQ - reference, contact, location and
+                          deadline can all be added later and don't need to
+                          be read before the record can be created. */}
+                      <details className="more-details">
+                        <summary>
+                          <span>More details</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="more-details-body">
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="rfq-reference">
+                                Customer reference
+                              </label>
+                              <Input
+                                id="rfq-reference"
+                                name="reference"
+                                placeholder="RFQ/2026/184"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="rfq-contact">Contact</label>
+                              <Input
+                                id="rfq-contact"
+                                name="contactName"
+                                placeholder="Rajesh Mehta"
+                              />
+                            </div>
+                          </div>
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="rfq-location">
+                                Delivery location
+                              </label>
+                              <Input
+                                id="rfq-location"
+                                name="deliveryLocation"
+                                placeholder="Ahmedabad, Gujarat"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="rfq-deadline">
+                                Submission deadline
+                              </label>
+                              <Input
+                                id="rfq-deadline"
+                                name="submissionDeadline"
+                                type="date"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </details>
                       <label className="upload-control rfq-upload">
                         <FileText />
                         Attach original RFQ
@@ -8035,19 +8057,6 @@ export default function Home() {
                           placeholder="Machine monitoring architecture review"
                         />
                       </div>
-                      <div className="field-block">
-                        <label htmlFor="meeting-lead">Primary contact</label>
-                        <select id="meeting-lead" name="leadId" defaultValue="">
-                          <option value="">No linked contact</option>
-                          {capturedLeads
-                            .filter((lead) => lead.reviewStatus !== 'erased')
-                            .map((lead) => (
-                              <option key={lead.id} value={lead.id}>
-                                {lead.fullName} · {lead.company}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
                       <div className="field-grid">
                         <div className="field-block">
                           <label htmlFor="meeting-start">Starts</label>
@@ -8068,38 +8077,71 @@ export default function Home() {
                           />
                         </div>
                       </div>
-                      <div className="field-block">
-                        <label htmlFor="meeting-location">
-                          Location or call link
-                        </label>
-                        <Input
-                          id="meeting-location"
-                          name="location"
-                          placeholder="Google Meet, booth, customer office…"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="meeting-participants">
-                          Additional participant emails
-                        </label>
-                        <Input
-                          id="meeting-participants"
-                          name="participantEmails"
-                          placeholder="it@customer.com, operations@customer.com"
-                        />
-                        <small className="field-help">
-                          The primary contact is included automatically when an
-                          email is available. No invitation is sent.
-                        </small>
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="meeting-agenda">Agenda</label>
-                        <Textarea
-                          id="meeting-agenda"
-                          name="agenda"
-                          placeholder="Topics, required documents and intended decision"
-                        />
-                      </div>
+                      {/* Title and the two times are all that's required to
+                          hold the slot - who's linked, where, and what's on
+                          the agenda can all be filled in later. */}
+                      <details className="more-details">
+                        <summary>
+                          <span>More details</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="more-details-body">
+                          <div className="field-block">
+                            <label htmlFor="meeting-lead">
+                              Primary contact
+                            </label>
+                            <select
+                              id="meeting-lead"
+                              name="leadId"
+                              defaultValue=""
+                            >
+                              <option value="">No linked contact</option>
+                              {capturedLeads
+                                .filter(
+                                  (lead) => lead.reviewStatus !== 'erased',
+                                )
+                                .map((lead) => (
+                                  <option key={lead.id} value={lead.id}>
+                                    {lead.fullName} · {lead.company}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="meeting-location">
+                              Location or call link
+                            </label>
+                            <Input
+                              id="meeting-location"
+                              name="location"
+                              placeholder="Google Meet, booth, customer office…"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="meeting-participants">
+                              Additional participant emails
+                            </label>
+                            <Input
+                              id="meeting-participants"
+                              name="participantEmails"
+                              placeholder="it@customer.com, operations@customer.com"
+                            />
+                            <small className="field-help">
+                              The primary contact is included automatically
+                              when an email is available. No invitation is
+                              sent.
+                            </small>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="meeting-agenda">Agenda</label>
+                            <Textarea
+                              id="meeting-agenda"
+                              name="agenda"
+                              placeholder="Topics, required documents and intended decision"
+                            />
+                          </div>
+                        </div>
+                      </details>
                       <Button
                         className="save-button"
                         type="submit"
