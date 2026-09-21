@@ -7,7 +7,7 @@ import hostingConfig from './.openai/hosting.json';
 const CLOUDFLARE_D1_DATABASE_ID =
   '3f7f39ab-358e-44eb-b7e9-bfe73c9cd94d';
 
-const { d1, r2 } = hostingConfig;
+const { d1 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
@@ -24,14 +24,7 @@ const localBindingConfig = {
         },
       ]
     : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: 'site-creator-r2',
-        },
-      ]
-    : [],
+  r2_buckets: [],
 };
 
 export default defineConfig(async () => {
