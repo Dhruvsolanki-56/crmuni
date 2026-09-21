@@ -7546,7 +7546,7 @@ export default function Home() {
                 </div>
               ) : null}
               {activeView === 'roi' ? (
-                <div className="events-layout">
+                <div className="roi-layout">
                   <section className="roi-grid">
                     <article className="panel roi-card">
                       <small>Reconciled investment</small>
@@ -7841,6 +7841,7 @@ export default function Home() {
                       />
                     </div>
                   </article>
+                  <h3 className="settings-group">Company profile</h3>
                   <article className="panel knowledge-card">
                     <h2>Business profile</h2>
                     <form
@@ -8030,6 +8031,7 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
+                  <h3 className="settings-group">Offering and fit</h3>
                   <article className="panel knowledge-card">
                     <h2>Products and services</h2>
                     <form
@@ -8152,6 +8154,7 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
+                  <h3 className="settings-group">Qualification and evidence</h3>
                   <article className="panel knowledge-card">
                     <h2>Qualification rules</h2>
                     <form
@@ -8385,6 +8388,7 @@ export default function Home() {
                       </div>
                     </article>
                   ) : null}
+                  <h3 className="settings-group">Workspace</h3>
                   <article className="panel settings-card workspace-manager">
                     <div className="settings-heading">
                       <Building2 />
@@ -8601,6 +8605,7 @@ export default function Home() {
                         : 'Configuration required'}
                     </span>
                   </article>
+                  <h3 className="settings-group">Operations</h3>
                   {operations ? (
                     <article className="panel settings-card">
                       <div className="settings-heading">
@@ -8778,6 +8783,7 @@ export default function Home() {
                       </div>
                     </article>
                   ) : null}
+                  <h3 className="settings-group">Team and access</h3>
                   <article className="panel settings-card">
                     <div className="settings-heading">
                       <UserPlus />
@@ -8890,6 +8896,7 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
+                  <h3 className="settings-group">Security and data</h3>
                   {appContext?.role === 'owner' ? (
                     <article className="panel settings-card">
                       <div className="settings-heading">
