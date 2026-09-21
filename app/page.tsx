@@ -30,6 +30,7 @@ import {
   UserPlus,
   Users,
   Wifi,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,6 +57,7 @@ import {
 type SavedLead = {
   id: string;
   eventId?: string;
+  accountId?: string;
   fullName: string;
   company: string;
   role?: string;
@@ -921,10 +923,12 @@ function VisitorCapture({
   activeEvent,
   onSaved,
   setNotice,
+  onGoToEventHome,
 }: {
   activeEvent: EventItem | undefined;
   onSaved: () => void;
   setNotice: (message: string) => void;
+  onGoToEventHome: () => void;
 }) {
   const form = useRef<HTMLFormElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -997,7 +1001,10 @@ function VisitorCapture({
         <article className="panel empty-state large">
           <CalendarDays />
           <h2>No active event</h2>
-          <p>Join or create an event on Event home before capturing a contact.</p>
+          <p>Join or create an event before capturing a contact.</p>
+          <Button type="button" onClick={onGoToEventHome}>
+            Go to Event home
+          </Button>
         </article>
       </div>
     );
@@ -1168,6 +1175,7 @@ export default function Home() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [accountFilter, setAccountFilter] = useState('');
   const topbarActionsRef = useRef<HTMLDivElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const [leadComments, setLeadComments] = useState<LeadComment[]>([]);
@@ -3982,6 +3990,10 @@ export default function Home() {
   );
   const capturableEvents = events.filter((item) => item.status === 'active');
   const reviewCaptureExtraction = captureExtraction(reviewLead?.extractedJson);
+  const filteredAccount = accounts.find((item) => item.id === accountFilter);
+  const visibleContacts = accountFilter
+    ? capturedLeads.filter((lead) => lead.accountId === accountFilter)
+    : capturedLeads;
   const activeEventOpportunities = activeEvent
     ? opportunities.filter((item) => item.eventId === activeEvent.id)
     : opportunities;
@@ -4224,7 +4236,9 @@ export default function Home() {
               ·{' '}
               {activeEvent
                 ? `${activeEvent.venue || 'Venue pending'} · ${activeEvent.status}`
-                : 'Select one in Events'}
+                : appContext?.workspace.kind === 'visitor'
+                  ? 'Select one in Event home'
+                  : 'Select one in Events'}
             </span>
           </div>
           <div className="topbar-actions" ref={topbarActionsRef}>
@@ -5740,8 +5754,13 @@ export default function Home() {
                             </span>
                             <span
                               className={`due ${action.priority >= 94 ? 'urgent' : ''}`}
+                              title={`Priority score ${action.priority}`}
                             >
-                              P{action.priority}
+                              {action.priority >= 94
+                                ? 'Urgent'
+                                : action.priority >= 70
+                                  ? 'High'
+                                  : 'Normal'}
                             </span>
                           </article>
                         ))
@@ -6027,7 +6046,16 @@ export default function Home() {
                     <h2>Accounts</h2>
                     {accounts.length ? (
                       accounts.map((account) => (
-                        <button key={account.id} className="record-row">
+                        <button
+                          key={account.id}
+                          className={`record-row ${accountFilter === account.id ? 'selected' : ''}`}
+                          aria-pressed={accountFilter === account.id}
+                          onClick={() =>
+                            setAccountFilter((current) =>
+                              current === account.id ? '' : account.id,
+                            )
+                          }
+                        >
                           <span className="initial-avatar">
                             {account.company
                               .split(' ')
@@ -6053,9 +6081,21 @@ export default function Home() {
                     )}
                   </article>
                   <article className="panel records-panel">
-                    <h2>Contacts</h2>
-                    {capturedLeads.length ? (
-                      capturedLeads.map((lead) => (
+                    <div className="records-panel-head">
+                      <h2>Contacts</h2>
+                      {accountFilter ? (
+                        <button
+                          type="button"
+                          className="filter-pill"
+                          onClick={() => setAccountFilter('')}
+                        >
+                          {filteredAccount?.company || 'Filtered'}
+                          <X size={13} />
+                        </button>
+                      ) : null}
+                    </div>
+                    {visibleContacts.length ? (
+                      visibleContacts.map((lead) => (
                         <button
                           key={lead.id}
                           className="record-row"
@@ -6074,7 +6114,9 @@ export default function Home() {
                               {lead.role || 'Role not added'} · {lead.company}
                             </small>
                           </span>
-                          <b className="review-chip">
+                          <b
+                            className={`review-chip ${lead.buyingRole ? '' : 'unset'}`}
+                          >
                             {lead.buyingRole?.replaceAll('_', ' ') ||
                               'Classify'}
                           </b>
@@ -6082,7 +6124,9 @@ export default function Home() {
                       ))
                     ) : (
                       <div className="empty-state">
-                        No captured contacts yet.
+                        {accountFilter
+                          ? `No contacts under ${filteredAccount?.company ?? 'this account'}.`
+                          : 'No captured contacts yet.'}
                       </div>
                     )}
                   </article>
@@ -9118,9 +9162,14 @@ export default function Home() {
                       <CalendarDays />
                       <h2>No active event</h2>
                       <p>
-                        Join or create an event on Event home before building
-                        a plan.
+                        Join or create an event before building a plan.
                       </p>
+                      <Button
+                        type="button"
+                        onClick={() => go('visitor-home')}
+                      >
+                        Go to Event home
+                      </Button>
                     </article>
                   </div>
                 ) : (
@@ -9466,6 +9515,7 @@ export default function Home() {
                   activeEvent={activeEvent}
                   onSaved={() => void loadWorkspace()}
                   setNotice={setNotice}
+                  onGoToEventHome={() => go('visitor-home')}
                 />
               ) : null}
               {activeView === 'visitor-contacts' ? (
