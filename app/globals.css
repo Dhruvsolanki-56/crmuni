@@ -925,3 +925,39 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .profile-form > .field-block:has(> #event-objective),
   .profile-form > .field-block:has(> #profile-change-reason) { grid-column: span 1; }
 }
+
+/* Capture flow: scan is the whole point of this dialog, so it gets the
+   brand treatment; recording sits beside it as an equally-weighted second
+   action. Everything below exists to get out of the way fast. */
+.scan-button { border-color: var(--color-brand) !important; background: var(--brand-50) !important; }
+.scan-button:hover { background: var(--brand-100) !important; }
+.scan-button svg { color: var(--color-brand) !important; }
+.pending-review-pill { display: inline-flex; align-items: center; gap: 6px; width: fit-content; margin: -4px 0 2px; padding: 6px 10px; border: 1px solid var(--warn-300); border-radius: var(--radius-pill); background: var(--warn-bg); color: var(--warn-750); font-size: var(--text-label); font-weight: var(--weight-medium); line-height: var(--lh-label); cursor: pointer; transition: background var(--ease-ui); }
+.pending-review-pill:hover { background: var(--warn-200); }
+.pending-review-pill svg { flex: 0 0 auto; }
+/* Role, event-specific fields and scheduling are real fields, just not
+   needed for the common case - collapsed by default so the visible form
+   is the 4-6 fields that actually get filled during a fast capture. */
+.more-details { margin-top: -4px; }
+.more-details summary { display: flex; align-items: center; gap: 6px; width: fit-content; padding: 2px 0; color: var(--color-text-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); line-height: var(--lh-sm); cursor: pointer; list-style: none; }
+.more-details summary::-webkit-details-marker { display: none; }
+.more-details summary:hover { color: var(--color-brand); }
+.more-details[open] summary svg { transform: rotate(180deg); }
+.more-details-body { display: grid; gap: 14px; margin-top: 12px; }
+/* "Scan next" is the dominant action on the success screen - the whole
+   product principle is confirm one visitor, immediately face the next.
+   Everything else is a secondary, equally-sized row underneath it. */
+.scan-next-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.success-actions-secondary { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; }
+.success-actions-secondary button { min-width: 0; }
+/* Adding an audio note or a brochure to a lead already on screen, without
+   opening another dialog. */
+.review-context-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 2px; }
+.review-context-actions button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border: 1px solid var(--color-line); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text-secondary); font-size: var(--text-label); line-height: var(--lh-label); cursor: pointer; transition: border-color var(--ease-ui), background var(--ease-ui); }
+.review-context-actions button:hover:not(:disabled) { border-color: var(--color-brand); color: var(--color-brand); }
+.review-context-actions button:disabled { opacity: .6; cursor: default; }
+.review-context-actions button.recording { border-color: var(--danger-600); background: var(--danger-bg); color: var(--danger-700); }
+@media (max-width: 460px) {
+  .success-actions-secondary { flex-direction: column; align-items: stretch; }
+  .success-actions-secondary button { width: 100%; }
+}

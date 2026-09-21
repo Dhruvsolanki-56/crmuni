@@ -3,6 +3,7 @@ import {
   database,
   eventAccessClause,
   requireEventAccess,
+  requireLeadAccess,
   requireRole,
   requireWorkspace,
   revenueEnv,
@@ -16,6 +17,8 @@ import {
 } from '@/lib/entitlements';
 
 type NewLead = {
+  action?: unknown;
+  leadId?: unknown;
   fullName?: unknown;
   company?: unknown;
   role?: unknown;
@@ -104,6 +107,104 @@ export async function POST(request: Request) {
     } else body = (await request.json()) as NewLead;
   } catch {
     return Response.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+
+  if (clean(body.action, 30) === 'attach_capture') {
+    // A conversation often produces more than one piece of evidence after
+    // the lead already exists - an audio note recorded mid-conversation, a
+    // brochure handed over on the way out. This reuses the exact storage,
+    // validation and entitlement path the initial capture uses; extraction
+    // for the new asset is the existing /api/capture-extraction call, which
+    // already operates on a lead's most recent asset.
+    const leadId = clean(body.leadId, 80);
+    if (!leadId)
+      return Response.json({ error: 'Lead ID is required.' }, { status: 400 });
+    const requestedKind = clean(body.attachmentKind, 20);
+    const kind = ['audio', 'document'].includes(requestedKind)
+      ? requestedKind
+      : 'document';
+    if (!file)
+      return Response.json(
+        { error: 'Choose a recording or file to attach.' },
+        { status: 400 },
+      );
+    if (kind === 'audio' && !file.type.startsWith('audio/'))
+      return Response.json(
+        { error: 'An audio note must be an audio file.' },
+        { status: 400 },
+      );
+    if (
+      await validateUpload(file, allowedFiles, 15 * 1024 * 1024)
+    )
+      return Response.json(
+        {
+          error:
+            'The attachment content does not match a supported image, PDF, or audio file up to 15 MB.',
+        },
+        { status: 400 },
+      );
+    await requireLeadAccess(context, leadId);
+    const lead = await database()
+      .prepare(
+        `SELECT review_status AS reviewStatus FROM leads WHERE id=? AND workspace_id=?`,
+      )
+      .bind(leadId, context.workspace.id)
+      .first<{ reviewStatus: string }>();
+    if (!lead || ['merged', 'erased'].includes(lead.reviewStatus))
+      return Response.json({ error: 'Lead not found.' }, { status: 404 });
+    await enforceStorageEntitlement(
+      database(),
+      context.workspace.id,
+      context.workspace.plan,
+      file.size,
+    );
+    const assetId = crypto.randomUUID();
+    const safeName =
+      file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 120) || 'capture';
+    const storageKey = `${context.workspace.id}/lead-captures/${leadId}/${assetId}-${safeName}`;
+    try {
+      await revenueEnv().FILES.put(storageKey, file.stream(), {
+        httpMetadata: { contentType: file.type },
+        customMetadata: {
+          workspaceId: context.workspace.id,
+          leadId,
+          uploadedBy: context.user.id,
+          kind,
+        },
+      });
+      const now = Date.now();
+      await database().batch([
+        database()
+          .prepare(
+            `INSERT INTO lead_capture_assets (id, workspace_id, lead_id, kind, original_name, storage_key, content_type, size_bytes, processing_status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'stored_pending_extraction', ?, ?)`,
+          )
+          .bind(
+            assetId,
+            context.workspace.id,
+            leadId,
+            kind,
+            file.name.slice(0, 180),
+            storageKey,
+            file.type,
+            file.size,
+            context.user.id,
+            now,
+          ),
+        auditStatement(context, 'lead_capture.attached', 'lead_capture_asset', assetId, {
+          leadId,
+          kind,
+        }),
+      ]);
+    } catch (error) {
+      await revenueEnv().FILES.delete(storageKey);
+      if (isEntitlementConstraint(error, 'STORAGE_LIMIT'))
+        throw storageLimitResponse(context.workspace.plan);
+      throw error;
+    }
+    return Response.json(
+      { asset: { id: assetId, kind, processingStatus: 'stored_pending_extraction' } },
+      { status: 201 },
+    );
   }
 
   const suppliedFullName = clean(body.fullName, 120);

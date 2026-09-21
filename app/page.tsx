@@ -20,7 +20,6 @@ import {
   Menu,
   Mic,
   Plus,
-  QrCode,
   Search,
   Settings,
   ShieldCheck,
@@ -1298,9 +1297,17 @@ export default function Home() {
   const [readingAttachment, setReadingAttachment] = useState(false);
   const [localOcrFields, setLocalOcrFields] = useState<string[]>([]);
   const [localOcrStatus, setLocalOcrStatus] = useState('');
+  const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
   const [acceptedCaptureFields, setAcceptedCaptureFields] = useState<string[]>(
     [],
   );
+  /* Adding an audio note or a brochure to an already-saved lead, from the
+     review panel. Independent of the primary capture attachment above,
+     which only ever holds one file for the lead being created. */
+  const [reviewRecording, setReviewRecording] = useState(false);
+  const [attachingReviewAsset, setAttachingReviewAsset] = useState<
+    '' | 'audio' | 'document'
+  >('');
   const [rfqs, setRfqs] = useState<RfqItem[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [processingRfq, setProcessingRfq] = useState('');
@@ -1324,14 +1331,19 @@ export default function Home() {
     file: File;
   } | null>(null);
   const [recording, setRecording] = useState(false);
-  const cardInput = useRef<HTMLInputElement>(null);
-  const badgeInput = useRef<HTMLInputElement>(null);
-  const qrInput = useRef<HTMLInputElement>(null);
+  /* One scan surface, not three near-identical upload buttons: card, badge
+     and QR all go through the same local OCR+QR pipeline and the same
+     server-side vision extraction, so there is nothing for the user to
+     choose between. */
+  const scanInput = useRef<HTMLInputElement>(null);
   const leadForm = useRef<HTMLFormElement>(null);
   const eventGateRef = useRef<HTMLOutputElement>(null);
   const leadDraftRef = useRef<Record<string, string> | null>(null);
   const eventForm = useRef<HTMLFormElement>(null);
   const reviewContactForm = useRef<HTMLFormElement>(null);
+  const reviewDocInput = useRef<HTMLInputElement>(null);
+  const reviewRecorder = useRef<MediaRecorder | null>(null);
+  const reviewAudioChunks = useRef<Blob[]>([]);
   const recorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const ocrRun = useRef(0);
@@ -1982,6 +1994,7 @@ export default function Home() {
         setReadingAttachment(false);
         setLocalOcrFields([]);
         setLocalOcrStatus('');
+        setMoreDetailsOpen(false);
         ocrRun.current += 1;
       }, 150);
     }
@@ -2041,6 +2054,10 @@ export default function Home() {
         filled.push(field);
       }
       setLocalOcrFields(filled);
+      // Role lives behind "More details" - if OCR filled it, that
+      // disclosure must open, or the user would be saving a field they
+      // never saw and never got the chance to correct.
+      if (filled.includes('role')) setMoreDetailsOpen(true);
       setLocalOcrStatus(
         filled.length
           ? `${filled.length} field${filled.length === 1 ? '' : 's'} prefilled on this device · verify before saving`
@@ -2056,17 +2073,18 @@ export default function Home() {
     }
   }
 
-  function selectAttachment(
-    event: SyntheticEvent<HTMLInputElement>,
-    kind: 'card' | 'badge' | 'qr',
-  ) {
+  function selectAttachment(event: SyntheticEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     if (attachment?.url) URL.revokeObjectURL(attachment.url);
+    // The scan surface no longer asks whether this is a card, badge, or QR
+    // code - the same OCR+QR pass reads all three, and the server-side
+    // vision fallback prompt reads generically either way. 'card' is simply
+    // the stored kind for "an image was scanned".
     setAttachment({
       name: file.name,
       url: URL.createObjectURL(file),
-      kind,
+      kind: 'card',
       file,
     });
     setSaveError('');
@@ -2155,6 +2173,96 @@ export default function Home() {
         'Microphone access was not available. You can still type the conversation note.',
       );
     }
+  }
+
+  // Closes the capture dialog and reopens it a moment later, ready for the
+  // next visitor. This is the fast path the whole capture flow is built
+  // around: confirm one person, immediately be ready for the next.
+  function scanNext() {
+    resetCapture(false);
+    window.setTimeout(() => setCaptureOpen(true), 200);
+  }
+
+  async function attachReviewAsset(
+    leadId: string,
+    kind: 'audio' | 'document',
+    file: File,
+  ) {
+    setAttachingReviewAsset(kind);
+    const form = new FormData();
+    form.set('action', 'attach_capture');
+    form.set('leadId', leadId);
+    form.set('attachmentKind', kind);
+    form.set('attachment', file);
+    try {
+      const response = await apiFetch('/api/leads', {
+        method: 'POST',
+        body: form,
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setNotice(data.error || 'Could not attach this file.');
+        return;
+      }
+      setNotice(
+        kind === 'audio'
+          ? 'Audio note attached · reading it now…'
+          : 'Brochure attached to this lead',
+      );
+      if (kind === 'audio') {
+        // Reuses the same extraction endpoint the initial capture uses -
+        // it already operates on a lead's most recently added asset, so
+        // the freshly attached recording is exactly what gets transcribed.
+        await processCapture();
+      } else {
+        void loadWorkspace();
+      }
+    } finally {
+      setAttachingReviewAsset('');
+    }
+  }
+
+  async function toggleReviewRecording() {
+    if (!reviewLead) return;
+    if (reviewRecording) {
+      reviewRecorder.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      const nextRecorder = new MediaRecorder(stream);
+      reviewAudioChunks.current = [];
+      nextRecorder.ondataavailable = (event) => {
+        if (event.data.size) reviewAudioChunks.current.push(event.data);
+      };
+      nextRecorder.onstop = () => {
+        const blob = new Blob(reviewAudioChunks.current, {
+          type: nextRecorder.mimeType || 'audio/webm',
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        setReviewRecording(false);
+        const lead = reviewLead;
+        if (!lead || !blob.size) return;
+        const file = new File([blob], `note-${Date.now()}.webm`, {
+          type: blob.type,
+        });
+        void attachReviewAsset(lead.id, 'audio', file);
+      };
+      reviewRecorder.current = nextRecorder;
+      nextRecorder.start();
+      setReviewRecording(true);
+    } catch {
+      setNotice('Microphone access was not available.');
+    }
+  }
+
+  function selectReviewDocument(event: SyntheticEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file || !reviewLead) return;
+    void attachReviewAsset(reviewLead.id, 'document', file);
   }
 
   function openReview(lead: SavedLead) {
@@ -2816,15 +2924,16 @@ export default function Home() {
     void loadWorkspace();
   }
 
-  async function analyzeConversation() {
-    if (!reviewLead) return;
+  async function analyzeConversation(leadOverride?: SavedLead) {
+    const lead = leadOverride || reviewLead;
+    if (!lead) return;
     setAnalyzing(true);
     setAnalysisError('');
     try {
       const response = await apiFetch('/api/analysis', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ leadId: reviewLead.id }),
+        body: JSON.stringify({ leadId: lead.id }),
       });
       const data = (await response.json()) as {
         analysis?: Analysis;
@@ -2844,6 +2953,18 @@ export default function Home() {
     } finally {
       setAnalyzing(false);
     }
+  }
+  // "Prepare follow-up" on the success screen jumps straight into the
+  // review dialog and runs the first analysis step automatically instead of
+  // making the user press Analyze themselves - the lead is passed directly
+  // rather than read back from state, since state from openReview() hasn't
+  // committed yet when this runs.
+  function prepareFollowup(lead: SavedLead) {
+    resetCapture(false);
+    window.setTimeout(() => {
+      openReview(lead);
+      if (lead.note) void analyzeConversation(lead);
+    }, 180);
   }
 
   async function confirmAnalysis() {
@@ -4340,6 +4461,12 @@ export default function Home() {
     (item) => item.id === activeEventId && item.status !== 'archived',
   );
   const capturableEvents = events.filter((item) => item.status === 'active');
+  // A rapid-capture queue without any new backend concept: every lead this
+  // salesperson hasn't confirmed yet, oldest first, is already exactly that
+  // queue. "Scan next" never forces a review; this is how you come back to it.
+  const pendingReviewLeads = capturedLeads
+    .filter((lead) => lead.reviewStatus === 'needs_review')
+    .sort((a, b) => a.createdAt - b.createdAt);
   const reviewCaptureExtraction = captureExtraction(reviewLead?.extractedJson);
   const filteredAccount = accounts.find((item) => item.id === accountFilter);
   /* Mirrors requireRole on every RFQ mutation route. The server stays the
@@ -4925,6 +5052,24 @@ export default function Home() {
                             conversation immediately after.
                           </DialogDescription>
                         </DialogHeader>
+                        {pendingReviewLeads.length ? (
+                          <button
+                            type="button"
+                            className="pending-review-pill"
+                            onClick={() => {
+                              const lead = pendingReviewLeads[0];
+                              resetCapture(false);
+                              window.setTimeout(() => openReview(lead), 180);
+                            }}
+                          >
+                            <AlertTriangle size={13} />
+                            {pendingReviewLeads.length}{' '}
+                            {pendingReviewLeads.length === 1
+                              ? 'capture'
+                              : 'captures'}{' '}
+                            waiting for review
+                          </button>
+                        ) : null}
                         {!activeEvent ? (
                           <output
                             ref={eventGateRef}
@@ -4976,35 +5121,14 @@ export default function Home() {
                         <div className="capture-methods">
                           <button
                             type="button"
-                            onClick={() => cardInput.current?.click()}
+                            className="scan-button"
+                            onClick={() => scanInput.current?.click()}
                           >
                             <Camera />
                             <span>
-                              <strong>Upload card</strong>
+                              <strong>Scan</strong>
                               <small>
-                                Choose or photograph a visiting card
-                              </small>
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => badgeInput.current?.click()}
-                          >
-                            <QrCode />
-                            <span>
-                              <strong>Upload badge</strong>
-                              <small>Choose or photograph an event badge</small>
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => qrInput.current?.click()}
-                          >
-                            <QrCode />
-                            <span>
-                              <strong>Upload QR</strong>
-                              <small>
-                                Attach a visitor or campaign QR image
+                                Card, badge or QR code — point and capture
                               </small>
                             </span>
                           </button>
@@ -5028,30 +5152,12 @@ export default function Home() {
                             </span>
                           </button>
                           <input
-                            ref={cardInput}
+                            ref={scanInput}
                             className="capture-file-input"
                             type="file"
                             accept="image/*"
                             capture="environment"
-                            onInput={(event) => selectAttachment(event, 'card')}
-                          />
-                          <input
-                            ref={badgeInput}
-                            className="capture-file-input"
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            onInput={(event) =>
-                              selectAttachment(event, 'badge')
-                            }
-                          />
-                          <input
-                            ref={qrInput}
-                            className="capture-file-input"
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            onInput={(event) => selectAttachment(event, 'qr')}
+                            onInput={selectAttachment}
                           />
                         </div>
                         <button
@@ -5143,14 +5249,6 @@ export default function Home() {
                               />
                             </div>
                           </div>
-                          <div className="field-block">
-                            <label htmlFor="lead-role">Role</label>
-                            <Input
-                              id="lead-role"
-                              name="role"
-                              placeholder="e.g. Procurement Head"
-                            />
-                          </div>
                           <div className="field-grid">
                             <div className="field-block">
                               <label htmlFor="lead-email">Work email</label>
@@ -5175,21 +5273,6 @@ export default function Home() {
                               />
                             </div>
                           </div>
-                          {activeEvent?.leadFieldSchema.length ? (
-                            <div className="field-grid">
-                              {activeEvent.leadFieldSchema.map((label) => (
-                                <div className="field-block" key={label}>
-                                  <label htmlFor={`lead-custom-${label}`}>
-                                    {label}
-                                  </label>
-                                  <Input
-                                    id={`lead-custom-${label}`}
-                                    name={`custom:${label}`}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
                           <fieldset className="field-block">
                             <legend>Follow-up permission</legend>
                             <label>
@@ -5219,20 +5302,74 @@ export default function Home() {
                               placeholder="What did they need, what did you promise, and when?"
                             />
                           </div>
-                          <div className="field-grid">
-                            <div className="field-block">
-                              <label htmlFor="lead-action">Next action</label>
-                              <Input
-                                id="lead-action"
-                                name="nextAction"
-                                placeholder="e.g. Send preliminary pricing"
-                              />
+                          {/* Role, event-specific fields, and next-action
+                              scheduling are real and saved exactly as typed
+                              - they're just not needed to capture the 90% of
+                              visitors where a name, company and a note are
+                              enough. Open by default only when the event
+                              defines its own required fields. */}
+                          <details
+                            className="more-details"
+                            open={
+                              moreDetailsOpen ||
+                              Boolean(activeEvent?.leadFieldSchema.length)
+                            }
+                            onToggle={(event) =>
+                              setMoreDetailsOpen(
+                                (event.target as HTMLDetailsElement).open,
+                              )
+                            }
+                          >
+                            <summary>
+                              <span>More details</span>
+                              <ChevronDown size={14} />
+                            </summary>
+                            <div className="more-details-body">
+                              <div className="field-block">
+                                <label htmlFor="lead-role">Role</label>
+                                <Input
+                                  id="lead-role"
+                                  name="role"
+                                  placeholder="e.g. Procurement Head"
+                                />
+                              </div>
+                              {activeEvent?.leadFieldSchema.length ? (
+                                <div className="field-grid">
+                                  {activeEvent.leadFieldSchema.map((label) => (
+                                    <div className="field-block" key={label}>
+                                      <label htmlFor={`lead-custom-${label}`}>
+                                        {label}
+                                      </label>
+                                      <Input
+                                        id={`lead-custom-${label}`}
+                                        name={`custom:${label}`}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                              <div className="field-grid">
+                                <div className="field-block">
+                                  <label htmlFor="lead-action">
+                                    Next action
+                                  </label>
+                                  <Input
+                                    id="lead-action"
+                                    name="nextAction"
+                                    placeholder="e.g. Send preliminary pricing"
+                                  />
+                                </div>
+                                <div className="field-block">
+                                  <label htmlFor="lead-due">Due date</label>
+                                  <Input
+                                    id="lead-due"
+                                    name="dueDate"
+                                    type="date"
+                                  />
+                                </div>
+                              </div>
                             </div>
-                            <div className="field-block">
-                              <label htmlFor="lead-due">Due date</label>
-                              <Input id="lead-due" name="dueDate" type="date" />
-                            </div>
-                          </div>
+                          </details>
                           {saveError ? (
                             <p className="form-error" role="alert">
                               {saveError}
@@ -5319,25 +5456,41 @@ export default function Home() {
                             </span>
                           ) : null}
                         </div>
-                        {captureOutcome && savedLead && !localOcrFields.length ? (
-                          <Button
-                            className="save-button"
-                            onClick={() => {
-                              const lead = savedLead;
-                              resetCapture(false);
-                              setTimeout(() => openReview(lead), 180);
-                            }}
-                          >
-                            Review manually
-                          </Button>
-                        ) : null}
-                        <Button
-                          variant={captureOutcome ? 'outline' : 'default'}
-                          className={captureOutcome ? undefined : 'save-button'}
-                          onClick={() => resetCapture(false)}
-                        >
-                          Back to today
+                        <Button className="save-button scan-next-button" onClick={scanNext}>
+                          <Camera size={16} /> Scan next
                         </Button>
+                        <div className="success-actions-secondary">
+                          {savedLead?.note &&
+                          savedLead.reviewStatus !== 'queued_offline' ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => prepareFollowup(savedLead)}
+                            >
+                              Prepare follow-up
+                            </Button>
+                          ) : null}
+                          {captureOutcome && savedLead && !localOcrFields.length ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                const lead = savedLead;
+                                resetCapture(false);
+                                setTimeout(() => openReview(lead), 180);
+                              }}
+                            >
+                              Review manually
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => resetCapture(false)}
+                          >
+                            Back to today
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </DialogContent>
@@ -5375,6 +5528,46 @@ export default function Home() {
                           'No conversation note was captured.'}
                       </p>
                     </div>
+                    {reviewLead ? (
+                      <div className="review-context-actions">
+                        <button
+                          type="button"
+                          className={reviewRecording ? 'recording' : ''}
+                          onClick={toggleReviewRecording}
+                          disabled={Boolean(attachingReviewAsset)}
+                        >
+                          {reviewRecording ? (
+                            <Square size={14} />
+                          ) : (
+                            <Mic size={14} />
+                          )}
+                          {reviewRecording
+                            ? 'Stop recording'
+                            : attachingReviewAsset === 'audio'
+                              ? 'Reading audio note…'
+                              : 'Add audio note'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => reviewDocInput.current?.click()}
+                          disabled={
+                            Boolean(attachingReviewAsset) || reviewRecording
+                          }
+                        >
+                          <FileText size={14} />
+                          {attachingReviewAsset === 'document'
+                            ? 'Attaching…'
+                            : 'Attach brochure'}
+                        </button>
+                        <input
+                          ref={reviewDocInput}
+                          className="capture-file-input"
+                          type="file"
+                          accept="image/*,.pdf"
+                          onInput={selectReviewDocument}
+                        />
+                      </div>
+                    ) : null}
                     {reviewLead?.captureStatus ? (
                       <div
                         className={`capture-status ${reviewLead.captureStatus}`}
@@ -5856,7 +6049,7 @@ export default function Home() {
                           </div>
                         ) : null}
                         <Button
-                          onClick={analyzeConversation}
+                          onClick={() => analyzeConversation()}
                           disabled={analyzing || !reviewLead?.note}
                         >
                           {analyzing
