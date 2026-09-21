@@ -7204,6 +7204,7 @@ export default function Home() {
                             required
                           />
                         </div>
+                      <h3 className="form-group-label">Playbook</h3>
                       </div>
                       <div className="field-block">
                         <label htmlFor="event-objective-detail">
@@ -7259,6 +7260,7 @@ export default function Home() {
                           event&apos;s capture form.
                         </small>
                       </div>
+                      <h3 className="form-group-label">Commercial</h3>
                       <div className="field-grid">
                         <div className="field-block">
                           <label htmlFor="event-budget">
@@ -7311,6 +7313,7 @@ export default function Home() {
                           />
                         </div>
                       </div>
+                      <h3 className="form-group-label">Routing and follow-up</h3>
                       <div className="event-three">
                         <div className="field-block">
                           <label htmlFor="event-route">Lead owner</label>

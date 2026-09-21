@@ -453,3 +453,70 @@ select:not([multiple]) {
 }
 select:not([multiple]):hover { border-color: var(--green-300); }
 select:not([multiple]):focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px #1f776433; }
+
+/* ============================================================
+   DIALOG REFINEMENT
+   The review dialog had stacked nine boxes — five sharing one grey fill —
+   all an equal 16px apart, so nothing grouped and white controls sat inside
+   grey cards inside a white dialog. Sections are now open, separated by a
+   hairline and generous space, which lets the content breathe without
+   dropping anything.
+   ============================================================ */
+.review-dialog, .capture-dialog { padding: 30px 32px 28px; gap: 22px; }
+.review-dialog > .flex, .capture-dialog > .settings-heading { margin-bottom: 2px; }
+
+/* Provenance banners read as one quiet group rather than three alerts. */
+.review-dialog .source-note,
+.review-dialog .capture-status,
+.review-dialog .extraction-evidence { border-radius: var(--radius-sm); }
+.review-dialog .source-note + .capture-status,
+.review-dialog .capture-status + .extraction-evidence,
+.review-dialog .source-note + .extraction-evidence { margin-top: -14px; }
+
+/* Form groups: no nested card, just a titled section. */
+.review-dialog .review-contact-form,
+.review-dialog .task-quick-add,
+.review-dialog .stakeholder-control {
+  padding: 20px 0 0; border: 0; border-top: 1px solid var(--color-line);
+  border-radius: 0; background: transparent; gap: 12px;
+}
+.review-dialog .review-contact-form h3,
+.review-dialog .task-quick-add h3 {
+  font-size: var(--text-label); font-weight: var(--weight-semibold);
+  letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted);
+}
+/* Each section had its own full-width slab button, so they all competed. */
+.review-dialog .review-contact-form > button,
+.review-dialog .task-quick-add > button { justify-self: end; width: auto; min-width: 168px; }
+.review-dialog .privacy-erase { justify-self: end; width: auto; min-width: 168px; padding: 0 14px; }
+.review-dialog .analysis-empty { padding-top: 20px; border-top: 1px solid var(--color-line); }
+
+/* Three saturated blocks stacked at the top read as three alerts competing
+   for attention. One neutral surface with a coloured rule keeps the semantic
+   hint while letting the contact details lead. */
+.review-dialog .source-note,
+.review-dialog .capture-status,
+.review-dialog .extraction-evidence {
+  padding: 12px 14px; background: var(--color-surface-secondary);
+  border: 0; border-left: 3px solid var(--color-line-strong);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; color: var(--color-text-secondary);
+}
+.review-dialog .capture-status { border-left-color: var(--color-success); }
+.review-dialog .extraction-evidence { border-left-color: var(--color-warning); color: var(--color-text-secondary); }
+.review-dialog .extraction-evidence span,
+.review-dialog .source-note p { color: var(--color-text-muted); }
+.review-dialog .extraction-evidence strong,
+.review-dialog .capture-status strong { color: var(--color-text-primary); }
+
+/* Four capture tiles across a 680px dialog forced every label onto three
+   lines. Two columns give each option room to read in one glance. */
+.capture-dialog .capture-methods { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.capture-dialog .capture-methods button { min-height: 0; padding: 14px; text-align: left; }
+
+/* A long form reads as a wall of inputs without grouping. Same section
+   rhythm as the review dialog: a quiet label over a hairline. */
+.form-group-label {
+  margin: 10px 0 0; padding-top: 20px; border-top: 1px solid var(--color-line);
+  font-size: var(--text-label); font-weight: var(--weight-semibold);
+  letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted);
+}
