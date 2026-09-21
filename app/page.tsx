@@ -796,6 +796,15 @@ function money(value: number, currency = 'INR') {
     return `${currency} ${value.toLocaleString()}`;
   }
 }
+function eventDates(startsOn: string, endsOn: string) {
+  const start = new Date(`${startsOn}T00:00:00`);
+  const end = new Date(`${endsOn}T00:00:00`);
+  const month = (value: Date) =>
+    value.toLocaleDateString('en', { month: 'short' });
+  return startsOn.slice(0, 7) === endsOn.slice(0, 7)
+    ? `${month(start)} ${start.getDate()}–${end.getDate()}, ${end.getFullYear()}`
+    : `${month(start)} ${start.getDate()} → ${month(end)} ${end.getDate()}, ${end.getFullYear()}`;
+}
 function rfqExtraction(value?: string) {
   try {
     return value ? (JSON.parse(value) as RfqExtraction) : null;
@@ -1298,6 +1307,9 @@ export default function Home() {
      state driven - so the open RFQ is held by id and always re-read from the
      loaded list, never from a snapshot captured at click time. */
   const [openRfqId, setOpenRfqId] = useState('');
+  const [eventTab, setEventTab] = useState('all');
+  const [eventQuery, setEventQuery] = useState('');
+  const [eventSort, setEventSort] = useState('recent');
   const [rfqState, setRfqState] = useState<'idle' | 'loading' | 'ready' | 'error'>(
     'idle',
   );
@@ -3654,6 +3666,81 @@ export default function Home() {
     );
   }
 
+  /* One readiness disclosure, shown by the lead event card and by each row in
+     the event list. Every value comes from the stored snapshot. */
+  function renderEventReadiness(item: EventItem) {
+    return (
+    item.readinessChecks.length ? (
+      /* Nine ticks over three lines dominated the card.
+         The count is what you scan for; the detail is one
+         click away and nothing is lost. */
+      <details className="readiness-disclosure">
+        <summary>
+          <span>
+            {
+              item.readinessChecks.filter((c) => c.passed)
+                .length
+            }{' '}
+            of {item.readinessChecks.length} readiness
+            checks passed
+          </span>
+          <ChevronDown size={14} />
+        </summary>
+      <div className="readiness-checks">
+        {item.readinessChecks.map((check) => {
+          const fixesInKnowledge = [
+            'company_profile',
+            'active_offering',
+            'ideal_customer',
+            'qualification_rules',
+            'approved_evidence',
+          ].includes(check.key);
+          const content = (
+            <>
+              {check.passed ? (
+                <Check />
+              ) : (
+                <AlertTriangle />
+              )}
+              {check.label}
+            </>
+          );
+          if (check.passed)
+            return (
+              <span
+                className="passed"
+                key={check.key}
+                title={check.detail}
+              >
+                {content}
+              </span>
+            );
+          return (
+            <button
+              type="button"
+              className="blocked"
+              key={check.key}
+              title={`${check.detail} Click to fix this in ${fixesInKnowledge ? 'Company knowledge' : 'this event'}.`}
+              onClick={() =>
+                fixesInKnowledge
+                  ? go('knowledge')
+                  : editEvent(item)
+              }
+            >
+              {content}
+            </button>
+          );
+        })}
+      </div>
+      </details>
+    ) : (
+      <small className="readiness-empty">
+        Readiness has not been assessed for configuration
+        v{item.configVersion}.
+      </small>
+    )
+    );
+  }
   async function eventAction(
     action: 'duplicate' | 'archive' | 'assess_readiness' | 'activate',
     id: string,
@@ -4248,6 +4335,40 @@ export default function Home() {
   const canManageRfq = ['owner', 'admin', 'manager', 'salesperson'].includes(
     appContext?.role || '',
   );
+  /* Mirrors requireRole on POST /api/events. Selecting the capture event is
+     not gated: that is client-side state, not a workspace mutation. */
+  const canManageEvents = ['owner', 'admin', 'manager'].includes(
+    appContext?.role || '',
+  );
+  /* The event chosen for capture leads the page; everything else is listed
+     below it, so the two never show the same record twice. */
+  const otherEvents = events.filter((item) => item.id !== activeEvent?.id);
+  const eventCounts = {
+    all: otherEvents.length,
+    active: otherEvents.filter((item) => item.status === 'active').length,
+    ready: otherEvents.filter((item) => item.status === 'ready').length,
+    draft: otherEvents.filter((item) => item.status === 'draft').length,
+    archived: otherEvents.filter((item) => item.status === 'archived').length,
+  };
+  const eventTerm = eventQuery.trim().toLowerCase();
+  const eventRows = otherEvents
+    .filter((item) => eventTab === 'all' || item.status === eventTab)
+    .filter(
+      (item) =>
+        !eventTerm ||
+        [item.name, item.venue, item.hall, item.booth, item.objective]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(eventTerm),
+    )
+    .sort((a, b) =>
+      eventSort === 'earliest'
+        ? a.startsOn.localeCompare(b.startsOn)
+        : eventSort === 'az'
+          ? a.name.localeCompare(b.name)
+          : b.startsOn.localeCompare(a.startsOn),
+    );
   const openRfq = rfqs.find((item) => item.id === openRfqId);
   const openRfqQuotations = quotations.filter(
     (quote) => quote.rfqId === openRfqId,
@@ -8136,278 +8257,376 @@ export default function Home() {
                     </DialogContent>
                   </Dialog>
                   <section
-                    className="event-list"
+                    className="events-workspace"
                     aria-label="Configured events"
                   >
-                    <div className="event-list-heading">
-                      <div>
-                        <h2>Configured events</h2>
-                        <p>Select the event used for new lead captures.</p>
-                      </div>
-                      <div className="event-list-heading-actions">
-                        <b>
-                          {
-                            events.filter((item) => item.status === 'active')
-                              .length
-                          }{' '}
-                          activated
-                        </b>
-                        <Button
-                          type="button"
-                          className="capture-button"
-                          onClick={newEvent}
-                        >
-                          <Plus /> New event
-                        </Button>
-                      </div>
-                    </div>
-                    {events.length ? (
-                      events.map((item) => (
-                        <article
-                          className={`panel event-record ${item.id === activeEventId ? 'selected' : ''} ${item.status === 'archived' ? 'archived' : ''}`}
-                          key={item.id}
-                        >
-                          <div className="event-record-head">
+                    <p className="workspace-intro">
+                      Manage event configuration, readiness and lead capture.
+                    </p>
+                    {activeEvent ? (
+                      <div className="lead-event">
+                        <h2 className="workspace-label">Active event</h2>
+                        <article className="panel event-hero">
+                          <div className="event-hero-head">
                             <span className="calendar-tile">
                               <b>
                                 {new Date(
-                                  `${item.startsOn}T00:00:00`,
+                                  `${activeEvent.startsOn}T00:00:00`,
                                 ).toLocaleDateString('en', { day: '2-digit' })}
                               </b>
                               <small>
                                 {new Date(
-                                  `${item.startsOn}T00:00:00`,
+                                  `${activeEvent.startsOn}T00:00:00`,
                                 ).toLocaleDateString('en', { month: 'short' })}
                               </small>
                             </span>
-                            <span>
-                              <strong>{item.name}</strong>
-                              <small>
-                                {item.venue || 'Venue pending'}
-                                {item.hall ? ` · Hall ${item.hall}` : ''}
-                                {item.booth ? ` · Booth ${item.booth}` : ''}
-                              </small>
-                            </span>
+                            <div className="event-hero-identity">
+                              <h3>{activeEvent.name}</h3>
+                              <p>
+                                {activeEvent.venue || 'Venue pending'}
+                            {activeEvent.hall ? ` · Hall ${activeEvent.hall}` : ''}
+                            {activeEvent.booth ? ` · Booth ${activeEvent.booth}` : ''}
+                              </p>
+                              <p className="event-hero-objective">
+                                {activeEvent.objective ||
+                                  'Business objective not added yet.'}
+                              </p>
+                            </div>
                             <span className="event-status-group">
-                              <b className={`event-status ${item.status}`}>
-                                {item.status}
+                              <b className={`event-status ${activeEvent.status}`}>
+                                {activeEvent.status}
                               </b>
-                              {item.directoryVisibility === 'published' ? (
+                              {activeEvent.directoryVisibility ===
+                              'published' ? (
                                 <b className="event-status published">
                                   In directory
                                 </b>
                               ) : null}
                             </span>
                           </div>
-                          <p>
-                            {item.objective ||
-                              'Business objective not added yet.'}
-                          </p>
                           <div className="event-meta">
                             <span>
                               <small>Dates</small>
                               <strong>
-                                {item.startsOn} → {item.endsOn}
+                                {eventDates(
+                                  activeEvent.startsOn,
+                                  activeEvent.endsOn,
+                                )}
                               </strong>
                             </span>
                             <span>
                               <small>Budget</small>
                               <strong>
                                 {appContext?.workspace.currency || 'INR'}{' '}
-                                {item.budget.toLocaleString()}
+                                {activeEvent.budget.toLocaleString()}
                               </strong>
                             </span>
                             <span>
                               <small>Follow-up</small>
-                              <strong>{item.followupSlaHours}h SLA</strong>
+                              <strong>
+                                {activeEvent.followupSlaHours}h SLA
+                              </strong>
                             </span>
                             <span>
                               <small>QR campaign</small>
                               <strong>
-                                {item.qrCampaignCode || 'Pending'}
+                                {activeEvent.qrCampaignCode || 'Pending'}
                               </strong>
                             </span>
                           </div>
-                          {item.products.length ? (
+                          {activeEvent.products.length ? (
                             <div className="event-tags">
-                              {item.products.map((product) => (
+                              {activeEvent.products.map((product) => (
                                 <span key={product}>{product}</span>
                               ))}
                             </div>
                           ) : null}
-                          {item.readinessChecks.length ? (
-                            /* Nine ticks over three lines dominated the card.
-                               The count is what you scan for; the detail is one
-                               click away and nothing is lost. */
-                            <details className="readiness-disclosure">
-                              <summary>
-                                <span>
-                                  {
-                                    item.readinessChecks.filter((c) => c.passed)
-                                      .length
-                                  }{' '}
-                                  of {item.readinessChecks.length} readiness
-                                  checks passed
-                                </span>
-                                <ChevronDown size={14} />
-                              </summary>
-                            <div className="readiness-checks">
-                              {item.readinessChecks.map((check) => {
-                                const fixesInKnowledge = [
-                                  'company_profile',
-                                  'active_offering',
-                                  'ideal_customer',
-                                  'qualification_rules',
-                                  'approved_evidence',
-                                ].includes(check.key);
-                                const content = (
-                                  <>
-                                    {check.passed ? (
-                                      <Check />
-                                    ) : (
-                                      <AlertTriangle />
-                                    )}
-                                    {check.label}
-                                  </>
-                                );
-                                if (check.passed)
-                                  return (
-                                    <span
-                                      className="passed"
-                                      key={check.key}
-                                      title={check.detail}
-                                    >
-                                      {content}
-                                    </span>
-                                  );
-                                return (
+                          {renderEventReadiness(activeEvent)}
+                          <div className="event-hero-actions">
+                            <Button
+                              type="button"
+                              onClick={() => selectEvent(activeEvent.id)}
+                            >
+                              <Check /> Active event
+                            </Button>
+                            {canManageEvents ? (
+                              <div className="event-actions-secondary">
+                                {activeEvent.status === 'active' ? (
                                   <button
                                     type="button"
-                                    className="blocked"
-                                    key={check.key}
-                                    title={`${check.detail} Click to fix this in ${fixesInKnowledge ? 'Company knowledge' : 'this event'}.`}
                                     onClick={() =>
-                                      fixesInKnowledge
-                                        ? go('knowledge')
-                                        : editEvent(item)
+                                      eventAction(
+                                        'assess_readiness',
+                                        activeEvent.id,
+                                      )
                                     }
                                   >
-                                    {content}
+                                    Recheck
                                   </button>
-                                );
-                              })}
-                            </div>
-                            </details>
-                          ) : (
-                            <small className="readiness-empty">
-                              Readiness has not been assessed for configuration
-                              v{item.configVersion}.
-                            </small>
-                          )}
-                          <div className="event-actions">
-                            {item.status === 'active' ? (
-                              <Button
-                                type="button"
-                                variant={
-                                  item.id === activeEventId
-                                    ? 'default'
-                                    : 'outline'
-                                }
-                                onClick={() => selectEvent(item.id)}
-                              >
-                                {item.id === activeEventId ? (
-                                  <>
-                                    <Check /> Active event
-                                  </>
-                                ) : (
-                                  'Use for capture'
-                                )}
-                              </Button>
-                            ) : item.status === 'ready' ? (
-                              <Button
-                                type="button"
-                                onClick={() => eventAction('activate', item.id)}
-                              >
-                                Activate for capture
-                              </Button>
-                            ) : item.status === 'draft' ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() =>
-                                  eventAction('assess_readiness', item.id)
-                                }
-                              >
-                                Run readiness
-                              </Button>
-                            ) : null}
-                            <div className="event-actions-secondary">
-                              {item.status === 'active' ? (
+                                ) : null}
+                                {activeEvent.status === 'active' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      toggleDirectoryVisibility(activeEvent)
+                                    }
+                                  >
+                                    {activeEvent.directoryVisibility ===
+                                    'published'
+                                      ? 'Unpublish'
+                                      : 'Publish'}
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    eventAction('assess_readiness', item.id)
-                                  }
-                                >
-                                  Recheck
-                                </button>
-                              ) : null}
-                              {item.status === 'active' ? (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleDirectoryVisibility(item)}
-                                >
-                                  {item.directoryVisibility === 'published'
-                                    ? 'Unpublish'
-                                    : 'Publish'}
-                                </button>
-                              ) : null}
-                              {item.status !== 'archived' ? (
-                                <button
-                                  type="button"
-                                  onClick={() => editEvent(item)}
+                                  onClick={() => editEvent(activeEvent)}
                                 >
                                   Edit
                                 </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  eventAction('duplicate', item.id)
-                                }
-                              >
-                                Duplicate
-                              </button>
-                              {item.status !== 'archived' ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    eventAction('duplicate', activeEvent.id)
+                                  }
+                                >
+                                  Duplicate
+                                </button>
                                 <button
                                   className="danger-link"
                                   type="button"
-                                  onClick={() => eventAction('archive', item.id)}
+                                  onClick={() =>
+                                    eventAction('archive', activeEvent.id)
+                                  }
                                 >
                                   Archive
                                 </button>
-                              ) : null}
-                            </div>
+                              </div>
+                            ) : null}
                           </div>
                         </article>
-                      ))
-                    ) : (
-                      <article className="panel empty-state large">
-                        <CalendarDays />
-                        <h2>No event configured</h2>
-                        <p>
-                          Create the first event playbook. It stays in draft
-                          until selected for capture.
-                        </p>
-                        <Button
-                          type="button"
-                          className="event-empty-cta"
-                          onClick={newEvent}
-                        >
-                          New event
-                        </Button>
-                      </article>
-                    )}
+                      </div>
+                    ) : null}
+                    <div className="event-index">
+                      <h2 className="workspace-label">
+                        {activeEvent ? 'Other events' : 'All events'}
+                      </h2>
+                      <nav className="entity-tabs" aria-label="Event status">
+                        {(
+                          [
+                            ['all', 'All'],
+                            ['active', 'Active'],
+                            ['ready', 'Ready'],
+                            ['draft', 'Draft'],
+                            ['archived', 'Archived'],
+                          ] as const
+                        ).map(([key, label]) => (
+                          <button
+                            type="button"
+                            key={key}
+                            className={eventTab === key ? 'current' : ''}
+                            aria-current={
+                              eventTab === key ? 'page' : undefined
+                            }
+                            onClick={() => setEventTab(key)}
+                          >
+                            {label} <b>{eventCounts[key]}</b>
+                          </button>
+                        ))}
+                      </nav>
+                      <div className="entity-toolbar">
+                        <label className="entity-search">
+                          <Search size={15} />
+                          <input
+                            value={eventQuery}
+                            onChange={(event) =>
+                              setEventQuery(event.currentTarget.value)
+                            }
+                            placeholder="Search events…"
+                            aria-label="Search events"
+                          />
+                        </label>
+                        <div className="entity-toolbar-actions">
+                          <select
+                            aria-label="Sort events"
+                            value={eventSort}
+                            onChange={(event) =>
+                              setEventSort(event.currentTarget.value)
+                            }
+                          >
+                            <option value="recent">Latest start date</option>
+                            <option value="earliest">
+                              Earliest start date
+                            </option>
+                            <option value="az">Name A–Z</option>
+                          </select>
+                          {canManageEvents ? (
+                            <Button
+                              type="button"
+                              className="capture-button"
+                              onClick={newEvent}
+                            >
+                              <Plus /> New event
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="event-table">
+                        <div className="event-head event-grid" aria-hidden="true">
+                          <span>Event</span>
+                          <span>Dates</span>
+                          <span>Venue</span>
+                          <span>Status</span>
+                          <span>Actions</span>
+                        </div>
+                        {eventRows.map((item) => (
+                          <div
+                            className={`event-row ${item.status === 'archived' ? 'archived' : ''}`}
+                            key={item.id}
+                          >
+                            <div className="event-grid">
+                              <span className="event-row-name">
+                                {canManageEvents &&
+                                item.status !== 'archived' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => editEvent(item)}
+                                  >
+                                    {item.name}
+                                  </button>
+                                ) : (
+                                  <strong>{item.name}</strong>
+                                )}
+                              </span>
+                              <span data-label="Dates">
+                                {eventDates(item.startsOn, item.endsOn)}
+                              </span>
+                              <span data-label="Venue">
+                                {item.venue || 'Venue pending'}
+                            {item.hall ? ` · Hall ${item.hall}` : ''}
+                            {item.booth ? ` · Booth ${item.booth}` : ''}
+                              </span>
+                              <span className="event-status-group">
+                                <b className={`event-status ${item.status}`}>
+                                  {item.status}
+                                </b>
+                                {item.directoryVisibility === 'published' ? (
+                                  <b className="event-status published">
+                                    In directory
+                                  </b>
+                                ) : null}
+                              </span>
+                              <span className="event-row-actions">
+                                {item.status === 'active' ? (
+                                  <button
+                                    type="button"
+                                    className="row-primary"
+                                    onClick={() => selectEvent(item.id)}
+                                  >
+                                    Use for capture
+                                  </button>
+                                ) : null}
+                                {canManageEvents && item.status === 'ready' ? (
+                                  <button
+                                    type="button"
+                                    className="row-primary"
+                                    onClick={() =>
+                                      eventAction('activate', item.id)
+                                    }
+                                  >
+                                    Activate
+                                  </button>
+                                ) : null}
+                                {canManageEvents && item.status === 'draft' ? (
+                                  <button
+                                    type="button"
+                                    className="row-primary"
+                                    onClick={() =>
+                                      eventAction('assess_readiness', item.id)
+                                    }
+                                  >
+                                    Run readiness
+                                  </button>
+                                ) : null}
+                                {canManageEvents &&
+                                item.status === 'active' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      eventAction('assess_readiness', item.id)
+                                    }
+                                  >
+                                    Recheck
+                                  </button>
+                                ) : null}
+                                {canManageEvents &&
+                                item.status === 'active' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      toggleDirectoryVisibility(item)
+                                    }
+                                  >
+                                    {item.directoryVisibility === 'published'
+                                      ? 'Unpublish'
+                                      : 'Publish'}
+                                  </button>
+                                ) : null}
+                                {canManageEvents ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      eventAction('duplicate', item.id)
+                                    }
+                                  >
+                                    Duplicate
+                                  </button>
+                                ) : null}
+                                {canManageEvents &&
+                                item.status !== 'archived' ? (
+                                  <button
+                                    className="danger-link"
+                                    type="button"
+                                    onClick={() =>
+                                      eventAction('archive', item.id)
+                                    }
+                                  >
+                                    Archive
+                                  </button>
+                                ) : null}
+                              </span>
+                            </div>
+                            {item.readinessChecks.length ? (
+                              <div className="event-row-readiness">
+                                {renderEventReadiness(item)}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                        {!eventRows.length ? (
+                          <div className="entity-empty">
+                            <strong>
+                              {events.length
+                                ? 'No events match this view'
+                                : 'No event configured'}
+                            </strong>
+                            <p>
+                              {events.length
+                                ? 'Try another status tab or clear the search.'
+                                : 'Create the first event playbook. It stays in draft until selected for capture.'}
+                            </p>
+                            {!events.length && canManageEvents ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={newEvent}
+                              >
+                                New event
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </section>
                 </div>
               ) : null}

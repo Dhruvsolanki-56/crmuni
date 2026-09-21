@@ -819,3 +819,67 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .rfq-detail-head { flex-direction: column; }
   .rfq-quote-list li { grid-template-columns: minmax(0, 1fr) auto; }
 }
+
+/* Events workspace: the event selected for capture leads the page, every
+   other event is a scannable row. Neutral surfaces, forest headings. */
+.events-workspace { display: grid; gap: 22px; align-content: start; min-width: 0; }
+.events-workspace > *, .event-index > * { min-width: 0; }
+.workspace-intro { margin: -6px 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.workspace-label { margin: 0 0 11px; color: var(--color-text-subtle); font-size: var(--text-micro); line-height: var(--lh-micro); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .06em; }
+.event-hero { display: grid; gap: 14px; padding: 19px 20px; border-color: var(--green-450); box-shadow: var(--shadow-md); }
+.event-hero-head { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: start; gap: 13px; }
+.event-hero-identity { min-width: 0; }
+.event-hero-identity h3 { margin: 0; color: var(--color-brand); font-size: var(--text-lg); line-height: var(--lh-lg); overflow-wrap: anywhere; }
+.event-hero-identity p { margin: 4px 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--lh-sm); overflow-wrap: anywhere; }
+.event-hero-objective { color: var(--color-text-secondary) !important; margin-top: 7px !important; }
+.event-hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-top: 3px; }
+.event-hero-actions > .event-actions-secondary { flex-direction: row; flex-wrap: wrap; gap: 14px; margin: 0; padding: 0; }
+.event-index { display: grid; gap: 0; }
+.event-index .entity-tabs { margin-bottom: 14px; }
+.event-index .entity-toolbar { margin-bottom: 12px; }
+.event-table { border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-surface); overflow: hidden; }
+/* Every track is content-independent so each row lines up with the header;
+   a content-sized actions column made the fr columns resolve differently per
+   row and the whole table drifted. */
+.event-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) 132px minmax(0, 1.4fr) 108px 236px; align-items: center; gap: 14px; padding: 11px 18px; }
+.event-head { border-bottom: 1px solid var(--color-line); background: var(--color-bg); color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--lh-label); font-weight: var(--weight-semibold); }
+.event-head > span:last-child { text-align: right; }
+.event-row { border-top: 1px solid var(--color-line); color: var(--color-text-secondary); font-size: var(--text-sm); line-height: var(--lh-sm); transition: background var(--ease-ui); }
+.event-row:first-of-type { border-top: 0; }
+.event-row:hover { background: var(--color-surface-hover); }
+.event-row > .event-grid > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Archived stays readable: quieter, not disabled. */
+.event-row.archived .event-row-name strong, .event-row.archived .event-row-name button { color: var(--color-text-muted); }
+.event-row-name strong { color: var(--color-text-primary); font-weight: var(--weight-medium); }
+.event-row-name button { padding: 0; border: 0; background: none; color: var(--color-text-primary); font: inherit; font-weight: var(--weight-medium); text-align: left; cursor: pointer; }
+.event-row-name button:hover { color: var(--color-brand); text-decoration: underline; }
+.event-row-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; overflow: visible !important; white-space: normal !important; }
+.event-row-actions button { padding: 0; border: 0; background: none; color: var(--color-text-muted); font: inherit; font-size: var(--text-label); line-height: var(--lh-label); cursor: pointer; transition: color var(--ease-ui); }
+.event-row-actions button:hover { color: var(--color-brand); }
+.event-row-actions .danger-link { color: var(--color-text-subtle); }
+.event-row-actions .row-primary { padding: 4px 10px; border: 1px solid var(--green-450); border-radius: var(--radius-pill); color: var(--green-700); background: var(--green-50); font-weight: var(--weight-medium); }
+.event-row-actions .row-primary:hover { border-color: var(--accent-500); color: var(--green-700); }
+.event-row-readiness { padding: 0 18px 11px; margin-top: -4px; }
+.event-row-readiness .readiness-disclosure summary { color: var(--color-text-subtle); }
+.event-row-readiness .readiness-disclosure { margin: 0; }
+.event-status.ready { color: var(--info-500); background: var(--info-bg); }
+@media (max-width: 1180px) {
+  .event-grid { grid-template-columns: minmax(0, 1.5fr) 132px 108px 236px; }
+  .event-grid > span:nth-child(3) { display: none; }
+}
+/* Below this the fixed Dates/Status/Actions tracks squeeze the event name to
+   a stub, so rows become stacked records rather than a cramped table. */
+@media (max-width: 1080px) {
+  /* Five status tabs do not fit one narrow line; wrapping keeps every
+     count visible instead of clipping the last one. */
+  .event-index .entity-tabs { flex-wrap: wrap; gap: 8px 18px; }
+  .event-hero-head { grid-template-columns: 44px minmax(0, 1fr); }
+  .event-hero-head .event-status-group { grid-column: 2; }
+  .event-grid { display: flex; flex-wrap: wrap; gap: 5px 12px; padding: 13px 16px; }
+  .event-grid > span:nth-child(3) { display: inline; }
+  .event-table .event-head { display: none; }
+  .event-row > .event-grid > span { overflow: visible; white-space: normal; }
+  .event-row-name { flex: 1 1 100%; }
+  .event-row-actions { justify-content: flex-start; flex: 1 1 100%; margin-top: 3px; }
+  .event-grid > span[data-label]::before { content: attr(data-label) ": "; color: var(--color-text-subtle); }
+}
