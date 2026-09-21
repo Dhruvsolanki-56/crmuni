@@ -643,3 +643,26 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 /* Send the add action below the configured items rather than pulling the
    items above their own card heading. */
 .knowledge-add { order: 1; }
+
+/* ---- Company knowledge layout ----
+   Once the add-forms moved into dialogs the four item cards became small
+   while Business profile stayed tall, so a two-column grid paired a tall
+   card with a nearly empty one. The page now runs full-width profile,
+   a row of equal item cards, then evidence. */
+.knowledge-layout { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; }
+.knowledge-layout > .settings-group,
+.knowledge-layout > .onboarding-progress,
+.knowledge-layout > .knowledge-sources { grid-column: 1 / -1; }
+/* Business profile is the page's substantial content — give it the width
+   and lay its fields out across it rather than down a narrow column. */
+.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) { grid-column: 1 / -1; }
+.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
+.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form > .field-grid { display: contents; }
+.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form > .save-button,
+.knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form > input[type='hidden'] { grid-column: 1; }
+
+@media (max-width: 1180px) { .knowledge-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+  .knowledge-layout { grid-template-columns: 1fr; }
+  .knowledge-layout > .knowledge-card:has(> h2 + .lead-form) > .lead-form { grid-template-columns: 1fr; }
+}

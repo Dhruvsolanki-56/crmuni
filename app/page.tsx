@@ -8262,6 +8262,7 @@ export default function Home() {
                       </div>
                     ) : null}
                   </article>
+                  <h3 className="settings-group">Knowledge base</h3>
                   <article className="panel knowledge-card">
                     <h2>Approved claims</h2>
                     <p className="field-help">
@@ -8359,7 +8360,6 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
-                  <h3 className="settings-group">Offering and fit</h3>
                   <article className="panel knowledge-card">
                     <h2>Products and services</h2>
                     <Button
@@ -8584,7 +8584,6 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
-                  <h3 className="settings-group">Qualification and evidence</h3>
                   <article className="panel knowledge-card">
                     <h2>Qualification rules</h2>
                     <Button
@@ -8688,6 +8687,7 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
+                  <h3 className="settings-group">Evidence</h3>
                   <article className="panel knowledge-card knowledge-sources">
                     <h2>Knowledge sources</h2>
                     <p>
