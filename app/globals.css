@@ -629,3 +629,17 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .pager button:hover:not(:disabled) { border-color: var(--brand-300); color: var(--color-brand); background: var(--brand-50); }
 .pager button.current { border-color: var(--color-brand); color: var(--color-text-on-brand); background: var(--color-brand); }
 .pager button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Readiness detail collapses to its count; the full list is one click away. */
+.readiness-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--color-line); color: var(--color-text-secondary); font-size: var(--text-sm); line-height: var(--lh-sm); cursor: pointer; list-style: none; }
+.readiness-disclosure > summary::-webkit-details-marker { display: none; }
+.readiness-disclosure > summary:hover { color: var(--color-brand); }
+.readiness-disclosure > summary svg { flex: none; color: var(--color-text-subtle); transition: transform var(--ease-ui); }
+.readiness-disclosure[open] > summary svg { transform: rotate(180deg); }
+.readiness-disclosure .readiness-checks { padding: 4px 0 8px; }
+
+/* Knowledge cards now lead with what is configured; the add form is a dialog. */
+.knowledge-add { justify-self: start; }
+/* Send the add action below the configured items rather than pulling the
+   items above their own card heading. */
+.knowledge-add { order: 1; }

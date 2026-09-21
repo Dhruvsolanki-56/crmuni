@@ -1212,6 +1212,9 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState('');
+  const [knowledgeDialog, setKnowledgeDialog] = useState<string | null>(
+    null,
+  );
   /* window.prompt/confirm are unsupported in this runtime, so the flows that
      relied on them threw instead of asking. One dialog serves them all. */
   const [askState, setAskState] = useState<AskRequest | null>(null);
@@ -3302,6 +3305,7 @@ export default function Home() {
       return;
     }
     form.reset();
+    setKnowledgeDialog(null);
     setNotice('Company intelligence saved');
     await loadKnowledge();
   }
@@ -7663,6 +7667,21 @@ export default function Home() {
                             </div>
                           ) : null}
                           {item.readinessChecks.length ? (
+                            /* Nine ticks over three lines dominated the card.
+                               The count is what you scan for; the detail is one
+                               click away and nothing is lost. */
+                            <details className="readiness-disclosure">
+                              <summary>
+                                <span>
+                                  {
+                                    item.readinessChecks.filter((c) => c.passed)
+                                      .length
+                                  }{' '}
+                                  of {item.readinessChecks.length} readiness
+                                  checks passed
+                                </span>
+                                <ChevronDown size={14} />
+                              </summary>
                             <div className="readiness-checks">
                               {item.readinessChecks.map((check) => {
                                 const fixesInKnowledge = [
@@ -7709,6 +7728,7 @@ export default function Home() {
                                 );
                               })}
                             </div>
+                            </details>
                           ) : (
                             <small className="readiness-empty">
                               Readiness has not been assessed for configuration
@@ -8248,30 +8268,53 @@ export default function Home() {
                       Only approved claims may be supplied to AI-generated
                       follow-ups.
                     </p>
-                    <form
-                      className="lead-form compact-form"
-                      onSubmit={submitKnowledge}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="knowledge-add"
+                      onClick={() => setKnowledgeDialog('add_claim')}
                     >
-                      <input type="hidden" name="action" value="add_claim" />
-                      <Textarea
-                        name="claimText"
-                        required
-                        placeholder="Specific factual claim salespeople may use"
-                      />
-                      <select name="sourceId" defaultValue="">
-                        <option value="">No linked source</option>
-                        {knowledge.sources.map((source) => (
-                          <option key={source.id} value={source.id}>
-                            {source.name} · {source.status}
-                          </option>
-                        ))}
-                      </select>
-                      <Textarea
-                        name="evidenceNote"
-                        placeholder="Evidence note or verification context"
-                      />
-                      <Button type="submit">Add claim for review</Button>
-                    </form>
+                      <Plus /> Add claim
+                    </Button>
+                    <Dialog
+                      open={knowledgeDialog === 'add_claim'}
+                      onOpenChange={(open) =>
+                        setKnowledgeDialog(open ? 'add_claim' : null)
+                      }
+                    >
+                      <DialogContent className="capture-dialog">
+                        <DialogHeader>
+                          <DialogTitle>Add approved claim</DialogTitle>
+                          <DialogDescription>
+                            Only approved claims may be supplied to AI-generated follow-ups.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form
+                          className="lead-form compact-form"
+                          onSubmit={submitKnowledge}
+                        >
+                          <input type="hidden" name="action" value="add_claim" />
+                          <Textarea
+                            name="claimText"
+                            required
+                            placeholder="Specific factual claim salespeople may use"
+                          />
+                          <select name="sourceId" defaultValue="">
+                            <option value="">No linked source</option>
+                            {knowledge.sources.map((source) => (
+                              <option key={source.id} value={source.id}>
+                                {source.name} · {source.status}
+                              </option>
+                            ))}
+                          </select>
+                          <Textarea
+                            name="evidenceNote"
+                            placeholder="Evidence note or verification context"
+                          />
+                          <Button type="submit">Add claim for review</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
                     <div className="knowledge-records">
                       {knowledge.claims.map((claim) => (
                         <div key={claim.id}>
@@ -8319,61 +8362,84 @@ export default function Home() {
                   <h3 className="settings-group">Offering and fit</h3>
                   <article className="panel knowledge-card">
                     <h2>Products and services</h2>
-                    <form
-                      className="lead-form compact-form"
-                      onSubmit={submitKnowledge}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="knowledge-add"
+                      onClick={() => setKnowledgeDialog('add_product')}
                     >
-                      <input type="hidden" name="action" value="add_product" />
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="product-name">Name</label>
-                          <Input
-                            id="product-name"
-                            name="name"
-                            required
-                            placeholder="Product or service name"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="product-kind">Type</label>
-                          <select
-                            id="product-kind"
-                            name="kind"
-                            defaultValue="product"
-                          >
-                            <option value="product">Product</option>
-                            <option value="service">Service</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="product-description">
-                          What it does
-                        </label>
-                        <Textarea
-                          id="product-description"
-                          name="description"
-                          placeholder="What it does and the outcome it creates"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="product-roles">Buyer roles</label>
-                        <Input
-                          id="product-roles"
-                          name="buyerRoles"
-                          placeholder="Comma separated"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="product-pains">Pain points solved</label>
-                        <Input
-                          id="product-pains"
-                          name="painPoints"
-                          placeholder="Comma separated"
-                        />
-                      </div>
-                      <Button type="submit">Add offering</Button>
-                    </form>
+                      <Plus /> Add offering
+                    </Button>
+                    <Dialog
+                      open={knowledgeDialog === 'add_product'}
+                      onOpenChange={(open) =>
+                        setKnowledgeDialog(open ? 'add_product' : null)
+                      }
+                    >
+                      <DialogContent className="capture-dialog">
+                        <DialogHeader>
+                          <DialogTitle>Add product or service</DialogTitle>
+                          <DialogDescription>
+                            What you sell, who buys it, and the pain it removes.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form
+                          className="lead-form compact-form"
+                          onSubmit={submitKnowledge}
+                        >
+                          <input type="hidden" name="action" value="add_product" />
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="product-name">Name</label>
+                              <Input
+                                id="product-name"
+                                name="name"
+                                required
+                                placeholder="Product or service name"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="product-kind">Type</label>
+                              <select
+                                id="product-kind"
+                                name="kind"
+                                defaultValue="product"
+                              >
+                                <option value="product">Product</option>
+                                <option value="service">Service</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="product-description">
+                              What it does
+                            </label>
+                            <Textarea
+                              id="product-description"
+                              name="description"
+                              placeholder="What it does and the outcome it creates"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="product-roles">Buyer roles</label>
+                            <Input
+                              id="product-roles"
+                              name="buyerRoles"
+                              placeholder="Comma separated"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="product-pains">Pain points solved</label>
+                            <Input
+                              id="product-pains"
+                              name="painPoints"
+                              placeholder="Comma separated"
+                            />
+                          </div>
+                          <Button type="submit">Add offering</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
                     <div className="knowledge-records">
                       {knowledge.products.map((item) => (
                         <div key={item.id}>
@@ -8406,70 +8472,93 @@ export default function Home() {
                   </article>
                   <article className="panel knowledge-card">
                     <h2>Ideal customer profile</h2>
-                    <form
-                      className="lead-form compact-form"
-                      onSubmit={submitKnowledge}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="knowledge-add"
+                      onClick={() => setKnowledgeDialog('add_icp')}
                     >
-                      <input type="hidden" name="action" value="add_icp" />
-                      <div className="field-block">
-                        <label htmlFor="icp-name">Profile name</label>
-                        <Input
-                          id="icp-name"
-                          name="name"
-                          required
-                          placeholder="e.g. Multi-site pharmaceutical plants"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="icp-industries">Industries</label>
-                        <Input
-                          id="icp-industries"
-                          name="industries"
-                          placeholder="Industries, comma separated"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="icp-sizes">Company sizes</label>
-                        <Input
-                          id="icp-sizes"
-                          name="companySizes"
-                          placeholder="e.g. 200–5,000 employees"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="icp-geographies">Target regions</label>
-                        <Input
-                          id="icp-geographies"
-                          name="geographies"
-                          placeholder="Target regions"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="icp-roles">Decision-maker roles</label>
-                        <Input
-                          id="icp-roles"
-                          name="buyerRoles"
-                          placeholder="Decision-maker roles"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="icp-signals">High-value signals</label>
-                        <Textarea
-                          id="icp-signals"
-                          name="mustHaveSignals"
-                          placeholder="Comma separated"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="icp-disqualifiers">Disqualifiers</label>
-                        <Textarea
-                          id="icp-disqualifiers"
-                          name="disqualifiers"
-                          placeholder="Comma separated"
-                        />
-                      </div>
-                      <Button type="submit">Add ideal customer profile</Button>
-                    </form>
+                      <Plus /> Add profile
+                    </Button>
+                    <Dialog
+                      open={knowledgeDialog === 'add_icp'}
+                      onOpenChange={(open) =>
+                        setKnowledgeDialog(open ? 'add_icp' : null)
+                      }
+                    >
+                      <DialogContent className="capture-dialog">
+                        <DialogHeader>
+                          <DialogTitle>Add ideal customer profile</DialogTitle>
+                          <DialogDescription>
+                            Who you are trying to reach, and who to rule out.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form
+                          className="lead-form compact-form"
+                          onSubmit={submitKnowledge}
+                        >
+                          <input type="hidden" name="action" value="add_icp" />
+                          <div className="field-block">
+                            <label htmlFor="icp-name">Profile name</label>
+                            <Input
+                              id="icp-name"
+                              name="name"
+                              required
+                              placeholder="e.g. Multi-site pharmaceutical plants"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="icp-industries">Industries</label>
+                            <Input
+                              id="icp-industries"
+                              name="industries"
+                              placeholder="Industries, comma separated"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="icp-sizes">Company sizes</label>
+                            <Input
+                              id="icp-sizes"
+                              name="companySizes"
+                              placeholder="e.g. 200–5,000 employees"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="icp-geographies">Target regions</label>
+                            <Input
+                              id="icp-geographies"
+                              name="geographies"
+                              placeholder="Target regions"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="icp-roles">Decision-maker roles</label>
+                            <Input
+                              id="icp-roles"
+                              name="buyerRoles"
+                              placeholder="Decision-maker roles"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="icp-signals">High-value signals</label>
+                            <Textarea
+                              id="icp-signals"
+                              name="mustHaveSignals"
+                              placeholder="Comma separated"
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="icp-disqualifiers">Disqualifiers</label>
+                            <Textarea
+                              id="icp-disqualifiers"
+                              name="disqualifiers"
+                              placeholder="Comma separated"
+                            />
+                          </div>
+                          <Button type="submit">Add ideal customer profile</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
                     <div className="knowledge-records">
                       {knowledge.icps.map((item) => (
                         <div key={item.id}>
@@ -8498,52 +8587,75 @@ export default function Home() {
                   <h3 className="settings-group">Qualification and evidence</h3>
                   <article className="panel knowledge-card">
                     <h2>Qualification rules</h2>
-                    <form
-                      className="lead-form compact-form"
-                      onSubmit={submitKnowledge}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="knowledge-add"
+                      onClick={() => setKnowledgeDialog('add_rule')}
                     >
-                      <input type="hidden" name="action" value="add_rule" />
-                      <Input
-                        name="label"
-                        required
-                        placeholder="Rule label, e.g. Budget within 6 months"
-                      />
-                      <div className="field-grid">
-                        <select name="field" defaultValue="budget_timing">
-                          <option value="budget_timing">Budget timing</option>
-                          <option value="authority">Authority</option>
-                          <option value="requirement">Requirement</option>
-                          <option value="company_size">Company size</option>
-                          <option value="product_interest">
-                            Product interest
-                          </option>
-                          <option value="existing_technology">
-                            Existing technology
-                          </option>
-                          <option value="industry">Industry</option>
-                          <option value="location">
-                            Location or geography
-                          </option>
-                          <option value="quantity">Quantity or scale</option>
-                          <option value="purchase_timeline">
-                            Purchase timeline
-                          </option>
-                        </select>
-                        <Input
-                          name="expectedValue"
-                          required
-                          placeholder="Expected value"
-                        />
-                      </div>
-                      <Input
-                        name="weight"
-                        type="number"
-                        min="-100"
-                        max="100"
-                        defaultValue="20"
-                      />
-                      <Button type="submit">Add scoring rule</Button>
-                    </form>
+                      <Plus /> Add rule
+                    </Button>
+                    <Dialog
+                      open={knowledgeDialog === 'add_rule'}
+                      onOpenChange={(open) =>
+                        setKnowledgeDialog(open ? 'add_rule' : null)
+                      }
+                    >
+                      <DialogContent className="capture-dialog">
+                        <DialogHeader>
+                          <DialogTitle>Add qualification rule</DialogTitle>
+                          <DialogDescription>
+                            Scored signals that qualify a conversation.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form
+                          className="lead-form compact-form"
+                          onSubmit={submitKnowledge}
+                        >
+                          <input type="hidden" name="action" value="add_rule" />
+                          <Input
+                            name="label"
+                            required
+                            placeholder="Rule label, e.g. Budget within 6 months"
+                          />
+                          <div className="field-grid">
+                            <select name="field" defaultValue="budget_timing">
+                              <option value="budget_timing">Budget timing</option>
+                              <option value="authority">Authority</option>
+                              <option value="requirement">Requirement</option>
+                              <option value="company_size">Company size</option>
+                              <option value="product_interest">
+                                Product interest
+                              </option>
+                              <option value="existing_technology">
+                                Existing technology
+                              </option>
+                              <option value="industry">Industry</option>
+                              <option value="location">
+                                Location or geography
+                              </option>
+                              <option value="quantity">Quantity or scale</option>
+                              <option value="purchase_timeline">
+                                Purchase timeline
+                              </option>
+                            </select>
+                            <Input
+                              name="expectedValue"
+                              required
+                              placeholder="Expected value"
+                            />
+                          </div>
+                          <Input
+                            name="weight"
+                            type="number"
+                            min="-100"
+                            max="100"
+                            defaultValue="20"
+                          />
+                          <Button type="submit">Add scoring rule</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
                     <div className="knowledge-records">
                       {knowledge.rules.map((item) => (
                         <div key={item.id}>
