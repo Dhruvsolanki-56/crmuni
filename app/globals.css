@@ -580,3 +580,13 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   color: var(--color-brand); font-size: var(--text-label); font-weight: var(--weight-semibold);
   letter-spacing: 0; text-transform: none; background-position: right 6px center;
 }
+
+/* Reads as part of the bar until you reach for it — the topbar should stay
+   low-noise, so no chrome until hover or focus. */
+.event-context-switch {
+  height: 28px; padding: 0 24px 0 6px; margin-left: -6px;
+  border: 1px solid transparent; border-radius: var(--radius-xs);
+  background-color: transparent; color: inherit;
+  font-size: inherit; font-weight: inherit; background-position: right 5px center;
+}
+.event-context-switch:hover { border-color: var(--color-line); background-color: var(--color-surface); }

@@ -4245,7 +4245,27 @@ export default function Home() {
             <span
               className={`live-dot ${activeEvent ? '' : 'idle'}`}
             />{' '}
-            {activeEvent?.name || 'No active event'}{' '}
+            {capturableEvents.length ? (
+              /* The active event drives every capture, so it should be
+                 switchable from the bar that reports it. */
+              <select
+                className="event-context-switch"
+                aria-label="Active event"
+                value={activeEventId}
+                onChange={(event) => void selectEvent(event.currentTarget.value)}
+              >
+                {!activeEventId ? (
+                  <option value="">No active event</option>
+                ) : null}
+                {capturableEvents.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <>{activeEvent?.name || 'No active event'} </>
+            )}
             <span>
               ·{' '}
               {activeEvent
