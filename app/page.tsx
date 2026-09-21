@@ -4896,9 +4896,12 @@ export default function Home() {
                     {reviewCaptureExtraction ? (
                       <div className="extraction-evidence">
                         <strong>
-                          Machine-read suggestions ·{' '}
-                          {Math.round(reviewCaptureExtraction.confidence * 100)}
-                          %{' overall confidence'}
+                          Machine-read suggestions
+                          {/* On-device OCR reports no score, and rendering it
+                              as "0% confidence" reads as a failed extraction. */}
+                          {reviewCaptureExtraction.confidence > 0
+                            ? ` · ${Math.round(reviewCaptureExtraction.confidence * 100)}% overall confidence`
+                            : ''}
                         </strong>
                         {reviewCaptureExtraction.warnings.length ? (
                           <span>
@@ -5338,6 +5341,12 @@ export default function Home() {
                             : 'Analyze conversation'}{' '}
                           <Sparkles />
                         </Button>
+                        {!reviewLead?.note && !analyzing ? (
+                          <p className="field-help">
+                            Add a conversation note to this contact first —
+                            there is nothing to analyse yet.
+                          </p>
+                        ) : null}
                       </div>
                     ) : (
                       <div className="analysis-result">
@@ -6728,7 +6737,9 @@ export default function Home() {
                                 <strong>{item.title}</strong>
                                 <small>{item.requesterCompany}</small>
                               </span>
-                              <b>
+                              <b
+                                className={`event-status ${item.extractionStatus === 'completed' ? 'active' : ''}`}
+                              >
                                 {item.extractionStatus?.replaceAll('_', ' ') ||
                                   'not processed'}
                               </b>
