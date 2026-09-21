@@ -520,3 +520,42 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   font-size: var(--text-label); font-weight: var(--weight-semibold);
   letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted);
 }
+
+/* The attention card stretched to the briefing's height, leaving a large
+   void under a single row. Let each panel take the height it needs. */
+.main-grid { align-items: start; }
+.main-grid > .panel { min-height: 218px; }
+
+/* Numeric columns scan far faster right-aligned against a tabular figure set. */
+.data-header > :nth-child(3), .data-header > :nth-child(4),
+.opportunity-row > :nth-child(3), .opportunity-row > :nth-child(4) { text-align: right; }
+.opportunity-row > :nth-child(3), .opportunity-row > :nth-child(4) { font-variant-numeric: tabular-nums; }
+
+/* Metadata sat in four bordered grey tiles inside an already-bordered card.
+   Dropping the boxes keeps the label/value structure and removes a whole
+   layer of framing from event, RFQ and quotation cards. */
+.event-meta { gap: 14px 18px; }
+.event-meta > span {
+  padding: 0; border: 0; background: transparent;
+  border-left: 2px solid var(--color-line); padding-left: 10px;
+}
+.event-meta small { color: var(--color-text-subtle); }
+.event-meta strong { margin-top: 3px; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--color-text-primary); }
+
+/* Nine filled pills wrapping over three lines dominated the card. Passing
+   checks are the expected state, so they recede to a tick and a label;
+   blocked ones keep their fill and stay the thing you notice. */
+.readiness-checks { gap: 4px 12px; }
+.readiness-checks .passed { padding: 2px 0; color: var(--color-text-muted); background: transparent; }
+.readiness-checks .passed svg { color: var(--color-success); }
+.readiness-checks button.blocked { font-weight: var(--weight-medium); }
+
+/* Seven bordered tiles inside a bordered card, with the last one orphaned.
+   Same borderless label/value treatment as the other card metadata. */
+.usage-grid { gap: 14px 18px; }
+.usage-grid span {
+  padding: 0 0 0 10px; border: 0; border-left: 2px solid var(--color-line);
+  border-radius: 0; background: transparent;
+}
+.usage-grid small { color: var(--color-text-subtle); }
+.usage-grid strong { margin-top: 3px; font-size: var(--text-base); font-weight: var(--weight-medium); }
