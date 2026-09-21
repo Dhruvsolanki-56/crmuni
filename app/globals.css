@@ -559,3 +559,15 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 }
 .usage-grid small { color: var(--color-text-subtle); }
 .usage-grid strong { margin-top: 3px; font-size: var(--text-base); font-weight: var(--weight-medium); }
+
+/* The knowledge forms sat in a grey box inside an already-titled white card.
+   The card is the container; the form does not need a second one. */
+.compact-form { padding: 0; border: 0; background: transparent; }
+
+/* Archiving a contact is routine and reversible — danger red made four
+   ordinary actions read as warnings down the side of the list. */
+.contact-archive-toggle { color: var(--color-text-muted); font-weight: var(--weight-medium); border-radius: var(--radius-xs); }
+.contact-archive-toggle:hover { text-decoration: none; color: var(--color-brand); background: var(--color-surface-hover); }
+
+/* A single panel in the two-column records grid left half the page empty. */
+.records-grid:has(> :only-child) { grid-template-columns: minmax(0, 720px); }
