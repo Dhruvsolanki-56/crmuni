@@ -53,6 +53,7 @@ import {
   mergeContactCandidates,
   type ContactCandidates,
 } from '@/lib/client-card-ocr';
+import { normalizeCompany } from '@/lib/accounts';
 
 type AskField = {
   name: string;
@@ -775,6 +776,7 @@ function dateTime(value: number | string) {
 }
 
 const AUDIT_PAGE_SIZE = 8;
+const PEOPLE_PAGE_SIZE = 8;
 
 function roiTone(value: number | null | undefined) {
   if (value == null) return 'roi-value';
@@ -1213,6 +1215,13 @@ export default function Home() {
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState('');
   const [leadScope, setLeadScope] = useState('all');
+  const [peopleTab, setPeopleTab] = useState<'accounts' | 'contacts'>(
+    'contacts',
+  );
+  const [peopleQuery, setPeopleQuery] = useState('');
+  const [peopleClass, setPeopleClass] = useState('all');
+  const [peopleSort, setPeopleSort] = useState('recent');
+  const [peoplePage, setPeoplePage] = useState(0);
   const [knowledgeDialog, setKnowledgeDialog] = useState<string | null>(
     null,
   );
@@ -4106,6 +4115,78 @@ export default function Home() {
   const capturableEvents = events.filter((item) => item.status === 'active');
   const reviewCaptureExtraction = captureExtraction(reviewLead?.extractedJson);
   const filteredAccount = accounts.find((item) => item.id === accountFilter);
+  /* People workspace. Every field below exists on the current Account and
+     SavedLead records — no new columns or filters were invented. */
+  /* Accounts come in two shapes: real rows the lead links to by id, and
+     "legacy:" rows the API synthesises for leads captured before an account
+     existed. Matching on accountId alone missed every legacy account. */
+  const leadInAccount = (lead: SavedLead, accountId: string) =>
+    accountId.startsWith('legacy:')
+      ? !lead.accountId &&
+        'legacy:' + normalizeCompany(lead.company) === accountId
+      : lead.accountId === accountId;
+  const peopleTerm = peopleQuery.trim().toLowerCase();
+  const matchesContact = (lead: SavedLead) =>
+    !peopleTerm ||
+    [lead.fullName, lead.company, lead.role, lead.email, lead.phone]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(peopleTerm);
+  const contactRows = capturedLeads
+    .filter((lead) => !accountFilter || leadInAccount(lead, accountFilter))
+    .filter(matchesContact)
+    .filter((lead) =>
+      peopleClass === 'classified'
+        ? Boolean(lead.buyingRole)
+        : peopleClass === 'unclassified'
+          ? !lead.buyingRole
+          : true,
+    )
+    .sort((a, b) =>
+      peopleSort === 'az'
+        ? a.fullName.localeCompare(b.fullName)
+        : peopleSort === 'za'
+          ? b.fullName.localeCompare(a.fullName)
+          : b.createdAt - a.createdAt,
+    );
+  const accountRows = accounts
+    .filter(
+      (account) =>
+        !peopleTerm || account.company.toLowerCase().includes(peopleTerm),
+    )
+    .filter((account) =>
+      peopleClass === 'classified'
+        ? (account.stakeholders || 0) > 0
+        : peopleClass === 'unclassified'
+          ? !account.stakeholders
+          : true,
+    )
+    .sort((a, b) =>
+      peopleSort === 'az'
+        ? a.company.localeCompare(b.company)
+        : peopleSort === 'za'
+          ? b.company.localeCompare(a.company)
+          : peopleSort === 'contacts'
+            ? b.contacts - a.contacts
+            : b.latestAt - a.latestAt,
+    );
+  const peopleRows: (SavedLead | Account)[] =
+    peopleTab === 'contacts' ? contactRows : accountRows;
+  const peoplePageCount = Math.max(
+    1,
+    Math.ceil(peopleRows.length / PEOPLE_PAGE_SIZE),
+  );
+  const peopleSafePage = Math.min(peoplePage, peoplePageCount - 1);
+  const peopleStart = peopleSafePage * PEOPLE_PAGE_SIZE;
+  const pagedContacts = contactRows.slice(
+    peopleStart,
+    peopleStart + PEOPLE_PAGE_SIZE,
+  );
+  const pagedAccounts = accountRows.slice(
+    peopleStart,
+    peopleStart + PEOPLE_PAGE_SIZE,
+  );
   const auditPageCount = Math.max(
     1,
     Math.ceil(auditEvents.length / AUDIT_PAGE_SIZE),
@@ -4126,9 +4207,6 @@ export default function Home() {
       (!activeEventId || lead.eventId === activeEventId) &&
       (!opportunityLead || lead.company === opportunityLead.company),
   );
-  const visibleContacts = accountFilter
-    ? capturedLeads.filter((lead) => lead.accountId === accountFilter)
-    : capturedLeads;
   const activeEventOpportunities = activeEvent
     ? opportunities.filter((item) => item.eventId === activeEvent.id)
     : opportunities;
@@ -6246,96 +6324,271 @@ export default function Home() {
                 ) : null}
               </div>
               {activeView === 'people' ? (
-                <div className="records-grid">
-                  <article className="panel records-panel">
-                    <h2>Accounts</h2>
-                    {accounts.length ? (
-                      accounts.map((account) => (
-                        <button
-                          key={account.id}
-                          className={`record-row ${accountFilter === account.id ? 'selected' : ''}`}
-                          aria-pressed={accountFilter === account.id}
-                          onClick={() =>
-                            setAccountFilter((current) =>
-                              current === account.id ? '' : account.id,
-                            )
-                          }
-                        >
-                          <span className="initial-avatar">
-                            {account.company
-                              .split(' ')
-                              .map((word) => word[0])
-                              .join('')
-                              .slice(0, 2)}
-                          </span>
-                          <span>
-                            <strong>{account.company}</strong>
-                            <small>
-                              {account.contacts} contact
-                              {account.contacts === 1 ? '' : 's'} ·{' '}
-                              {account.stakeholders || 0} classified
-                            </small>
-                          </span>
-                          <ArrowRight />
-                        </button>
-                      ))
+                <section className="people-workspace">
+                  <nav className="entity-tabs" aria-label="People and accounts">
+                    <button
+                      type="button"
+                      className={peopleTab === 'accounts' ? 'current' : ''}
+                      aria-current={peopleTab === 'accounts' ? 'page' : undefined}
+                      onClick={() => {
+                        setPeopleTab('accounts');
+                        setPeoplePage(0);
+                      }}
+                    >
+                      Accounts <b>{accounts.length}</b>
+                    </button>
+                    <button
+                      type="button"
+                      className={peopleTab === 'contacts' ? 'current' : ''}
+                      aria-current={peopleTab === 'contacts' ? 'page' : undefined}
+                      onClick={() => {
+                        setPeopleTab('contacts');
+                        setPeoplePage(0);
+                      }}
+                    >
+                      Contacts <b>{capturedLeads.length}</b>
+                    </button>
+                  </nav>
+
+                  <div className="entity-toolbar">
+                    <label className="entity-search">
+                      <Search size={15} />
+                      <input
+                        value={peopleQuery}
+                        onChange={(event) => {
+                          setPeopleQuery(event.currentTarget.value);
+                          setPeoplePage(0);
+                        }}
+                        placeholder={
+                          peopleTab === 'contacts'
+                            ? 'Search contacts…'
+                            : 'Search accounts…'
+                        }
+                        aria-label={
+                          peopleTab === 'contacts'
+                            ? 'Search contacts'
+                            : 'Search accounts'
+                        }
+                      />
+                    </label>
+                    <div className="entity-toolbar-actions">
+                      <select
+                        aria-label="Filter by classification"
+                        value={peopleClass}
+                        onChange={(event) => {
+                          setPeopleClass(event.currentTarget.value);
+                          setPeoplePage(0);
+                        }}
+                      >
+                        <option value="all">All classifications</option>
+                        <option value="classified">Classified</option>
+                        <option value="unclassified">Unclassified</option>
+                      </select>
+                      <select
+                        aria-label="Sort"
+                        value={peopleSort}
+                        onChange={(event) =>
+                          setPeopleSort(event.currentTarget.value)
+                        }
+                      >
+                        <option value="recent">
+                          {peopleTab === 'contacts'
+                            ? 'Recently added'
+                            : 'Recent activity'}
+                        </option>
+                        <option value="az">Name A–Z</option>
+                        <option value="za">Name Z–A</option>
+                        {peopleTab === 'accounts' ? (
+                          <option value="contacts">Most contacts</option>
+                        ) : null}
+                      </select>
+                      <Button
+                        type="button"
+                        className="capture-button"
+                        onClick={() => setCaptureOpen(true)}
+                      >
+                        <Plus /> Add contact
+                      </Button>
+                    </div>
+                  </div>
+
+                  {accountFilter && peopleTab === 'contacts' ? (
+                    <div className="entity-filter-note">
+                      <button
+                        type="button"
+                        className="filter-pill"
+                        onClick={() => setAccountFilter('')}
+                      >
+                        {filteredAccount?.company || 'Filtered'}
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="entity-table">
+                    {peopleTab === 'contacts' ? (
+                      <>
+                        <div className="entity-head contact-grid" aria-hidden="true">
+                          <span>Name</span>
+                          <span>Company</span>
+                          <span>Role</span>
+                          <span>Status</span>
+                        </div>
+                        {pagedContacts.map((lead) => (
+                          <button
+                            type="button"
+                            className="entity-row contact-grid"
+                            key={lead.id}
+                            onClick={() => openReview(lead)}
+                          >
+                            <span className="entity-primary">
+                              <span className="initial-avatar small">
+                                {lead.fullName
+                                    .split(' ')
+                                    .map((word) => word[0])
+                                    .join('')
+                                    .slice(0, 2)}
+                              </span>
+                              <span>{lead.fullName}</span>
+                            </span>
+                            <span data-label="Company">{lead.company}</span>
+                            <span data-label="Role">{lead.role || '—'}</span>
+                            <span data-label="Status">
+                              {lead.buyingRole ? (
+                                <b className="review-chip">
+                                  {lead.buyingRole.replaceAll('_', ' ')}
+                                </b>
+                              ) : (
+                                <span className="classify-link">
+                                  Classify <ArrowRight size={12} />
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        ))}
+                        {!pagedContacts.length ? (
+                          <div className="entity-empty">
+                            <strong>No contacts found</strong>
+                            <p>
+                              {capturedLeads.length
+                                ? 'Try changing your search or filters.'
+                                : 'Capture a conversation to add your first contact.'}
+                            </p>
+                            {!capturedLeads.length ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setCaptureOpen(true)}
+                              >
+                                Add contact
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
-                      <div className="empty-state">
-                        Capture a lead to create the first account.
-                      </div>
+                      <>
+                        <div className="entity-head account-grid" aria-hidden="true">
+                          <span>Account</span>
+                          <span>Contacts</span>
+                          <span>Classified</span>
+                          <span>Last activity</span>
+                        </div>
+                        {pagedAccounts.map((account) => (
+                          <button
+                            type="button"
+                            className="entity-row account-grid"
+                            key={account.id}
+                            onClick={() => {
+                              setAccountFilter(account.id);
+                              setPeopleTab('contacts');
+                              setPeoplePage(0);
+                            }}
+                          >
+                            <span className="entity-primary">
+                              <span className="initial-avatar small">
+                                {account.company
+                                    .split(' ')
+                                    .map((word) => word[0])
+                                    .join('')
+                                    .slice(0, 2)}
+                              </span>
+                              <span>{account.company}</span>
+                            </span>
+                            <span data-label="Contacts" className="entity-num">
+                              {account.contacts}
+                            </span>
+                            <span data-label="Classified" className="entity-num">
+                              {account.stakeholders || 0}
+                            </span>
+                            <span data-label="Last activity">
+                              {account.latestAt
+                                ? dateTime(account.latestAt)
+                                : '—'}
+                            </span>
+                          </button>
+                        ))}
+                        {!pagedAccounts.length ? (
+                          <div className="entity-empty">
+                            <strong>No accounts found</strong>
+                            <p>
+                              {accounts.length
+                                ? 'Try changing your search or filters.'
+                                : 'Capture a lead to create the first account.'}
+                            </p>
+                          </div>
+                        ) : null}
+                      </>
                     )}
-                  </article>
-                  <article className="panel records-panel">
-                    <div className="records-panel-head">
-                      <h2>Contacts</h2>
-                      {accountFilter ? (
-                        <button
-                          type="button"
-                          className="filter-pill"
-                          onClick={() => setAccountFilter('')}
-                        >
-                          {filteredAccount?.company || 'Filtered'}
-                          <X size={13} />
-                        </button>
+                  </div>
+
+                  {peopleRows.length ? (
+                    <div className="entity-footer">
+                      <small>
+                        Showing {peopleStart + 1}–
+                        {Math.min(
+                          peopleStart + PEOPLE_PAGE_SIZE,
+                          peopleRows.length,
+                        )}{' '}
+                        of {peopleRows.length}
+                      </small>
+                      {peoplePageCount > 1 ? (
+                        <nav className="pager" aria-label="Pages">
+                          <button
+                            type="button"
+                            disabled={peopleSafePage === 0}
+                            onClick={() => setPeoplePage((p) => p - 1)}
+                          >
+                            Previous
+                          </button>
+                          <span className="pager-pages">
+                            {Array.from({ length: peoplePageCount }).map(
+                              (_, index) => (
+                                <button
+                                  key={index}
+                                  type="button"
+                                  className={
+                                    index === peopleSafePage ? 'current' : ''
+                                  }
+                                  onClick={() => setPeoplePage(index)}
+                                >
+                                  {index + 1}
+                                </button>
+                              ),
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={peopleSafePage >= peoplePageCount - 1}
+                            onClick={() => setPeoplePage((p) => p + 1)}
+                          >
+                            Next
+                          </button>
+                        </nav>
                       ) : null}
                     </div>
-                    {visibleContacts.length ? (
-                      visibleContacts.map((lead) => (
-                        <button
-                          key={lead.id}
-                          className="record-row"
-                          onClick={() => openReview(lead)}
-                        >
-                          <span className="initial-avatar">
-                            {lead.fullName
-                              .split(' ')
-                              .map((word) => word[0])
-                              .join('')
-                              .slice(0, 2)}
-                          </span>
-                          <span>
-                            <strong>{lead.fullName}</strong>
-                            <small>
-                              {lead.role || 'Role not added'} · {lead.company}
-                            </small>
-                          </span>
-                          <b
-                            className={`review-chip ${lead.buyingRole ? '' : 'unset'}`}
-                          >
-                            {lead.buyingRole?.replaceAll('_', ' ') ||
-                              'Classify'}
-                          </b>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="empty-state">
-                        {accountFilter
-                          ? `No contacts under ${filteredAccount?.company ?? 'this account'}.`
-                          : 'No captured contacts yet.'}
-                      </div>
-                    )}
-                  </article>
-                </div>
+                  ) : null}
+                </section>
               ) : null}
               {activeView === 'opportunities' ? (
                 <article className="panel data-panel">
