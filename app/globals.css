@@ -570,3 +570,13 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 
 /* A single panel in the two-column records grid left half the page empty. */
 .records-grid:has(> :only-child) { grid-template-columns: minmax(0, 720px); }
+
+/* Inline event switcher in the capture dialog header. */
+.capture-event-switch { display: flex; align-items: center; gap: 8px; }
+.capture-event-switch label { color: var(--color-text-subtle); letter-spacing: .09em; }
+.capture-event-switch select {
+  height: 28px; padding: 0 26px 0 8px; border: 1px solid var(--color-line);
+  border-radius: var(--radius-xs); background-color: var(--color-surface);
+  color: var(--color-brand); font-size: var(--text-label); font-weight: var(--weight-semibold);
+  letter-spacing: 0; text-transform: none; background-position: right 6px center;
+}

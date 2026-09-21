@@ -4391,9 +4391,33 @@ export default function Home() {
                     {!saved ? (
                       <>
                         <DialogHeader>
-                          <p className="dialog-kicker">
-                            {activeEvent?.name || 'Unassigned event'}
-                          </p>
+                          {activeEvent && capturableEvents.length > 1 ? (
+                            /* Once an event was chosen the name became static
+                               text, leaving no way to capture into a different
+                               one without leaving the dialog. */
+                            <div className="dialog-kicker capture-event-switch">
+                              <label htmlFor="capture-event-switch">
+                                Capturing into
+                              </label>
+                              <select
+                                id="capture-event-switch"
+                                value={activeEventId}
+                                onChange={(event) =>
+                                  void selectEvent(event.currentTarget.value)
+                                }
+                              >
+                                {capturableEvents.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <p className="dialog-kicker">
+                              {activeEvent?.name || 'Unassigned event'}
+                            </p>
+                          )}
                           <DialogTitle className="dialog-title">
                             Capture a new conversation
                           </DialogTitle>
