@@ -17,6 +17,11 @@
 //   node scripts/seed-demo-data.mjs --leads=300  seed a smaller amount
 //   node scripts/seed-demo-data.mjs --reset      wipe the local DB and
 //                                                reapply migrations first
+//   node scripts/seed-demo-data.mjs --if-empty   do nothing when the database
+//                                                already holds a workspace,
+//                                                so first-run setup can call
+//                                                this without ever clobbering
+//                                                work already in progress
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -53,6 +58,15 @@ if (args.includes('--reset')) {
 function readLocalTestIdentity() {
   let userId = 'test-user';
   let email = 'tester@crm.local';
+  // Codespaces sets the identity through the devcontainer's containerEnv, so
+  // the process environment wins over .env - matching how the app itself
+  // resolves it - and .env is only the fallback for a plain local checkout.
+  if (process.env.CRMUNI_TEST_USER_ID || process.env.CRMUNI_TEST_USER_EMAIL) {
+    return {
+      userId: process.env.CRMUNI_TEST_USER_ID || userId,
+      email: process.env.CRMUNI_TEST_USER_EMAIL || email,
+    };
+  }
   try {
     const envText = readFileSync(resolve(root, '.env'), 'utf-8');
     for (const line of envText.split('\n')) {
@@ -223,6 +237,24 @@ const mf = new Miniflare({
 
 try {
   const db = await mf.getD1Database(D1_BINDING);
+
+  // First-run setup calls this with --if-empty, so opening a Codespace gets a
+  // populated app while rerunning setup on a database someone has already
+  // worked in changes nothing.
+  if (args.includes('--if-empty')) {
+    const existing = await db
+      .prepare(`SELECT COUNT(*) AS total FROM workspaces`)
+      .first();
+    if (Number(existing?.total || 0) > 0) {
+      console.log(
+        'Local database already has a workspace - leaving it untouched.\n' +
+          'Run `npm run db:local:seed -- --reset` to replace it with demo data.',
+      );
+      await mf.dispose();
+      process.exit(0);
+    }
+  }
+
   const now = Date.now();
 
   // --- workspace -----------------------------------------------------

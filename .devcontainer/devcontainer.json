@@ -12,10 +12,14 @@
     "CRMUNI_TEST_USER_EMAIL": "tester@crm.local"
   },
 
-  // npm ci for a reproducible install, then create .env and initialize the
-  // local D1 schema. Nothing here touches the network beyond the npm
-  // registry, and nothing here can reach the production Cloudflare account
-  // - see scripts/local-cloudflare-config.mjs for why.
+  // npm ci for a reproducible install, then create .env, initialize the local
+  // D1 schema and fill it with demo data so the Codespace opens on a
+  // populated app rather than an empty workspace. Seeding is skipped whenever
+  // the database already holds a workspace, so rebuilding or rerunning setup
+  // never disturbs work in progress; set CRMUNI_SKIP_SEED=1 to start empty.
+  // Nothing here touches the network beyond the npm registry, and nothing
+  // here can reach the production Cloudflare account - see
+  // scripts/local-cloudflare-config.mjs for why.
   "postCreateCommand": "npm ci && npm run setup:test",
 
   "forwardPorts": [3000],
