@@ -17,6 +17,7 @@
     "db:local:init": "node scripts/db-local-init.mjs",
     "db:local:reset": "node scripts/db-local-init.mjs --reset",
     "setup:test": "node scripts/setup-test.mjs",
+    "db:local:seed": "node scripts/seed-demo-data.mjs",
     "load:smoke": "node scripts/load-smoke.mjs",
     "format": "oxfmt"
   },
