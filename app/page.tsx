@@ -1465,7 +1465,19 @@ export default function Home() {
 
   async function loadWorkspace() {
     try {
-      const response = await apiFetch('/api/workspace');
+      let response = await apiFetch('/api/workspace');
+      // A workspace id saved on this device can outlive the workspace itself —
+      // it is deleted, the membership is removed, or the local test database is
+      // rebuilt. The server then refuses every request for it and the app used
+      // to sit on an empty shell forever, because the bad id stayed in storage.
+      // Drop it once and retry: with no id the server resolves the first
+      // workspace this user can actually reach.
+      if (!response.ok && window.localStorage.getItem('revenue-workspace-id')) {
+        window.localStorage.removeItem('revenue-workspace-id');
+        window.localStorage.removeItem('revenue-event-id');
+        setActiveEventId('');
+        response = await apiFetch('/api/workspace');
+      }
       if (!response.ok) return;
       const data = (await response.json()) as {
         context?: AppContext;
