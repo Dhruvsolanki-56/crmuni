@@ -73,6 +73,53 @@ export function attributedWithinWindow(
   );
 }
 
+export type InvestmentBasisSource =
+  | 'actual_cost_lines'
+  | 'planned_cost_lines'
+  | 'event_budget';
+
+/**
+ * Until a separate accounting close is available, the highest evidenced cost
+ * total is used so a partial set of invoices cannot overstate ROI. This is the
+ * single definition; /api/reports and /api/analytics both call it so an event
+ * breakdown can never disagree with the headline figure.
+ */
+export function investmentBasisOf(input: {
+  actualCostLines: number;
+  plannedCostLines: number;
+  plannedBudget: number;
+}): { basis: number; source: InvestmentBasisSource } {
+  const basis = Math.max(
+    input.actualCostLines,
+    input.plannedCostLines,
+    input.plannedBudget,
+  );
+  return {
+    basis,
+    source:
+      basis > 0 && basis === input.actualCostLines
+        ? 'actual_cost_lines'
+        : basis > 0 && basis === input.plannedCostLines
+          ? 'planned_cost_lines'
+          : 'event_budget',
+  };
+}
+
+/** Return less investment, divided by investment. Null without an investment basis. */
+export function roiPercent(returned: number, investmentBasis: number) {
+  return investmentBasis ? ((returned - investmentBasis) / investmentBasis) * 100 : null;
+}
+
+/** Probability-weighted value of one opportunity. Negative probability is floored at zero. */
+export function weightedOpportunityValue(value: number, probability: number) {
+  return (Number(value || 0) * Math.max(0, Number(probability || 0))) / 100;
+}
+
+/** Gross profit contributed by one won opportunity at its event's configured margin. */
+export function grossProfitOf(value: number, grossMarginBps: number) {
+  return (Number(value || 0) * Number(grossMarginBps || 0)) / 10_000;
+}
+
 export function safeCsvCell(value: unknown) {
   let text = '';
   if (typeof value === 'string') text = value;

@@ -8,8 +8,12 @@ import {
 } from '@/lib/db';
 import {
   attributedWithinWindow,
+  grossProfitOf,
+  investmentBasisOf,
   rankNextActions,
+  roiPercent,
   toCsv,
+  weightedOpportunityValue,
   type PriorityCandidate,
 } from '@/lib/reporting';
 
@@ -33,11 +37,17 @@ export async function GET(request: Request) {
   const context = await requireWorkspace(request);
   const db = database();
   const url = new URL(request.url);
-  const requestedEventId = clean(
-    url.searchParams.get('eventId') ||
-      request.headers.get('x-revenue-event-id'),
-    80,
-  );
+  // scope=all reports across every accessible event even when a capture event
+  // is selected on the device, so an explicit "All events" choice is not
+  // silently narrowed by the x-revenue-event-id header.
+  const requestedEventId =
+    clean(url.searchParams.get('scope'), 10) === 'all'
+      ? ''
+      : clean(
+          url.searchParams.get('eventId') ||
+            request.headers.get('x-revenue-event-id'),
+          80,
+        );
   if (requestedEventId) await requireEventAccess(context, requestedEventId);
   const eventAccess = eventAccessClause(context, 'e.id');
   const eventFilter = requestedEventId ? ' AND e.id=?' : '';
@@ -122,8 +132,7 @@ export async function GET(request: Request) {
   const weightedPipelineValue = openOpportunities.reduce(
     (sum, item) =>
       sum +
-      (Number(item.value || 0) * Math.max(0, Number(item.probability || 0))) /
-        100,
+      weightedOpportunityValue(Number(item.value), Number(item.probability)),
     0,
   );
   const closedRevenue = wonOpportunities.reduce(
@@ -140,18 +149,16 @@ export async function GET(request: Request) {
   const plannedCostLines = costRows.results
     .filter((item) => item.status === 'planned')
     .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  // Until a separate accounting close is available, use the highest evidenced
-  // cost total so a partial set of invoices cannot overstate ROI.
-  const investmentBasis = Math.max(
-    actualInvestment,
-    plannedCostLines,
-    plannedInvestment,
-  );
+  const { basis: investmentBasis, source: investmentBasisSource } =
+    investmentBasisOf({
+      actualCostLines: actualInvestment,
+      plannedCostLines,
+      plannedBudget: plannedInvestment,
+    });
   const grossProfit = wonOpportunities.reduce((sum, item) => {
     const event = eventById.get(String(item.eventId));
     return (
-      sum +
-      (Number(item.value || 0) * Number(event?.grossMarginBps || 0)) / 10_000
+      sum + grossProfitOf(Number(item.value), Number(event?.grossMarginBps))
     );
   }, 0);
   const acceptedQuotes = quoteRows.results.filter(
@@ -179,19 +186,10 @@ export async function GET(request: Request) {
     plannedCostLines,
     actualInvestment,
     investmentBasis,
-    investmentBasisSource:
-      investmentBasis > 0 && investmentBasis === actualInvestment
-        ? 'actual_cost_lines'
-        : investmentBasis > 0 && investmentBasis === plannedCostLines
-          ? 'planned_cost_lines'
-          : 'event_budget',
+    investmentBasisSource,
     grossProfit,
-    revenueRoiPercent: investmentBasis
-      ? ((closedRevenue - investmentBasis) / investmentBasis) * 100
-      : null,
-    profitRoiPercent: investmentBasis
-      ? ((grossProfit - investmentBasis) / investmentBasis) * 100
-      : null,
+    revenueRoiPercent: roiPercent(closedRevenue, investmentBasis),
+    profitRoiPercent: roiPercent(grossProfit, investmentBasis),
     reconciliation: {
       acceptedQuotationValue: acceptedQuotes.reduce(
         (sum, item) => sum + Number(item.amount || 0),

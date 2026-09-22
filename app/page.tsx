@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import Analytics, { type AnalyticsPayload } from './analytics';
 import {
   classifyCaptureResponse,
   nextCaptureRetry,
@@ -786,11 +787,6 @@ function dateTime(value: number | string) {
 const AUDIT_PAGE_SIZE = 8;
 const PEOPLE_PAGE_SIZE = 8;
 
-function roiTone(value: number | null | undefined) {
-  if (value == null) return 'roi-value';
-  return `roi-value ${value < 0 ? 'negative' : 'positive'}`;
-}
-
 function money(value: number, currency = 'INR') {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -1332,11 +1328,27 @@ export default function Home() {
   const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
   const [memoryQuery, setMemoryQuery] = useState('');
   const [showArchivedContacts, setShowArchivedContacts] = useState(false);
-  const [revenueReport, setRevenueReport] = useState<RevenueReport | null>(
+  const [nextBestActions, setNextBestActions] = useState<NextBestAction[]>([]);
+  /* Analytics keeps its own scope and its own copy of the report. Today's
+     briefing stays scoped to the selected capture event; choosing a different
+     event to analyse must not silently re-scope the rest of the app. */
+  const [analyticsScopeId, setAnalyticsScopeId] = useState('');
+  const [analyticsReport, setAnalyticsReport] = useState<RevenueReport | null>(
     null,
   );
-  const [eventCosts, setEventCosts] = useState<EventCost[]>([]);
-  const [nextBestActions, setNextBestActions] = useState<NextBestAction[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsPayload | null>(
+    null,
+  );
+  const [analyticsCosts, setAnalyticsCosts] = useState<EventCost[]>([]);
+  const [analyticsActions, setAnalyticsActions] = useState<NextBestAction[]>(
+    [],
+  );
+  const [analyticsState, setAnalyticsState] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
+  // Set when a pipeline stage is selected in Analytics, so that drill-down
+  // lands on the matching opportunities instead of the unfiltered list.
+  const [opportunityStage, setOpportunityStage] = useState('');
   const [activeEventId, setActiveEventId] = useState(() =>
     typeof window === 'undefined'
       ? ''
@@ -1529,17 +1541,46 @@ export default function Home() {
       if (cached.length) setEvents(cached);
     }
   }
+  // Feeds Today's briefing, scoped by the selected capture event. Analytics
+  // loads its own copy at its own scope through loadAnalytics below.
   async function loadReports() {
     const response = await apiFetch('/api/reports');
     if (!response.ok) return;
     const data = (await response.json()) as {
-      report: RevenueReport;
-      costs: EventCost[];
       nextBestActions: NextBestAction[];
     };
-    setRevenueReport(data.report);
-    setEventCosts(data.costs || []);
     setNextBestActions(data.nextBestActions || []);
+  }
+  async function loadAnalytics(scopeId: string) {
+    setAnalyticsState((current) => (current === 'ready' ? 'ready' : 'loading'));
+    // scope=all is explicit so the device's selected capture event cannot
+    // silently narrow an "All events" request through the request header.
+    const query = scopeId
+      ? `eventId=${encodeURIComponent(scopeId)}`
+      : 'scope=all';
+    try {
+      const [reports, analytics] = await Promise.all([
+        apiFetch(`/api/reports?${query}`),
+        apiFetch(`/api/analytics?${query}`),
+      ]);
+      if (!reports.ok || !analytics.ok) {
+        setAnalyticsState('error');
+        return;
+      }
+      const reportData = (await reports.json()) as {
+        report: RevenueReport;
+        costs: EventCost[];
+        nextBestActions: NextBestAction[];
+      };
+      const analyticsPayload = (await analytics.json()) as AnalyticsPayload;
+      setAnalyticsReport(reportData.report);
+      setAnalyticsCosts(reportData.costs || []);
+      setAnalyticsActions(reportData.nextBestActions || []);
+      setAnalyticsData(analyticsPayload);
+      setAnalyticsState('ready');
+    } catch {
+      setAnalyticsState('error');
+    }
   }
   async function loadSettings() {
     const response = await apiFetch('/api/settings');
@@ -3382,8 +3423,13 @@ export default function Home() {
     // nothing stale (next-best-actions, revenue figures) lingers on screen
     // while the new workspace's data is still loading.
     setNextBestActions([]);
-    setRevenueReport(null);
-    setEventCosts([]);
+    setAnalyticsScopeId('');
+    setAnalyticsReport(null);
+    setAnalyticsData(null);
+    setAnalyticsCosts([]);
+    setAnalyticsActions([]);
+    setAnalyticsState('idle');
+    setOpportunityStage('');
     setOperations(null);
     setNotice('Workspace switched');
     await Promise.all([
@@ -3883,7 +3929,7 @@ export default function Home() {
     if (view === 'meetings') void loadMeetings();
     if (view === 'roi') {
       void loadEvents();
-      void loadReports();
+      void loadAnalytics(analyticsScopeId);
     }
     if (view === 'events') {
       void loadEvents();
@@ -4522,9 +4568,13 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  // Costs belong to whichever event Analytics is looking at; if that is "All
+  // events" they fall back to the selected capture event.
+  const costEventId = analyticsScopeId || activeEventId;
+
   async function submitEventCost(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!activeEventId) {
+    if (!costEventId) {
       setNotice('Select one event before adding reconciled costs.');
       return;
     }
@@ -4535,7 +4585,7 @@ export default function Home() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         action: 'create_cost',
-        eventId: activeEventId,
+        eventId: costEventId,
         category: values.get('category'),
         description: values.get('description'),
         vendor: values.get('vendor'),
@@ -4551,7 +4601,7 @@ export default function Home() {
     }
     form.reset();
     setNotice('Event cost added to the reconciled report');
-    await loadReports();
+    await Promise.all([loadReports(), loadAnalytics(analyticsScopeId)]);
   }
 
   async function voidEventCost(item: EventCost) {
@@ -4586,16 +4636,17 @@ export default function Home() {
     const data = (await response.json()) as { error?: string };
     if (!response.ok) {
       setNotice(data.error || 'Could not void this cost line.');
-      await loadReports();
+      await Promise.all([loadReports(), loadAnalytics(analyticsScopeId)]);
       return;
     }
     setNotice('Cost line voided with an audit reason');
-    await loadReports();
+    await Promise.all([loadReports(), loadAnalytics(analyticsScopeId)]);
   }
 
   async function exportReport(kind: string) {
+    // Exports follow the scope shown on screen, not the capture event.
     const response = await apiFetch(
-      `/api/reports?export=${encodeURIComponent(kind)}${activeEventId ? `&eventId=${encodeURIComponent(activeEventId)}` : ''}`,
+      `/api/reports?export=${encodeURIComponent(kind)}&${analyticsScopeId ? `eventId=${encodeURIComponent(analyticsScopeId)}` : 'scope=all'}`,
     );
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as {
@@ -4652,6 +4703,10 @@ export default function Home() {
     void loadWorkspace();
     void loadReports();
   }
+
+  const stageOpportunities = opportunityStage
+    ? opportunities.filter((item) => item.stage === opportunityStage)
+    : opportunities;
 
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
@@ -4989,7 +5044,7 @@ export default function Home() {
               />
               <NavItem
                 icon={BarChart3}
-                label="Revenue & ROI"
+                label="Revenue analytics"
                 active={activeView === 'roi'}
                 onClick={() => go('roi')}
               />
@@ -6967,7 +7022,7 @@ export default function Home() {
                             : activeView === 'events'
                               ? 'Events'
                               : activeView === 'roi'
-                                ? 'Revenue & ROI'
+                                ? 'Revenue analytics'
                                 : activeView === 'settings'
                                   ? 'Workspace settings'
                                   : activeView === 'knowledge'
@@ -7273,7 +7328,24 @@ export default function Home() {
               ) : null}
               {activeView === 'opportunities' ? (
                 <article className="panel data-panel">
-                  {opportunities.length ? (
+                  {opportunityStage ? (
+                    <div className="stage-filter-bar">
+                      <span>
+                        Showing <strong>{opportunityStage}</strong>{' '}
+                        opportunities · {stageOpportunities.length} of the{' '}
+                        {opportunities.length} most recently updated across
+                        every event, so this count can differ from an
+                        event-scoped analytics figure
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOpportunityStage('')}
+                      >
+                        Clear filter
+                      </button>
+                    </div>
+                  ) : null}
+                  {stageOpportunities.length ? (
                     <>
                       <div className="data-header">
                         <span>Opportunity</span>
@@ -7281,7 +7353,7 @@ export default function Home() {
                         <span>Value</span>
                         <span>Probability</span>
                       </div>
-                      {opportunities.map((item) => (
+                      {stageOpportunities.map((item) => (
                         <div className="data-row opportunity-row" key={item.id}>
                           <span>
                             <strong>{item.title}</strong>
@@ -7392,6 +7464,21 @@ export default function Home() {
                         </div>
                       ))}
                     </>
+                  ) : opportunityStage ? (
+                    <div className="empty-state large">
+                      <Target />
+                      <h2>No {opportunityStage} opportunities loaded</h2>
+                      <p>
+                        This view holds the 100 most recently updated
+                        opportunities, and none of them are at this stage.
+                      </p>
+                      <Button
+                        variant="outline"
+                        onClick={() => setOpportunityStage('')}
+                      >
+                        Show every stage
+                      </Button>
+                    </div>
                   ) : (
                     <div className="empty-state large">
                       <Target />
@@ -9406,106 +9493,45 @@ export default function Home() {
                 </div>
               ) : null}
               {activeView === 'roi' ? (
-                <div className="roi-layout">
-                  <section className="roi-grid">
-                    <article className="panel roi-card">
-                      <small>Reconciled investment</small>
-                      <strong>
-                        {money(
-                          revenueReport?.investmentBasis || 0,
-                          appContext?.workspace.currency,
-                        )}
-                      </strong>
-                      <span>
-                        {revenueReport?.investmentBasisSource ===
-                        'actual_cost_lines'
-                          ? 'Actual cost lines'
-                          : revenueReport?.investmentBasisSource ===
-                              'planned_cost_lines'
-                            ? 'Planned cost lines'
-                            : 'Planned event budget'}{' '}
-                        · actual{' '}
-                        {money(
-                          revenueReport?.actualInvestment || 0,
-                          appContext?.workspace.currency,
-                        )}
-                      </span>
-                    </article>
-                    <article className="panel roi-card">
-                      <small>Open pipeline</small>
-                      <strong>
-                        {money(
-                          revenueReport?.pipelineValue || 0,
-                          appContext?.workspace.currency,
-                        )}
-                      </strong>
-                      <span>
-                        Weighted:{' '}
-                        {money(
-                          revenueReport?.weightedPipelineValue || 0,
-                          appContext?.workspace.currency,
-                        )}
-                      </span>
-                    </article>
-                    <article className="panel roi-card">
-                      <small>Closed revenue</small>
-                      <strong>
-                        {money(
-                          revenueReport?.closedRevenue || 0,
-                          appContext?.workspace.currency,
-                        )}
-                      </strong>
-                      <span>
-                        {revenueReport?.wonOpportunities || 0} attributed won
-                        opportunities
-                      </span>
-                    </article>
-                    <article className="panel roi-card">
-                      <small>Revenue ROI</small>
-                      <strong
-                        className={roiTone(revenueReport?.revenueRoiPercent)}
-                      >
-                        {revenueReport?.revenueRoiPercent == null
-                          ? 'Not available'
-                          : `${revenueReport.revenueRoiPercent.toFixed(1)}%`}
-                      </strong>
-                      <span>
-                        Revenue less investment, divided by investment
-                      </span>
-                    </article>
-                    <article className="panel roi-card">
-                      <small>Estimated gross profit</small>
-                      <strong>
-                        {money(
-                          revenueReport?.grossProfit || 0,
-                          appContext?.workspace.currency,
-                        )}
-                      </strong>
-                      <span>
-                        Uses each event&apos;s configured gross margin
-                      </span>
-                    </article>
-                    <article className="panel roi-card">
-                      <small>Profit ROI</small>
-                      <strong
-                        className={roiTone(revenueReport?.profitRoiPercent)}
-                      >
-                        {revenueReport?.profitRoiPercent == null
-                          ? 'Not available'
-                          : `${revenueReport.profitRoiPercent.toFixed(1)}%`}
-                      </strong>
-                      <span>
-                        Gross profit less investment, divided by investment
-                      </span>
-                    </article>
-                  </section>
-                  <section className="settings-grid">
-                    <article className="panel settings-card">
-                      <h2>Cost reconciliation</h2>
-                      <p>
-                        Add actual invoices separately from planned costs. Voids
-                        preserve an immutable reason and version history.
-                      </p>
+                <Analytics
+                  report={analyticsReport}
+                  analytics={analyticsData}
+                  scopeEvents={events.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    status: item.status,
+                    startsOn: item.startsOn,
+                    endsOn: item.endsOn,
+                  }))}
+                  costs={analyticsCosts}
+                  actions={analyticsActions}
+                  currency={appContext?.workspace.currency || 'INR'}
+                  scopeEventId={analyticsScopeId}
+                  onScopeChange={(id) => {
+                    setAnalyticsScopeId(id);
+                    void loadAnalytics(id);
+                  }}
+                  loading={analyticsState === 'loading'}
+                  failed={analyticsState === 'error'}
+                  onRetry={() => void loadAnalytics(analyticsScopeId)}
+                  canExport={['owner', 'admin', 'manager'].includes(
+                    appContext?.role || '',
+                  )}
+                  onExport={(kind) => void exportReport(kind)}
+                  onOpenStage={(stage) => {
+                    setOpportunityStage(stage);
+                    go('opportunities');
+                  }}
+                  onOpenAction={(action) => {
+                    if (action.kind === 'task') go('today');
+                    else if (action.kind === 'rfq') {
+                      setOpenRfqId(action.id);
+                      go('rfqs');
+                    } else if (action.kind === 'quotation') go('rfqs');
+                    else go('people');
+                  }}
+                  costEntry={
+                    <div className="an-cost-entry">
                       <form className="lead-form" onSubmit={submitEventCost}>
                         <div className="field-grid">
                           <div className="field-block">
@@ -9547,14 +9573,6 @@ export default function Home() {
                             />
                           </div>
                           <div className="field-block">
-                            <label htmlFor="cost-vendor">Vendor</label>
-                            <Input
-                              id="cost-vendor"
-                              name="vendor"
-                              placeholder="Vendor"
-                            />
-                          </div>
-                          <div className="field-block">
                             <label htmlFor="cost-amount">
                               Amount ({appContext?.workspace.currency || 'INR'})
                             </label>
@@ -9568,114 +9586,71 @@ export default function Home() {
                               required
                             />
                           </div>
-                          <div className="field-block">
-                            <label htmlFor="cost-date">Incurred on</label>
-                            <Input
-                              id="cost-date"
-                              name="incurredOn"
-                              type="date"
-                            />
-                          </div>
                         </div>
-                        <Button type="submit" disabled={!activeEventId}>
+                        <details className="more-details">
+                          <summary>More details</summary>
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="cost-vendor">Vendor</label>
+                              <Input
+                                id="cost-vendor"
+                                name="vendor"
+                                placeholder="Vendor"
+                              />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="cost-date">Incurred on</label>
+                              <Input
+                                id="cost-date"
+                                name="incurredOn"
+                                type="date"
+                              />
+                            </div>
+                          </div>
+                        </details>
+                        <Button type="submit" disabled={!costEventId}>
                           Add cost line
                         </Button>
-                        {!activeEventId ? (
-                          <p className="field-help">
-                            Costs attach to an event. Select an active event in
-                            Events to record one.
-                          </p>
-                        ) : null}
+                        <p className="field-help">
+                          {costEventId
+                            ? `Recorded against ${
+                                events.find((item) => item.id === costEventId)
+                                  ?.name || 'the selected event'
+                              }. Voids keep an immutable reason and version history.`
+                            : 'Costs attach to one event. Choose an event above before recording one.'}
+                        </p>
                       </form>
-                      <div className="action-list">
-                        {eventCosts.map((cost) => (
-                          <article className="action-row" key={cost.id}>
-                            <span className="action-copy">
-                              <strong>{cost.description}</strong>
-                              <small>
-                                {cost.category} · {cost.status}
-                                {cost.vendor ? ` · ${cost.vendor}` : ''}
-                              </small>
-                            </span>
-                            <strong>
-                              {money(
-                                cost.amount,
-                                appContext?.workspace.currency,
-                              )}
-                            </strong>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => voidEventCost(cost)}
-                            >
-                              Void
-                            </Button>
-                          </article>
-                        ))}
-                      </div>
-                    </article>
-                    <article className="panel settings-card">
-                      <h2>Attribution and reconciliation</h2>
-                      <p>
-                        Model: 100% to the originating event. Window:{' '}
-                        {revenueReport?.attributionWindowDays ??
-                          'per-event configuration'}{' '}
-                        days after the event.
-                      </p>
-                      <dl className="reconcile-list">
-                        <div>
-                          <dt>Accepted quotation value</dt>
-                          <dd>
-                            {money(
-                              revenueReport?.reconciliation
-                                .acceptedQuotationValue || 0,
-                              appContext?.workspace.currency,
-                            )}
-                          </dd>
+                      {analyticsCosts.length ? (
+                        <div className="action-list">
+                          {analyticsCosts.map((cost) => (
+                            <article className="action-row" key={cost.id}>
+                              <span className="action-copy">
+                                <strong>{cost.description}</strong>
+                                <small>
+                                  {cost.category} · {cost.status}
+                                  {cost.vendor ? ` · ${cost.vendor}` : ''}
+                                </small>
+                              </span>
+                              <strong>
+                                {money(
+                                  cost.amount,
+                                  appContext?.workspace.currency,
+                                )}
+                              </strong>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => voidEventCost(cost)}
+                              >
+                                Void
+                              </Button>
+                            </article>
+                          ))}
                         </div>
-                        <div>
-                          <dt>Won without accepted quotation</dt>
-                          <dd>
-                            {revenueReport?.reconciliation
-                              .wonWithoutAcceptedQuotation || 0}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Accepted quotation without won opportunity</dt>
-                          <dd>
-                            {revenueReport?.reconciliation
-                              .acceptedQuotationWithoutWonOpportunity || 0}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Outside attribution window</dt>
-                          <dd>
-                            {revenueReport?.reconciliation
-                              .excludedOutsideAttributionWindow || 0}
-                          </dd>
-                        </div>
-                      </dl>
-                      <div className="export-actions">
-                        {[
-                          'summary',
-                          'leads',
-                          'opportunities',
-                          'costs',
-                          'actions',
-                        ].map((kind) => (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            key={kind}
-                            onClick={() => exportReport(kind)}
-                          >
-                            Export {kind} CSV
-                          </Button>
-                        ))}
-                      </div>
-                    </article>
-                  </section>
-                </div>
+                      ) : null}
+                    </div>
+                  }
+                />
               ) : null}
               {activeView === 'knowledge' &&
               knowledgeState === 'error' &&
@@ -11987,6 +11962,7 @@ export default function Home() {
             {searchTerm.trim() ? (
               [
                 ...capturedLeads.map((lead) => ({
+                  key: `lead:${lead.id}`,
                   label: lead.fullName,
                   meta: lead.company,
                   action: () => {
@@ -11995,6 +11971,7 @@ export default function Home() {
                   },
                 })),
                 ...tasks.map((task) => ({
+                  key: `task:${task.id}`,
                   label: task.title,
                   meta: `${task.fullName} · ${task.company}`,
                   action: () => {
@@ -12003,6 +11980,7 @@ export default function Home() {
                   },
                 })),
                 ...opportunities.map((item) => ({
+                  key: `opportunity:${item.id}`,
                   label: item.title,
                   meta: item.company,
                   action: () => {
@@ -12019,7 +11997,7 @@ export default function Home() {
                 .slice(0, 8)
                 .map((item) => (
                   <button
-                    key={`${item.label}-${item.meta}`}
+                    key={item.key}
                     onClick={item.action}
                   >
                     <Search />
