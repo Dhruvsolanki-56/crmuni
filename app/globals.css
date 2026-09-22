@@ -1161,8 +1161,12 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .an-strip-legend span { color: var(--text-700); }
 .an-strip-legend b { color: var(--brand-900); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
 .an-strip-legend small { min-width: 38px; color: var(--text-400); font-size: var(--text-micro); text-align: right; font-variant-numeric: tabular-nums; }
-.an-coverage { margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--color-line); color: var(--text-600); font-size: var(--text-sm); line-height: var(--leading-relaxed); }
-.an-coverage b { color: var(--brand-900); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-coverage { display: grid; gap: 0; margin: 4px 0 0; }
+.an-coverage > div { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; padding: 11px 0; border-top: 1px solid var(--color-line); }
+.an-coverage dt { color: var(--text-600); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.an-coverage dd { display: flex; align-items: baseline; gap: 6px; margin: 0; color: var(--brand-900); font-size: var(--text-md); line-height: var(--lh-md); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-coverage dd.is-flag { color: var(--warn-800); }
+.an-coverage dd small { color: var(--text-400); font-size: var(--text-micro); font-weight: var(--weight-normal); }
 
 /* ── capture timeline ────────────────────────────────────────────────────── */
 .an-timeline { position: relative; display: grid; gap: 8px; }
@@ -1341,8 +1345,8 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .an-secondary { padding-top: 26px; border-top: 1px solid var(--line); }
 .an-secondary > summary { color: var(--text-600); font-size: var(--text-sm); line-height: var(--lh-sm); cursor: pointer; list-style: none; }
 .an-secondary > summary::-webkit-details-marker { display: none; }
-.an-secondary > summary::before { content: '+ '; color: var(--text-400); }
-.an-secondary[open] > summary::before { content: '- '; }
+.an-secondary > summary::before { content: '+'; display: inline-block; width: 15px; color: var(--text-400); }
+.an-secondary[open] > summary::before { content: '−'; }
 .an-secondary > summary:hover { color: var(--brand-800); }
 .an-secondary > summary:focus-visible { outline: none; box-shadow: var(--ring-brand); border-radius: var(--radius-xs); }
 .an-secondary[open] > summary { margin-bottom: 16px; }
@@ -1912,6 +1916,65 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .an-rail-nav { display: none; }
   .an-scope { flex-wrap: wrap; padding-bottom: 16px; }
   .an-ladder-row { grid-template-columns: minmax(0, 1fr) minmax(88px, auto); gap: 8px 12px; padding: 11px 0; }
+}
+
+
+/* ═══ ANALYTICS: LET THE CHARTS DO THE TALKING ═══════════════════════════════
+   Prose that only restated what a chart already showed has been removed or
+   moved into tooltips. What is left is labelled figures, which read at a
+   glance instead of having to be parsed.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── hero facts: the sentence became four numbers ────────────────────────── */
+.an-facts { display: flex; gap: 40px; flex-wrap: wrap; margin: 4px 0 0; }
+.an-facts > div { display: grid; gap: 3px; }
+.an-facts dt { color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro); letter-spacing: .07em; text-transform: uppercase; font-weight: var(--weight-semibold); }
+.an-facts dd { margin: 0; color: var(--brand-900); font-size: var(--text-lg); line-height: var(--lh-lg); letter-spacing: -.018em; font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-facts dd.an-roi { padding: 0; background: none; font-size: var(--text-lg); }
+.an-facts dd.an-roi.is-positive { color: #3d5a0c; }
+.an-facts dd.an-roi.is-negative { color: var(--danger-700); }
+.an-facts dd.an-pending { font-size: var(--text-base); line-height: var(--lh-lg); }
+.an-sentence { font-size: var(--text-base); }
+
+/* ── ladder: one label per row, no sub-caption ───────────────────────────── */
+.an-ladder-label { display: block; color: var(--text-800); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-medium); cursor: help; }
+
+/* ── evidence: a figure list, not four paragraphs ────────────────────────── */
+.an-evidence { display: grid; gap: 0; margin: 0; }
+.an-evidence > div { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; padding: 13px 0; border-bottom: 1px solid var(--color-line); cursor: help; }
+.an-evidence > div:last-child { border-bottom: 0; }
+.an-evidence dt { color: var(--text-600); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.an-evidence dd { margin: 0; color: var(--brand-900); font-size: var(--text-md); line-height: var(--lh-md); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.an-evidence dd.is-flag { color: var(--warn-800); }
+.an-evidence dd.an-pending { color: var(--text-400); font-size: var(--text-sm); font-weight: var(--weight-normal); }
+
+.an-cost-basis .is-basis { cursor: help; }
+.an-cost-basis .is-basis dt { display: grid; gap: 1px; }
+.an-cost-basis .is-basis dt small { color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro); font-weight: var(--weight-normal); }
+
+/* ── chapter strip note ──────────────────────────────────────────────────── */
+.an-rail-note { margin-left: auto; padding-left: 16px; color: var(--text-400); font-size: var(--text-micro); line-height: var(--lh-micro); white-space: nowrap; }
+
+/* ── cost lines under the secondary form ─────────────────────────────────── */
+.an-cost-entry-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.an-cost-entry-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(96px, auto) auto;
+  align-items: center; gap: 18px;
+  padding: 11px 0; border-top: 1px solid var(--color-line);
+}
+.an-cost-entry-copy { display: grid; gap: 2px; min-width: 0; }
+.an-cost-entry-copy strong { color: var(--text-800); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-cost-entry-copy small { color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-cost-entry-list b { color: var(--brand-900); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-semibold); text-align: right; font-variant-numeric: tabular-nums; }
+.an-cost-entry-list button { min-height: 32px; height: 32px; padding: 0 14px; font-size: var(--text-sm); }
+
+@media (max-width: 760px) {
+  .an-facts { gap: 22px 28px; }
+  .an-facts dd { font-size: var(--text-md); line-height: var(--lh-md); }
+  .an-cost-entry-list li { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'copy amount' 'action action'; row-gap: 9px; justify-items: start; }
+  .an-cost-entry-copy { grid-area: copy; }
+  .an-cost-entry-list b { grid-area: amount; }
+  .an-cost-entry-list button { grid-area: action; }
 }
 
 /* ── reduced motion: the final state, immediately ────────────────────────── */

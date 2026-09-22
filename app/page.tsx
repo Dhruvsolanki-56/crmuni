@@ -9632,23 +9632,26 @@ export default function Home() {
                             : 'Costs attach to one event. Choose an event above before recording one.'}
                         </p>
                       </form>
+                      {/* Its own row rather than Today's .action-row, whose
+                          grid starts with a 37px icon column and crushed the
+                          description down to three characters here. */}
                       {analyticsCosts.length ? (
-                        <div className="action-list">
+                        <ul className="an-cost-entry-list">
                           {analyticsCosts.map((cost) => (
-                            <article className="action-row" key={cost.id}>
-                              <span className="action-copy">
+                            <li key={cost.id}>
+                              <span className="an-cost-entry-copy">
                                 <strong>{cost.description}</strong>
                                 <small>
                                   {cost.category} · {cost.status}
                                   {cost.vendor ? ` · ${cost.vendor}` : ''}
                                 </small>
                               </span>
-                              <strong>
+                              <b>
                                 {money(
                                   cost.amount,
                                   appContext?.workspace.currency,
                                 )}
-                              </strong>
+                              </b>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -9656,9 +9659,9 @@ export default function Home() {
                               >
                                 Void
                               </Button>
-                            </article>
+                            </li>
                           ))}
-                        </div>
+                        </ul>
                       ) : null}
                     </div>
                   }

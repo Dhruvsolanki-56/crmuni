@@ -492,9 +492,10 @@ function ValueLadder({
         ) : null}
         {rows.map((row) => (
         <div className={`an-ladder-row an-tone-${row.tone}`} key={row.key}>
-          <span className="an-ladder-label">
+          {/* The hint moved to the row's tooltip: five sub-labels under five
+              labels doubled the reading for no extra meaning. */}
+          <span className="an-ladder-label" title={row.hint}>
             {row.label}
-            <small>{row.hint}</small>
           </span>
           <span className="an-ladder-track">
             <i style={fill(row.value / max)} />
@@ -715,8 +716,7 @@ function PipelineFlow({
           </>
         ) : (
           <span className="an-flow-hint">
-            The solid area of each stage is its weighted pipeline. Select a
-            stage to open those opportunities.
+            Select a stage to open those opportunities.
           </span>
         )}
       </div>
@@ -861,8 +861,7 @@ function QualityMatrix({
           </>
         ) : (
           <span className="an-flow-hint">
-            {count(total)} leads by qualification and review state. Darker cells
-            hold more leads.
+            {count(total)} leads by qualification and review state
           </span>
         )}
       </p>
@@ -1141,7 +1140,6 @@ function RfqTrack({
     <div className="an-track">
       <div className="an-track-head">
         <h3>RFQ lifecycle</h3>
-        <small>Requests for quotation received against this scope</small>
       </div>
       <div className="an-track-steps" onMouseLeave={() => setActive(null)}>
         {progression.map((key) => {
@@ -1249,9 +1247,8 @@ function QuotationLedger({
     <div className="an-quotes">
       <div className="an-track-head">
         <h3>Quotation lifecycle</h3>
-        <small>
-          A separate document lifecycle — not a continuation of the RFQ stages
-        </small>
+        {/* Short, but the distinction matters: these are not RFQ stages. */}
+        <small>Separate from the RFQ stages</small>
       </div>
       <div className="an-quote-stack" onMouseLeave={() => setActive(null)}>
         <div className="an-quote-column">
@@ -1330,23 +1327,25 @@ function CostComposition({
           <dt>Actual cost lines</dt>
           <dd>{money(report.actualInvestment, currency)}</dd>
         </div>
-        <div className="is-basis">
-          <dt>Investment basis</dt>
+        {/* Why this number is the one ROI divides by lives on the row itself,
+            rather than as a sentence underneath the whole table. */}
+        <div
+          className="is-basis"
+          title="The highest of the three, so a partial set of invoices cannot overstate ROI."
+        >
+          <dt>
+            Investment basis
+            <small>
+              {report.investmentBasisSource === 'actual_cost_lines'
+                ? 'Actual cost lines'
+                : report.investmentBasisSource === 'planned_cost_lines'
+                  ? 'Planned cost lines'
+                  : 'Planned event budget'}
+            </small>
+          </dt>
           <dd>{money(report.investmentBasis, currency)}</dd>
         </div>
       </dl>
-      <p className="an-note">
-        The basis is the highest of the three, so a partial set of invoices
-        cannot overstate ROI — here,{' '}
-        <strong>
-          {report.investmentBasisSource === 'actual_cost_lines'
-            ? 'actual cost lines'
-            : report.investmentBasisSource === 'planned_cost_lines'
-              ? 'planned cost lines'
-              : 'the planned event budget'}
-        </strong>
-        .
-      </p>
       {categories.length ? (
         <>
           <ul className="an-cost-list">
@@ -1449,90 +1448,65 @@ function RevenueEvidence({
     !needsReview &&
     !report.wonOpportunities &&
     !reconciliation.acceptedQuotationValue;
+  // Four labelled figures rather than four paragraphs. The reasoning behind
+  // each one is real and worth keeping, so it moves to the row's tooltip
+  // instead of being printed under every line.
+  const rows = [
+    {
+      key: 'documented',
+      label: 'Accepted quotation value',
+      value: reconciliation.acceptedQuotationValue
+        ? money(reconciliation.acceptedQuotationValue, currency)
+        : null,
+      empty: 'None yet',
+      tone: 'plain',
+      help: 'Closed revenue is counted from won opportunities, so this is independent evidence of the same outcome.',
+    },
+    {
+      key: 'won-unquoted',
+      label: 'Won without an accepted quotation',
+      value: nothingToReconcile
+        ? null
+        : count(reconciliation.wonWithoutAcceptedQuotation),
+      empty: 'Nothing to reconcile',
+      tone: reconciliation.wonWithoutAcceptedQuotation ? 'flag' : 'plain',
+      help: 'Opportunities marked won that have no accepted quotation linked to them.',
+    },
+    {
+      key: 'quoted-unwon',
+      label: 'Accepted quotation without a win',
+      value: nothingToReconcile
+        ? null
+        : count(reconciliation.acceptedQuotationWithoutWonOpportunity),
+      empty: 'Nothing to reconcile',
+      tone: reconciliation.acceptedQuotationWithoutWonOpportunity
+        ? 'flag'
+        : 'plain',
+      help: 'Quotations the customer accepted that are not linked to a won opportunity.',
+    },
+    {
+      key: 'excluded',
+      label: 'Outside the attribution window',
+      value: count(reconciliation.excludedOutsideAttributionWindow),
+      empty: '',
+      tone: 'plain',
+      help:
+        report.attributionWindowDays != null
+          ? `Every opportunity is attributed to the event it originated at, within ${count(report.attributionWindowDays)} days of that event ending. These fall outside and are excluded from every figure above.`
+          : 'Every opportunity is attributed to the event it originated at, within that event’s own attribution window. These fall outside and are excluded from every figure above.',
+    },
+  ];
   return (
-    <div className="an-evidence">
-      <div className="an-evidence-block">
-        <p className="an-evidence-title">Documented revenue</p>
-        {reconciliation.acceptedQuotationValue ? (
-          <strong>
-            {money(reconciliation.acceptedQuotationValue, currency)}
-          </strong>
-        ) : (
-          <strong className="an-pending">No accepted quotations yet</strong>
-        )}
-        <small>
-          Accepted quotation value. Closed revenue is counted from won
-          opportunities, so the two are independent evidence of the same
-          outcome.
-        </small>
-      </div>
-      <div className="an-evidence-block">
-        <p className="an-evidence-title">
-          Unmatched records
-          {needsReview || nothingToReconcile ? '' : ' — none'}
-        </p>
-        {nothingToReconcile ? (
-          <small>
-            Nothing to reconcile yet: this scope has no won opportunities and no
-            accepted quotations.
-          </small>
-        ) : needsReview ? (
-          <ul className="an-evidence-list">
-            {reconciliation.wonWithoutAcceptedQuotation ? (
-              <li>
-                <b>{count(reconciliation.wonWithoutAcceptedQuotation)}</b>
-                <span>
-                  won{' '}
-                  {reconciliation.wonWithoutAcceptedQuotation === 1
-                    ? 'opportunity has'
-                    : 'opportunities have'}{' '}
-                  no accepted quotation linked to them
-                </span>
-              </li>
-            ) : null}
-            {reconciliation.acceptedQuotationWithoutWonOpportunity ? (
-              <li>
-                <b>
-                  {count(
-                    reconciliation.acceptedQuotationWithoutWonOpportunity,
-                  )}
-                </b>
-                <span>
-                  accepted{' '}
-                  {reconciliation.acceptedQuotationWithoutWonOpportunity === 1
-                    ? 'quotation is'
-                    : 'quotations are'}{' '}
-                  not linked to a won opportunity
-                </span>
-              </li>
-            ) : null}
-          </ul>
-        ) : (
-          <small>
-            Every won opportunity has an accepted quotation and every accepted
-            quotation has a won opportunity.
-          </small>
-        )}
-      </div>
-      <div className="an-evidence-block">
-        <p className="an-evidence-title">Attribution</p>
-        <small>
-          {report.attributionModel === 'event_origin_100_percent'
-            ? '100% of an opportunity is attributed to the event it originated at'
-            : report.attributionModel}
-          {report.attributionWindowDays != null
-            ? `, within ${count(report.attributionWindowDays)} days of the event ending.`
-            : '. Each event applies its own attribution window.'}
-        </small>
-        <p className="an-evidence-excluded">
-          <b>{count(reconciliation.excludedOutsideAttributionWindow)}</b>{' '}
-          {reconciliation.excludedOutsideAttributionWindow === 1
-            ? 'opportunity was'
-            : 'opportunities were'}{' '}
-          created outside that window and are excluded from every figure above.
-        </p>
-      </div>
-    </div>
+    <dl className="an-evidence">
+      {rows.map((row) => (
+        <div key={row.key} title={row.help}>
+          <dt>{row.label}</dt>
+          <dd className={row.value == null ? 'an-pending' : `is-${row.tone}`}>
+            {row.value ?? row.empty}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -1762,8 +1736,10 @@ function ExportMenu({ onExport }: { onExport: (kind: string) => void }) {
  */
 function ChapterRail({
   chapters,
+  note,
 }: {
   chapters: Array<{ id: string; label: string }>;
+  note?: string;
 }) {
   const [current, setCurrent] = useState(chapters[0]?.id || '');
   useEffect(() => {
@@ -1835,6 +1811,9 @@ function ChapterRail({
           <span>{chapter.label}</span>
         </button>
       ))}
+      {/* Exclusions stay stated, but in the strip's spare space rather than
+          as another line of text above the headline figure. */}
+      {note ? <span className="an-rail-note">{note}</span> : null}
     </nav>
   );
 }
@@ -1892,6 +1871,9 @@ export default function Analytics({
   // Reporting deliberately excludes archived events. Saying so is better than
   // leaving someone to wonder why an old event's revenue is not counted.
   const archivedCount = scopeEvents.length - selectable.length;
+  const archivedNote = archivedCount
+    ? `${count(archivedCount)} archived ${archivedCount === 1 ? 'event' : 'events'} excluded`
+    : undefined;
 
   const captureSegments = useMemo(
     () =>
@@ -2051,24 +2033,20 @@ export default function Analytics({
   return (
     <div className="an" ref={rootRef}>
       {scopeBar}
-      <ChapterRail chapters={chapters} />
+      <ChapterRail chapters={chapters} note={archivedNote} />
 
       {/* ── the ledger ──────────────────────────────────────────────────── */}
       <section className="an-ledger" id="an-revenue">
         <div className="an-ledger-head">
+          {/* The selected event is already named in the chips above; repeating
+              it, its dates and the archived count here made a two-line label
+              sit on top of the number it was labelling. */}
           <p className="an-eyebrow">
             {hasWins
               ? 'Closed revenue'
               : hasOpportunities
                 ? 'Open pipeline'
-                : 'Committed investment'}{' '}
-            · {scopeLabel}
-            {selected
-              ? ` · ${dateRange(selected.startsOn, selected.endsOn)}`
-              : ''}
-            {archivedCount
-              ? ` · ${count(archivedCount)} archived excluded`
-              : ''}
+                : 'Committed investment'}
           </p>
           {/* The headline is whichever figure this scope has actually reached.
               Leading with a zero revenue figure would make the emptiest number
@@ -2085,53 +2063,61 @@ export default function Analytics({
               currency={currency}
             />
           </h1>
+          {/* Figures rather than a paragraph: the same facts read faster as a
+              row of labelled numbers than as a sentence to be parsed. */}
           {hasWins ? (
-            <p className="an-sentence">
-              From <strong>{count(report.wonOpportunities)}</strong> won{' '}
-              {report.wonOpportunities === 1 ? 'opportunity' : 'opportunities'}{' '}
-              against <strong>{money(report.investmentBasis, currency)}</strong>{' '}
-              invested
-              {report.revenueRoiPercent == null ? (
-                <>
-                  {' '}
-                  — <span className="an-flat">revenue ROI unavailable</span>{' '}
-                  until an investment basis exists.
-                </>
-              ) : (
-                <>
-                  {' '}
-                  — <b className={`an-roi${roiTone}`}>
-                    {percent(report.revenueRoiPercent)}
-                  </b>{' '}
-                  revenue ROI and{' '}
-                  <b className={`an-roi${report.profitRoiPercent == null ? '' : report.profitRoiPercent < 0 ? ' is-negative' : ' is-positive'}`}>
-                    {report.profitRoiPercent == null
-                      ? 'n/a'
-                      : percent(report.profitRoiPercent)}
-                  </b>{' '}
-                  profit ROI.
-                </>
-              )}
-            </p>
+            <dl className="an-facts">
+              <div>
+                <dt>Won</dt>
+                <dd>{count(report.wonOpportunities)}</dd>
+              </div>
+              <div>
+                <dt>Invested</dt>
+                <dd>{money(report.investmentBasis, currency)}</dd>
+              </div>
+              <div>
+                <dt>Revenue ROI</dt>
+                <dd className={`an-roi${roiTone}`}>
+                  {report.revenueRoiPercent == null
+                    ? 'n/a'
+                    : percent(report.revenueRoiPercent, 0)}
+                </dd>
+              </div>
+              <div>
+                <dt>Profit ROI</dt>
+                <dd
+                  className={`an-roi${report.profitRoiPercent == null ? '' : report.profitRoiPercent < 0 ? ' is-negative' : ' is-positive'}`}
+                >
+                  {report.profitRoiPercent == null
+                    ? 'n/a'
+                    : percent(report.profitRoiPercent, 0)}
+                </dd>
+              </div>
+            </dl>
           ) : hasOpportunities ? (
-            <p className="an-sentence">
-              <strong>{count(report.openOpportunities)}</strong> open{' '}
-              {report.openOpportunities === 1
-                ? 'opportunity carries'
-                : 'opportunities carry'}{' '}
-              <strong>
-                {money(report.weightedPipelineValue, currency)}
-              </strong>{' '}
-              of probability-weighted value. Nothing has closed won yet, so
-              revenue and ROI are not reported for this scope.
-            </p>
+            <dl className="an-facts">
+              <div>
+                <dt>Open</dt>
+                <dd>{count(report.openOpportunities)}</dd>
+              </div>
+              <div>
+                <dt>Weighted</dt>
+                <dd>{money(report.weightedPipelineValue, currency)}</dd>
+              </div>
+              <div>
+                <dt>Invested</dt>
+                <dd>{money(report.investmentBasis, currency)}</dd>
+              </div>
+              <div>
+                <dt>Revenue ROI</dt>
+                <dd className="an-pending">Nothing won yet</dd>
+              </div>
+            </dl>
           ) : (
             <p className="an-sentence">
               {report.totalLeads
-                ? `${count(report.totalLeads)} conversations have been captured, but none has become an opportunity yet. `
-                : 'No conversations have been captured for this scope yet. '}
-              Pipeline, revenue and ROI begin once a captured conversation
-              becomes an opportunity.
+                ? `${count(report.totalLeads)} captured, none converted to an opportunity yet.`
+                : 'No conversations captured for this scope yet.'}
             </p>
           )}
         </div>
@@ -2151,8 +2137,8 @@ export default function Analytics({
             title="From the floor to the ledger"
             note={
               hasOpportunities
-                ? 'Distinct records at each step, inside the attribution window.'
-                : 'No conversation has become an opportunity yet, so the last two steps stay at zero.'
+                ? undefined
+                : 'Nothing has become an opportunity yet.'
             }
           />
           <div className="an-body">
@@ -2176,7 +2162,7 @@ export default function Analytics({
           <SectionHead
             eyebrow="Pipeline"
             title="Where the value is sitting"
-            note="Stage width is its share of open value; height is its average probability."
+            note="Width = share of value. Height = probability."
           />
           <div className="an-body">
             <PipelineFlow
@@ -2197,8 +2183,8 @@ export default function Analytics({
             title="Who is in the pipeline"
             note={
               hasOpportunities
-                ? 'Qualification against review state.'
-                : 'Pipeline analytics appear once a conversation becomes an opportunity.'
+                ? undefined
+                : 'Pipeline appears once a conversation becomes an opportunity.'
             }
           />
           <div className="an-body an-body-split">
@@ -2217,14 +2203,28 @@ export default function Analytics({
                   )}
                 />
               ) : null}
+              {/* The same two facts, as figures rather than a sentence. */}
               {analytics.coverage ? (
-                <p className="an-coverage">
-                  <b>{count(analytics.coverage.hotWithoutOpenTask)}</b> of{' '}
-                  {count(analytics.coverage.hotLeads)} hot leads have no open
-                  follow-up commitment.{' '}
-                  {count(analytics.coverage.leadsWithOpenTask)} of{' '}
-                  {count(analytics.coverage.scopedLeads)} leads in scope do.
-                </p>
+                <dl className="an-coverage">
+                  <div>
+                    <dt>Hot leads with no commitment</dt>
+                    <dd
+                      className={
+                        analytics.coverage.hotWithoutOpenTask ? 'is-flag' : ''
+                      }
+                    >
+                      {count(analytics.coverage.hotWithoutOpenTask)}
+                      <small>of {count(analytics.coverage.hotLeads)}</small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Leads with an open commitment</dt>
+                    <dd>
+                      {count(analytics.coverage.leadsWithOpenTask)}
+                      <small>of {count(analytics.coverage.scopedLeads)}</small>
+                    </dd>
+                  </div>
+                </dl>
               ) : null}
             </div>
           </div>
@@ -2238,9 +2238,7 @@ export default function Analytics({
             eyebrow="Momentum"
             title="Capture volume by day"
             note={
-              selected
-                ? "Only recorded capture days are plotted. The dashed line is this event's daily target."
-                : 'Only recorded capture days are plotted; gaps between events are not filled in.'
+              selected ? "Dashed line is this event's daily target." : undefined
             }
             aside={
               hasMeetings && analytics ? (
@@ -2281,7 +2279,6 @@ export default function Analytics({
           <SectionHead
             eyebrow="Commercial"
             title="How quotes are moving"
-            note="Two separate lifecycles, not one funnel: RFQs are counted, quotations are weighed by value."
           />
           <div className="an-body an-body-even">
             {hasRfqs && analytics ? (
@@ -2316,7 +2313,6 @@ export default function Analytics({
         <SectionHead
           eyebrow="Investment"
           title="What the scope cost"
-          note="Select a category to read its recorded cost lines."
         />
         <div className="an-body an-body-split">
           <CostComposition
@@ -2335,7 +2331,7 @@ export default function Analytics({
           <SectionHead
             eyebrow="Comparison"
             title="Event by event"
-            note="Bars scale against the strongest event in each column. ROI is per event, so it will not sum to the totals above."
+            note="ROI is per event and will not sum to the totals above."
           />
           <div className="an-body">
             <EventMatrix
@@ -2353,7 +2349,6 @@ export default function Analytics({
           <SectionHead
             eyebrow="Attention"
             title="What the backlog is waiting on"
-            note="Ranked by the workspace's own urgency rules."
           />
           <div className="an-body">
             <ul className="an-actions">
@@ -2406,7 +2401,6 @@ export default function Analytics({
           <SectionHead
             eyebrow="Team"
             title="Who captured the conversations"
-            note="Leads in scope by their assigned owner."
           />
           <div className="an-body">
             <ul className="an-owners">
