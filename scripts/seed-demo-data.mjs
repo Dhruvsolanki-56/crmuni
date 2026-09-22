@@ -37,6 +37,8 @@ import {
 assertLocalOnly();
 
 const root = resolve(import.meta.dirname, '..');
+// One definition, shared by the pre-seed guard and the workspace insert.
+const DEMO_SLUG = 'global-expo-solutions';
 const args = process.argv.slice(2);
 const leadTarget = Number(
   (args.find((a) => a.startsWith('--leads=')) || '--leads=1000').split(
@@ -238,22 +240,42 @@ const mf = new Miniflare({
 try {
   const db = await mf.getD1Database(D1_BINDING);
 
-  // First-run setup calls this with --if-empty, so opening a Codespace gets a
-  // populated app while rerunning setup on a database someone has already
-  // worked in changes nothing.
-  if (args.includes('--if-empty')) {
-    const existing = await db
-      .prepare(`SELECT COUNT(*) AS total FROM workspaces`)
-      .first();
-    if (Number(existing?.total || 0) > 0) {
-      console.log(
-        'Local database already has a workspace - leaving it untouched.\n' +
-          'Run `npm run db:local:seed -- --reset` to replace it with demo data.',
-      );
-      await mf.dispose();
-      process.exit(0);
-    }
-  }
+  // Two reasons to stop before writing anything:
+  //
+  //  --if-empty  first-run setup passes this, so opening a Codespace gets a
+  //              populated app while rerunning setup on a database someone
+  //              has already worked in changes nothing.
+  //
+  //  re-seeding  the demo workspace has a fixed slug and workspaces.slug is
+  //              unique, so a second seed used to die part-way through on a
+  //              constraint error, leaving a half-written database behind.
+  //              Say what to do instead of crashing.
+  const stop = async (...messages) => {
+    for (const message of messages) console.log(message);
+    await mf.dispose();
+    process.exit(0);
+  };
+  const workspaceCount = Number(
+    (await db.prepare(`SELECT COUNT(*) AS total FROM workspaces`).first())
+      ?.total || 0,
+  );
+  if (args.includes(`--if-empty`) && workspaceCount > 0)
+    await stop(
+      `Local database already has a workspace - leaving it untouched.`,
+      'Run: npm run db:local:seed -- --reset',
+    );
+  const seeded = await db
+    .prepare(`SELECT name FROM workspaces WHERE slug=?`)
+    .bind(DEMO_SLUG)
+    .first();
+  if (seeded)
+    await stop(
+      `This database already holds the demo workspace "${seeded.name}".`,
+      `Seeding again would collide with it, so nothing was changed.`,
+      ``,
+      `To replace it with a fresh set of demo data:`,
+      `  npm run db:local:seed -- --reset`,
+    );
 
   const now = Date.now();
 
@@ -266,7 +288,7 @@ try {
     [
       workspaceId,
       'Global Expo Solutions',
-      'global-expo-solutions',
+      DEMO_SLUG,
       'Asia/Kolkata',
       'INR',
       'growth',
