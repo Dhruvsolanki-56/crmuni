@@ -365,6 +365,12 @@ const fill = (ratio: number) =>
 
 /* ── small building blocks ───────────────────────────────────────────────── */
 
+/**
+ * Every chapter's label, title and explanation sit in a fixed narrow column to
+ * the left of its visualization. That gives the page one alignment line to
+ * scan down, keeps explanatory text at a readable measure instead of running
+ * the full width, and lets the charts start at a consistent edge.
+ */
 function SectionHead({
   eyebrow,
   title,
@@ -378,11 +384,9 @@ function SectionHead({
 }) {
   return (
     <div className="an-head">
-      <div>
-        <p className="an-eyebrow">{eyebrow}</p>
-        <h2>{title}</h2>
-        {note ? <p className="an-note">{note}</p> : null}
-      </div>
+      <p className="an-eyebrow">{eyebrow}</p>
+      <h2>{title}</h2>
+      {note ? <p className="an-note">{note}</p> : null}
       {aside ? <div className="an-head-aside">{aside}</div> : null}
     </div>
   );
@@ -471,19 +475,22 @@ function ValueLadder({
   const basisRatio = report.investmentBasis / max;
   return (
     <div className="an-ladder">
-      {report.investmentBasis > 0 && basisRatio < 0.97 ? (
-        <div className="an-ladder-marks" aria-hidden="true">
-          <span>
-            <i
-              className="an-ladder-mark"
-              style={{ left: `${Math.min(100, basisRatio * 100)}%` }}
-            >
-              <b>Invested</b>
-            </i>
-          </span>
-        </div>
-      ) : null}
-      {rows.map((row) => (
+      {/* The reference line has to share the rows' containing block, or it
+          drifts out of the track column it is meant to cut across. */}
+      <div className="an-ladder-rows">
+        {report.investmentBasis > 0 && basisRatio < 0.97 ? (
+          <div className="an-ladder-marks" aria-hidden="true">
+            <span>
+              <i
+                className="an-ladder-mark"
+                style={{ left: `${Math.min(100, basisRatio * 100)}%` }}
+              >
+                <b>Invested</b>
+              </i>
+            </span>
+          </div>
+        ) : null}
+        {rows.map((row) => (
         <div className={`an-ladder-row an-tone-${row.tone}`} key={row.key}>
           <span className="an-ladder-label">
             {row.label}
@@ -502,8 +509,9 @@ function ValueLadder({
               <CountMoney value={row.value} currency={currency} />
             )}
           </strong>
-        </div>
-      ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -707,8 +715,7 @@ function PipelineFlow({
           </>
         ) : (
           <span className="an-flow-hint">
-            Width is each stage&apos;s share of open value; height is its average
-            probability, so the solid area is the weighted pipeline. Select a
+            The solid area of each stage is its weighted pipeline. Select a
             stage to open those opportunities.
           </span>
         )}
@@ -1958,21 +1965,17 @@ export default function Analytics({
             aria-pressed={scopeEventId === item.id}
             key={item.id}
             onClick={() => handleScope(item.id)}
+            title={`${item.name} · ${titleCase(item.status)}`}
           >
-            {item.name}
-            <b className={`an-chip-status is-${item.status}`}>{item.status}</b>
+            {/* A status dot rather than a word: five chips with spelled-out
+                statuses wrapped onto a second line and made the header ragged. */}
+            <i className={`an-chip-dot is-${item.status}`} aria-hidden="true" />
+            <span>{item.name}</span>
+            <em>{titleCase(item.status)}</em>
           </button>
         ))}
       </fieldset>
-      <div className="an-scope-actions">
-        {archivedCount ? (
-          <span className="an-scope-note">
-            {count(archivedCount)} archived{' '}
-            {archivedCount === 1 ? 'event is' : 'events are'} excluded
-          </span>
-        ) : null}
-        {canExport ? <ExportMenu onExport={onExport} /> : null}
-      </div>
+      {canExport ? <ExportMenu onExport={onExport} /> : null}
     </header>
   );
 
@@ -2063,6 +2066,9 @@ export default function Analytics({
             {selected
               ? ` · ${dateRange(selected.startsOn, selected.endsOn)}`
               : ''}
+            {archivedCount
+              ? ` · ${count(archivedCount)} archived excluded`
+              : ''}
           </p>
           {/* The headline is whichever figure this scope has actually reached.
               Leading with a zero revenue figure would make the emptiest number
@@ -2145,13 +2151,13 @@ export default function Analytics({
             title="From the floor to the ledger"
             note={
               hasOpportunities
-                ? 'Each step counts distinct records, not estimates. Opportunities are limited to those inside the attribution window.'
-                : 'Captures are being confirmed. No conversation has become an opportunity yet, so the last two steps stay at zero.'
+                ? 'Distinct records at each step, inside the attribution window.'
+                : 'No conversation has become an opportunity yet, so the last two steps stay at zero.'
             }
           />
-          <ConversionSpine
-            conversion={conversion}
-          />
+          <div className="an-body">
+            <ConversionSpine conversion={conversion} />
+          </div>
         </section>
       ) : hasEvents ? (
         <section className="an-block">
@@ -2163,58 +2169,64 @@ export default function Analytics({
         </section>
       ) : null}
 
-      {/* ── pipeline + lead quality ─────────────────────────────────────── */}
+      {/* ── pipeline ────────────────────────────────────────────────────── */}
       {hasOpportunities && analytics ? (
         <section className="an-block" id="an-pipeline">
           {/* The encoding is explained once, in the chart's own readout. */}
-          <SectionHead eyebrow="Pipeline" title="Where the value is sitting" />
-          <PipelineFlow
-            stages={analytics.pipelineStages}
-            closed={analytics.closedStages}
-            currency={currency}
-            onOpenStage={onOpenStage}
+          <SectionHead
+            eyebrow="Pipeline"
+            title="Where the value is sitting"
+            note="Stage width is its share of open value; height is its average probability."
           />
+          <div className="an-body">
+            <PipelineFlow
+              stages={analytics.pipelineStages}
+              closed={analytics.closedStages}
+              currency={currency}
+              onOpenStage={onOpenStage}
+            />
+          </div>
         </section>
       ) : null}
 
       {/* ── lead quality ────────────────────────────────────────────────── */}
       {hasLeads && analytics ? (
-        <section className="an-block an-split" id="an-quality">
-          <div className="an-sub">
-            <SectionHead
-              eyebrow="Lead quality"
-              title="Who is in the pipeline"
-              note={
-                hasOpportunities
-                  ? undefined
-                  : 'Pipeline analytics appear once a confirmed conversation is converted into an opportunity.'
-              }
-            />
+        <section className="an-block" id="an-quality">
+          <SectionHead
+            eyebrow="Lead quality"
+            title="Who is in the pipeline"
+            note={
+              hasOpportunities
+                ? 'Qualification against review state.'
+                : 'Pipeline analytics appear once a conversation becomes an opportunity.'
+            }
+          />
+          <div className="an-body an-body-split">
             <QualityMatrix
               cells={analytics.qualificationByReview}
               total={analytics.coverage?.scopedLeads || 0}
             />
-          </div>
-          <div className="an-sub an-quality-side">
-            {captureSegments.length ? (
-              <DensityStrip
-                title="How they were captured"
-                segments={captureSegments}
-                total={captureSegments.reduce(
-                  (sum, item) => sum + item.value,
-                  0,
-                )}
-              />
-            ) : null}
-            {analytics.coverage ? (
-              <p className="an-coverage">
-                <b>{count(analytics.coverage.hotWithoutOpenTask)}</b> of{' '}
-                {count(analytics.coverage.hotLeads)} hot leads have no open
-                follow-up commitment.{' '}
-                {count(analytics.coverage.leadsWithOpenTask)} of{' '}
-                {count(analytics.coverage.scopedLeads)} leads in scope do.
-              </p>
-            ) : null}
+            <div className="an-quality-side">
+              {captureSegments.length ? (
+                <DensityStrip
+                  title="How they were captured"
+                  segments={captureSegments}
+                  total={captureSegments.reduce(
+                    (sum, item) => sum + item.value,
+                    0,
+                  )}
+                />
+              ) : null}
+              {analytics.coverage ? (
+                <p className="an-coverage">
+                  <b>{count(analytics.coverage.hotWithoutOpenTask)}</b> of{' '}
+                  {count(analytics.coverage.hotLeads)} hot leads have no open
+                  follow-up commitment.{' '}
+                  {count(analytics.coverage.leadsWithOpenTask)} of{' '}
+                  {count(analytics.coverage.scopedLeads)} leads in scope do.
+                </p>
+              ) : null}
+            </div>
           </div>
         </section>
       ) : null}
@@ -2227,71 +2239,91 @@ export default function Analytics({
             title="Capture volume by day"
             note={
               selected
-                ? `Only days with a recorded capture are plotted. The dashed line is this event's daily lead target.`
-                : 'Only days with a recorded capture are plotted, so gaps between separate events are not filled in.'
+                ? "Only recorded capture days are plotted. The dashed line is this event's daily target."
+                : 'Only recorded capture days are plotted; gaps between events are not filled in.'
+            }
+            aside={
+              hasMeetings && analytics ? (
+                <ul className="an-head-stats">
+                  {[...analytics.meetingStatuses]
+                    .sort(
+                      (left, right) =>
+                        MEETING_ORDER.indexOf(left.status) -
+                        MEETING_ORDER.indexOf(right.status),
+                    )
+                    .map((item) => (
+                      <li key={item.status}>
+                        <b>{count(item.total)}</b>
+                        <span>{titleCase(item.status)} meetings</span>
+                      </li>
+                    ))}
+                </ul>
+              ) : null
             }
           />
-          <CaptureTimeline
-            timeline={analytics.leadTimeline}
-            target={
-              selected
-                ? analytics.events.find((item) => item.id === selected.id)
-                    ?.dailyLeadTarget || null
-                : null
-            }
-          />
+          <div className="an-body">
+            <CaptureTimeline
+              timeline={analytics.leadTimeline}
+              target={
+                selected
+                  ? analytics.events.find((item) => item.id === selected.id)
+                      ?.dailyLeadTarget || null
+                  : null
+              }
+            />
+          </div>
         </section>
       ) : null}
 
       {/* ── commercial lifecycles ───────────────────────────────────────── */}
       {hasRfqs || hasQuotations ? (
-        <section className="an-block an-split-even" id="an-commercial">
-          {hasRfqs && analytics ? (
-            <RfqTrack
-              progression={[
-                'received',
-                'reviewing',
-                'clarification',
-                'ready_to_quote',
-                'quoted',
-              ]}
-              terminal={['won', 'lost']}
-              rows={rfqRows}
-              total={analytics.rfqTotal}
-              quoted={analytics.rfqsWithQuotation}
-            />
-          ) : null}
-          {hasQuotations ? (
-            <QuotationLedger
-              progression={['draft', 'approved', 'sent', 'accepted']}
-              terminal={['rejected', 'expired']}
-              rows={quotationRows}
-              currency={currency}
-            />
-          ) : null}
+        <section className="an-block" id="an-commercial">
+          <SectionHead
+            eyebrow="Commercial"
+            title="How quotes are moving"
+            note="Two separate lifecycles, not one funnel: RFQs are counted, quotations are weighed by value."
+          />
+          <div className="an-body an-body-even">
+            {hasRfqs && analytics ? (
+              <RfqTrack
+                progression={[
+                  'received',
+                  'reviewing',
+                  'clarification',
+                  'ready_to_quote',
+                  'quoted',
+                ]}
+                terminal={['won', 'lost']}
+                rows={rfqRows}
+                total={analytics.rfqTotal}
+                quoted={analytics.rfqsWithQuotation}
+              />
+            ) : null}
+            {hasQuotations ? (
+              <QuotationLedger
+                progression={['draft', 'approved', 'sent', 'accepted']}
+                terminal={['rejected', 'expired']}
+                rows={quotationRows}
+                currency={currency}
+              />
+            ) : null}
+          </div>
         </section>
       ) : null}
 
-      {/* ── cost + evidence ─────────────────────────────────────────────── */}
-      <section className="an-block an-split" id="an-investment">
-        <div className="an-sub">
-          <SectionHead
-            eyebrow="Investment"
-            title="What the scope cost"
-            note="Select a category to read its recorded cost lines."
-          />
+      {/* ── cost ────────────────────────────────────────────────────────── */}
+      <section className="an-block" id="an-investment">
+        <SectionHead
+          eyebrow="Investment"
+          title="What the scope cost"
+          note="Select a category to read its recorded cost lines."
+        />
+        <div className="an-body an-body-split">
           <CostComposition
             report={report}
             categories={analytics?.costCategories || []}
             costs={costs}
             currency={currency}
-          />
-        </div>
-        <div className="an-sub">
-          <SectionHead
-            eyebrow="Data trust"
-            title="Evidence behind the revenue"
-            note="Concrete reconciliation facts, not a score."
           />
           <RevenueEvidence report={report} currency={currency} />
         </div>
@@ -2303,134 +2335,117 @@ export default function Analytics({
           <SectionHead
             eyebrow="Comparison"
             title="Event by event"
-            note="Each bar is scaled against the strongest event in that column. Investment basis and ROI are calculated per event, so they will not sum to the totals above. Select an event to scope this page to it."
+            note="Bars scale against the strongest event in each column. ROI is per event, so it will not sum to the totals above."
           />
-          <EventMatrix
-            events={comparable}
-            currency={currency}
-            onScopeChange={handleScope}
-          />
+          <div className="an-body">
+            <EventMatrix
+              events={comparable}
+              currency={currency}
+              onScopeChange={handleScope}
+            />
+          </div>
         </section>
       ) : null}
 
-      {/* ── attention, with the team split alongside it ─────────────────── */}
-      {actions.length || (analytics?.leadOwners.length || 0) > 1 ? (
-        <section className="an-block an-split" id="an-attention">
-        {actions.length ? (
-        <div className="an-sub">
+      {/* ── attention ───────────────────────────────────────────────────── */}
+      {actions.length ? (
+        <section className="an-block" id="an-attention">
           <SectionHead
             eyebrow="Attention"
             title="What the backlog is waiting on"
-            note="Ranked by the workspace's own urgency rules. Select one to open the record."
-            aside={
-              hasMeetings && analytics ? (
-                <span className="an-meeting-inline">
-                  {[...analytics.meetingStatuses]
-                    .sort(
-                      (left, right) =>
-                        MEETING_ORDER.indexOf(left.status) -
-                        MEETING_ORDER.indexOf(right.status),
-                    )
-                    .map((item) => (
-                      <span key={item.status}>
-                        <b>{count(item.total)}</b> {titleCase(item.status)}
-                        {item.status === 'scheduled' && item.upcoming
-                          ? ` (${count(item.upcoming)} ahead)`
-                          : ''}
-                      </span>
-                    ))}
-                  <small>meetings</small>
-                </span>
-              ) : null
-            }
+            note="Ranked by the workspace's own urgency rules."
           />
-          <ul className="an-actions">
-            {actions.slice(0, actionsExpanded ? actions.length : 5).map((action) => {
-              const due = dueLabel(action.dueAt, now);
-              const overdue = action.dueAt != null && action.dueAt < now;
-              return (
-                <li key={`${action.kind}-${action.id}`}>
-                  <button type="button" onClick={() => onOpenAction(action)}>
-                    <span className={`an-action-kind is-${action.kind}`}>
-                      {action.kind}
-                    </span>
-                    <span className="an-action-copy">
-                      <b>{action.title}</b>
-                      <small>{action.subject}</small>
-                    </span>
-                    <span
-                      className={`an-action-due${overdue ? ' is-overdue' : ''}`}
-                    >
-                      {due || action.reason}
-                    </span>
-                    <ArrowRight aria-hidden="true" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {/* The ranking is the backend's; expanding only reveals more of it. */}
-          {actions.length > 5 ? (
-            <button
-              type="button"
-              className="an-more"
-              onClick={() => setActionsExpanded((value) => !value)}
-              aria-expanded={actionsExpanded}
-            >
-              {actionsExpanded
-                ? 'Show the top 5'
-                : `View all ${count(actions.length)} ranked actions`}
-            </button>
-          ) : null}
-        </div>
-        ) : null}
+          <div className="an-body">
+            <ul className="an-actions">
+              {actions
+                .slice(0, actionsExpanded ? actions.length : 5)
+                .map((action) => {
+                  const due = dueLabel(action.dueAt, now);
+                  const overdue = action.dueAt != null && action.dueAt < now;
+                  return (
+                    <li key={`${action.kind}-${action.id}`}>
+                      <button type="button" onClick={() => onOpenAction(action)}>
+                        <span className={`an-action-kind is-${action.kind}`}>
+                          {action.kind}
+                        </span>
+                        <span className="an-action-copy">
+                          <b>{action.title}</b>
+                          <small>{action.subject}</small>
+                        </span>
+                        <span
+                          className={`an-action-due${overdue ? ' is-overdue' : ''}`}
+                        >
+                          {due || action.reason}
+                        </span>
+                        <ArrowRight aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+            {/* The ranking is the backend's; expanding only reveals more of it. */}
+            {actions.length > 5 ? (
+              <button
+                type="button"
+                className="an-more"
+                onClick={() => setActionsExpanded((value) => !value)}
+                aria-expanded={actionsExpanded}
+              >
+                {actionsExpanded
+                  ? 'Show the top 5'
+                  : `View all ${count(actions.length)} ranked actions`}
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── owners ──────────────────────────────────────────────────────── */}
       {(analytics?.leadOwners.length || 0) > 1 && analytics ? (
-        <div className="an-sub">
+        <section className="an-block" id="an-team">
           <SectionHead
             eyebrow="Team"
             title="Who captured the conversations"
             note="Leads in scope by their assigned owner."
           />
-          <ul className="an-owners">
-            {analytics.leadOwners
-              .slice(0, ownersExpanded ? analytics.leadOwners.length : 5)
-              .map((owner) => {
-                const max = Math.max(
-                  ...analytics.leadOwners.map((item) => item.total),
-                  1,
-                );
-                return (
-                  <li key={owner.ownerId}>
-                    <span className="an-owner-name">
-                      {owner.ownerName || owner.ownerId}
-                    </span>
-                    <span className="an-owner-track">
-                      <i style={fill(owner.total / max)} />
-                    </span>
-                    <span className="an-owner-value">
-                      <b>{count(owner.total)}</b>
-                      <small>{count(owner.confirmed)} confirmed</small>
-                    </span>
-                  </li>
-                );
-              })}
-          </ul>
-          {analytics.leadOwners.length > 5 ? (
-            <button
-              type="button"
-              className="an-more"
-              onClick={() => setOwnersExpanded((value) => !value)}
-              aria-expanded={ownersExpanded}
-            >
-              {ownersExpanded
-                ? 'Show the top 5'
-                : `Show all ${count(analytics.leadOwners.length)} owners`}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+          <div className="an-body">
+            <ul className="an-owners">
+              {analytics.leadOwners
+                .slice(0, ownersExpanded ? analytics.leadOwners.length : 5)
+                .map((owner) => {
+                  const max = Math.max(
+                    ...analytics.leadOwners.map((item) => item.total),
+                    1,
+                  );
+                  return (
+                    <li key={owner.ownerId}>
+                      <span className="an-owner-name">
+                        {owner.ownerName || owner.ownerId}
+                      </span>
+                      <span className="an-owner-track">
+                        <i style={fill(owner.total / max)} />
+                      </span>
+                      <span className="an-owner-value">
+                        <b>{count(owner.total)}</b>
+                        <small>{count(owner.confirmed)} confirmed</small>
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+            {analytics.leadOwners.length > 5 ? (
+              <button
+                type="button"
+                className="an-more"
+                onClick={() => setOwnersExpanded((value) => !value)}
+                aria-expanded={ownersExpanded}
+              >
+                {ownersExpanded
+                  ? 'Show the top 5'
+                  : `Show all ${count(analytics.leadOwners.length)} owners`}
+              </button>
+            ) : null}
+          </div>
         </section>
       ) : null}
 

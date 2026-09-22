@@ -1647,8 +1647,8 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .an-em-head,
 .an-em-row {
   display: grid;
-  grid-template-columns: minmax(168px, 1.35fr) repeat(4, minmax(0, 1fr)) minmax(92px, auto);
-  align-items: center; gap: 20px;
+  grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)) 84px;
+  align-items: center; gap: 16px;
 }
 .an-em-head {
   padding: 0 12px 9px; border-bottom: 1px solid var(--line);
@@ -1665,7 +1665,7 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .an-em-row:focus-visible { outline: none; box-shadow: var(--ring-brand); }
 .an-em-row.is-dimmed { opacity: .45; }
 .an-em-name { display: grid; gap: 2px; min-width: 0; }
-.an-em-name b { color: var(--brand-900); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-em-name b { color: var(--brand-900); font-size: var(--text-base); line-height: var(--leading-tight); font-weight: var(--weight-semibold); text-wrap: balance; }
 .an-em-name small { color: var(--text-400); font-size: var(--text-micro); line-height: var(--lh-micro); }
 .an-em-cell { display: grid; gap: 4px; min-width: 0; }
 .an-em-cell b { color: var(--brand-900); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
@@ -1762,6 +1762,158 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .an-timeline-area { opacity: 0; animation: an-fade 700ms var(--an-ease) 240ms forwards; }
 @keyframes an-draw { to { stroke-dashoffset: 0; } }
 @keyframes an-fade { to { opacity: 1; } }
+
+/* ═══ ANALYTICS LAYOUT ═══════════════════════════════════════════════════════
+   One editorial grid for the whole page: every chapter's label, title and
+   explanation sit in a fixed narrow column, every visualization starts at the
+   same left edge. That single alignment line is what the page was missing —
+   before this, nine stacked three-line headers all began at x=0 with the
+   charts, so there was nothing to scan down and no white space to rest in.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.an { gap: 0; min-width: 0; }
+.an > * { min-width: 0; }
+.an-block > * { min-width: 0; }
+
+/* ── chapter grid ────────────────────────────────────────────────────────── */
+.an-block {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  column-gap: 60px;
+  row-gap: 20px;
+  align-items: start;
+  padding: 46px 0 0;
+  border-top: 1px solid var(--line);
+  margin-top: 46px;
+}
+.an-head { display: grid; gap: 0; align-content: start; position: relative; }
+.an-head h2 {
+  margin: 5px 0 0;
+  color: var(--brand-900);
+  font-size: var(--text-lg); line-height: var(--leading-tight);
+  letter-spacing: -.022em; font-weight: var(--weight-semibold);
+  text-wrap: balance;
+}
+.an-note { margin: 9px 0 0; max-width: none; color: var(--text-500); font-size: var(--text-sm); line-height: var(--leading-relaxed); }
+.an-eyebrow {
+  margin: 0; color: var(--accent-700);
+  font-size: var(--text-micro); line-height: var(--lh-micro);
+  letter-spacing: .1em; text-transform: uppercase; font-weight: var(--weight-bold);
+}
+.an-body { display: grid; gap: 18px; min-width: 0; }
+.an-body-split { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: start; }
+.an-body-even { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; align-items: start; }
+
+/* Supporting figures hang under the chapter title rather than crowding it. */
+.an-head-stats { display: grid; gap: 9px; margin: 20px 0 0; padding: 18px 0 0; border-top: 1px solid var(--color-line); list-style: none; }
+.an-head-stats li { display: flex; align-items: baseline; gap: 8px; }
+.an-head-stats b { min-width: 30px; color: var(--brand-900); font-size: var(--text-md); line-height: var(--lh-md); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-head-stats span { color: var(--text-500); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.an-head-aside { margin-top: 0; }
+
+/* ── header: one row, no wrapping ────────────────────────────────────────── */
+.an-scope {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; flex-wrap: nowrap;
+  padding-bottom: 22px;
+}
+.an-scope-events {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+  border: 0; margin: 0; padding: 2px; min-inline-size: 0;
+}
+.an-scope-events::-webkit-scrollbar { display: none; }
+.an-chip {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid transparent; border-radius: var(--radius-pill);
+  padding: 7px 14px; background: transparent; color: var(--text-600);
+  font-size: var(--text-sm); line-height: var(--lh-sm); cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ease-ui), color var(--ease-ui), border-color var(--ease-ui);
+}
+.an-chip:hover { background: var(--surface-2); color: var(--brand-900); }
+.an-chip.is-current { border-color: var(--line); background: var(--color-surface); color: var(--brand-900); font-weight: var(--weight-medium); box-shadow: var(--shadow-xs); }
+.an-chip b { color: var(--text-400); font-size: var(--text-micro); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-chip.is-current b { color: var(--text-500); }
+.an-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--neutral-300); }
+.an-chip-dot.is-active { background: var(--accent-600); }
+.an-chip-dot.is-ready { background: var(--brand-400); }
+.an-chip-dot.is-draft { background: var(--neutral-300); }
+/* The spelled-out status is kept for assistive tech and the hover title. */
+.an-chip em { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* ── chapter strip: a table of contents, not a second chip bar ───────────── */
+.an-rail-nav {
+  position: sticky; top: 0; z-index: 15;
+  display: flex; gap: 0; flex-wrap: wrap; align-items: center;
+  margin: 0; padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+  backdrop-filter: saturate(1.1) blur(8px);
+}
+.an-rail-nav button {
+  display: inline-flex; align-items: center;
+  border: 0; border-radius: 0; padding: 2px 14px;
+  background: transparent; color: var(--text-400);
+  font-size: var(--text-label); line-height: var(--lh-label); cursor: pointer;
+  transition: color var(--ease-ui);
+}
+.an-rail-nav button + button { border-left: 1px solid var(--color-line); }
+.an-rail-nav button:first-child { padding-left: 0; }
+.an-rail-nav button i { display: none; }
+.an-rail-nav button:hover { color: var(--brand-800); }
+.an-rail-nav button:focus-visible { outline: none; color: var(--brand-900); box-shadow: var(--ring-brand); border-radius: var(--radius-xs); }
+.an-rail-nav button.is-current { color: var(--brand-900); font-weight: var(--weight-semibold); }
+
+/* ── hero ────────────────────────────────────────────────────────────────── */
+.an-ledger { display: grid; gap: 30px; padding: 40px 0 0; }
+.an-ledger-head { display: grid; gap: 10px; max-width: 62ch; }
+.an-headline { font-size: clamp(40px, 5.2vw, 64px); }
+.an-ledger .an-eyebrow { color: var(--text-500); font-weight: var(--weight-semibold); }
+
+/* The ladder sits in the content column so it lines up with every chart. */
+/* The ladder shares the chapter grid so its bars start on the same line as
+   every chart below. The rows live in their own relatively-positioned block so
+   the investment reference line can cut across exactly the track column. */
+.an-ladder { display: grid; grid-template-columns: 216px minmax(0, 1fr); row-gap: 0; column-gap: 60px; }
+.an-ladder-rows { grid-column: 2; position: relative; display: grid; gap: 0; }
+.an-ladder-row { grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) minmax(112px, auto); gap: 22px; padding: 14px 0; }
+.an-ladder-track { height: 26px; border-radius: 4px; }
+.an-ladder-track i { border-radius: 4px; }
+.an-ladder-marks { grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) minmax(112px, auto); gap: 22px; inset: 0; }
+.an-ladder-value { font-size: var(--text-md); }
+
+/* ── breathing room inside the visuals ───────────────────────────────────── */
+.an-flow { gap: 20px; }
+.an-spine-body strong { font-size: 34px; line-height: 40px; }
+.an-secondary { margin-top: 46px; padding-top: 30px; }
+
+/* ── responsive: the header column folds on top ──────────────────────────── */
+@media (max-width: 1240px) {
+  .an-block { grid-template-columns: 184px minmax(0, 1fr); column-gap: 40px; }
+  .an-ladder { grid-template-columns: 184px minmax(0, 1fr); column-gap: 40px; }
+  .an-body-split, .an-body-even { grid-template-columns: minmax(0, 1fr); gap: 34px; }
+}
+@media (max-width: 1080px) {
+  .an-block {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 22px; padding-top: 34px; margin-top: 34px;
+  }
+  .an-head { max-width: 62ch; }
+  .an-head-stats { display: flex; gap: 28px; flex-wrap: wrap; }
+  .an-ladder { grid-template-columns: minmax(0, 1fr); }
+  .an-ladder-rows { grid-column: 1; }
+  .an-ladder-marks { display: none; }
+}
+@media (max-width: 760px) {
+  .an-block { padding-top: 26px; margin-top: 26px; row-gap: 18px; }
+  .an-ledger { padding-top: 26px; }
+  .an-rail-nav { display: none; }
+  .an-scope { flex-wrap: wrap; padding-bottom: 16px; }
+  .an-ladder-row { grid-template-columns: minmax(0, 1fr) minmax(88px, auto); gap: 8px 12px; padding: 11px 0; }
+}
+
 /* ── reduced motion: the final state, immediately ────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .an { --enter: 1; }
