@@ -12,6 +12,7 @@ import {
 } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
 import { accountIdentity } from '@/lib/accounts';
+import { resolveContact } from '@/lib/contacts';
 import {
   enforceStorageEntitlement,
   isEntitlementConstraint,
@@ -383,6 +384,15 @@ export async function POST(request: Request) {
       email: string | null;
       phone: string | null;
     }>();
+  // Workspace-wide identity resolution, independent of the event-scoped
+  // duplicate check above: the same person met at a different event must
+  // resolve to the same contact, which an event-scoped query can never see.
+  const contact = await resolveContact(database(), context.workspace.id, {
+    fullName,
+    email,
+    phone,
+    accountId: account?.id || null,
+  });
   const interactionId = note ? crypto.randomUUID() : null;
   const taskId = nextAction ? crypto.randomUUID() : null;
   const attachmentKind = ['card', 'badge', 'qr', 'audio'].includes(
@@ -410,14 +420,15 @@ export async function POST(request: Request) {
   const statements = [
     database()
       .prepare(`
-    INSERT INTO leads (id, workspace_id, event_id, account_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, custom_fields_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO leads (id, workspace_id, event_id, account_id, contact_id, client_capture_id, owner_id, full_name, company, role, email, phone, source, review_status, custom_fields_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
       .bind(
         leadId,
         context.workspace.id,
         eventId,
         account?.id || null,
+        contact.contactId,
         clientCaptureId || null,
         context.user.id,
         fullName,
@@ -492,6 +503,50 @@ export async function POST(request: Request) {
           consentSource,
           now,
           context.user.id,
+          now,
+        ),
+    );
+  // Same ordering requirement as the account insert below: this has to
+  // land before the lead insert in the final batch, and before the account
+  // insert if a new contact references it. unshift() puts whichever call
+  // runs last at index 0, so this call must execute BEFORE the account
+  // block's unshift() for the final order to come out [account, contact,
+  // lead, ...].
+  if (contact.isNew)
+    statements.unshift(
+      database()
+        .prepare(
+          `INSERT INTO contacts (id, workspace_id, full_name, email, phone, primary_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          contact.contactId,
+          context.workspace.id,
+          fullName,
+          email || null,
+          phone || null,
+          account?.id || null,
+          now,
+          now,
+        ),
+    );
+  // Medium-confidence account+name evidence never auto-attaches (Phase 5:
+  // never merge solely on a shared name), so it always creates a new
+  // contact above and separately records the match here for a human to
+  // confirm or dismiss - the same shape lead_duplicate_suggestions already
+  // uses for the equivalent lead-level decision.
+  if (contact.suggestedContactId)
+    statements.push(
+      database()
+        .prepare(
+          `INSERT INTO contact_duplicate_suggestions (id,workspace_id,source_contact_id,target_contact_id,status,confidence_basis_points,reasons_json,created_at,updated_at) VALUES (?,?,?,?,'pending',8000,?,?,?)`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          context.workspace.id,
+          contact.contactId,
+          contact.suggestedContactId,
+          JSON.stringify(['same_account_and_name']),
+          now,
           now,
         ),
     );

@@ -190,6 +190,12 @@ export const leads = sqliteTable(
     workspaceId: text('workspace_id').notNull(),
     eventId: text('event_id').notNull(),
     accountId: text('account_id').references(() => accounts.id),
+    // Release A domain foundation: durable person identity now lives in
+    // contacts. Nullable during the compatibility period - fullName/
+    // company/email/phone stay on the lead row as the historical shadow
+    // of what was captured at this event; contactId is the resolved
+    // permanent identity. See lib/contacts.ts.
+    contactId: text('contact_id').references(() => contacts.id),
     clientCaptureId: text('client_capture_id'),
     ownerId: text('owner_id').notNull(),
     fullName: text('full_name').notNull(),
@@ -216,6 +222,7 @@ export const leads = sqliteTable(
   (table) => [
     index('idx_leads_workspace_created').on(table.workspaceId, table.createdAt),
     index('idx_leads_workspace_company').on(table.workspaceId, table.company),
+    index('idx_leads_workspace_contact').on(table.workspaceId, table.contactId),
     uniqueIndex('uidx_leads_workspace_client_capture').on(
       table.workspaceId,
       table.clientCaptureId,
@@ -223,6 +230,54 @@ export const leads = sqliteTable(
   ],
 );
 
+// Release A domain foundation.
+//
+// A contact is the durable identity of a person inside one workspace: the
+// same human met at three different events is one contact row with three
+// lead rows (event relationships), not three separate people. Keep this
+// table to genuinely durable identity only - name, a best-known email/
+// phone, and which account they currently work at. Everything event-
+// specific (qualification, review status, owner, custom fields) stays on
+// leads, which now represents "this workspace met this contact at this
+// event" rather than the person's identity itself.
+//
+// No DB-level uniqueness is enforced on email/phone: two people can
+// legitimately share a work email, and silently rejecting an insert is
+// worse than a human reviewing a suggestion. Resolution (find the right
+// existing contact, or flag a suggestion for a human) is an application-
+// level concern - see lib/contacts.ts - deliberately not a DB constraint.
+export const contacts = sqliteTable(
+  'contacts',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    fullName: text('full_name').notNull(),
+    email: text('email'),
+    phone: text('phone'),
+    // The account this contact currently works at. A person's employer can
+    // change; this is the current answer, not a historical log of every
+    // company they've ever been linked to - that level of detail has no
+    // consumer today (Phase 2: don't model what nothing reads).
+    primaryAccountId: text('primary_account_id').references(() => accounts.id),
+    // Self-referential, no FK constraint - matches leads.mergedIntoId, which
+    // has the same shape for the same reason (a merged-away row still needs
+    // to exist for history/audit, so a hard FK cycle isn't useful here).
+    mergedIntoId: text('merged_into_id'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_contacts_workspace_email').on(table.workspaceId, table.email),
+    index('idx_contacts_workspace_phone').on(table.workspaceId, table.phone),
+    index('idx_contacts_workspace_account').on(
+      table.workspaceId,
+      table.primaryAccountId,
+    ),
+    index('idx_contacts_workspace_name').on(table.workspaceId, table.fullName),
+  ],
+);
 export const accountStakeholders = sqliteTable(
   'account_stakeholders',
   {
@@ -1657,6 +1712,76 @@ export const leadMergeEvents = sqliteTable(
     index('idx_lead_merge_source_status').on(
       table.workspaceId,
       table.sourceLeadId,
+      table.status,
+    ),
+  ],
+);
+
+// Same shape as leadDuplicateSuggestions/leadMergeEvents, one level up: a
+// contact-identity match now goes through this instead of (or in addition
+// to) the lead-level tables above. Kept as a direct parallel rather than a
+// generalized polymorphic table, because the two are reviewed in different
+// UI contexts (lead review vs. a company/contact merge) and a shared table
+// would need a discriminator column and weaker foreign keys for no benefit.
+export const contactDuplicateSuggestions = sqliteTable(
+  'contact_duplicate_suggestions',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    sourceContactId: text('source_contact_id')
+      .notNull()
+      .references(() => contacts.id),
+    targetContactId: text('target_contact_id')
+      .notNull()
+      .references(() => contacts.id),
+    status: text('status').notNull().default('pending'),
+    confidenceBasisPoints: integer('confidence_basis_points').notNull(),
+    reasonsJson: text('reasons_json').notNull(),
+    resolvedBy: text('resolved_by'),
+    resolvedAt: integer('resolved_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uidx_contact_duplicate_pair').on(
+      table.workspaceId,
+      table.sourceContactId,
+      table.targetContactId,
+    ),
+    index('idx_contact_duplicate_source_status').on(
+      table.workspaceId,
+      table.sourceContactId,
+      table.status,
+    ),
+  ],
+);
+
+export const contactMergeEvents = sqliteTable(
+  'contact_merge_events',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    sourceContactId: text('source_contact_id')
+      .notNull()
+      .references(() => contacts.id),
+    targetContactId: text('target_contact_id')
+      .notNull()
+      .references(() => contacts.id),
+    status: text('status').notNull().default('merged'),
+    snapshotJson: text('snapshot_json').notNull(),
+    mergedBy: text('merged_by').notNull(),
+    mergedAt: integer('merged_at').notNull(),
+    revertedBy: text('reverted_by'),
+    revertedAt: integer('reverted_at'),
+  },
+  (table) => [
+    index('idx_contact_merge_source_status').on(
+      table.workspaceId,
+      table.sourceContactId,
       table.status,
     ),
   ],
