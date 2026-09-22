@@ -108,6 +108,14 @@ type SavedLead = {
   duplicateLeadName?: string;
   duplicateLeadCompany?: string;
   qualificationState?: string;
+  // Release B: what identity resolution actually did for this capture,
+  // so the success screen can say so instead of the organization being
+  // invisible.
+  contact?: {
+    isNew: boolean;
+    matchedOn: 'email' | 'phone' | null;
+    accountContactCount: number | null;
+  } | null;
   qualificationReason?: string;
   ownerId?: string;
   ownerName?: string;
@@ -1364,6 +1372,20 @@ export default function Home() {
   const [readingAttachment, setReadingAttachment] = useState(false);
   const [localOcrFields, setLocalOcrFields] = useState<string[]>([]);
   const [localOcrStatus, setLocalOcrStatus] = useState('');
+  // What Release A's identity resolution already knows about the person/
+  // company being captured, surfaced before Save so the automatic
+  // organization the backend does is actually visible while it happens,
+  // not just afterward. Read-only preview, never a Release B write.
+  const [identityPreview, setIdentityPreview] = useState<{
+    contact: {
+      recognized: boolean;
+      matchedOn: 'email' | 'phone' | null;
+      possibleMatch: boolean;
+      name: string | null;
+    } | null;
+    account: { name: string; contactCount: number } | null;
+  } | null>(null);
+  const identityPreviewRun = useRef(0);
   const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
   const [acceptedCaptureFields, setAcceptedCaptureFields] = useState<string[]>(
     [],
@@ -1935,6 +1957,7 @@ export default function Home() {
       });
       const data = (await response.json()) as {
         lead?: SavedLead;
+        contact?: SavedLead['contact'];
         error?: string;
         warning?: string | null;
       };
@@ -1942,8 +1965,9 @@ export default function Home() {
         setSaveError(data.error || 'Unable to save this lead.');
         return;
       }
-      setSavedLead(data.lead);
-      setCapturedLeads((current) => [data.lead!, ...current]);
+      const savedWithResolution = { ...data.lead, contact: data.contact };
+      setSavedLead(savedWithResolution);
+      setCapturedLeads((current) => [savedWithResolution, ...current]);
       void loadWorkspace();
       if (data.warning) {
         // File storage is unavailable in this environment - the backend
@@ -2111,6 +2135,8 @@ export default function Home() {
         setLocalOcrFields([]);
         setLocalOcrStatus('');
         setMoreDetailsOpen(false);
+        setIdentityPreview(null);
+        identityPreviewRun.current += 1;
         ocrRun.current += 1;
       }, 150);
     }
@@ -2147,6 +2173,57 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [captureOpen]);
 
+  // Non-blocking: a failed or slow lookup must never hold up capture, so
+  // this only ever sets state on success and is silent otherwise. Blur is
+  // its own natural debounce (fires once when the user leaves the field),
+  // and the OCR call site below only fires once when extraction finishes -
+  // neither needs an additional timer.
+  async function checkIdentityPreview(fields: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+  }) {
+    if (!fields.email && !fields.phone && !fields.company) return;
+    const run = ++identityPreviewRun.current;
+    const params = new URLSearchParams({ preview: 'identity' });
+    if (fields.fullName) params.set('fullName', fields.fullName);
+    if (fields.email) params.set('email', fields.email);
+    if (fields.phone) params.set('phone', fields.phone);
+    if (fields.company) params.set('company', fields.company);
+    try {
+      const response = await apiFetch(`/api/leads?${params.toString()}`);
+      if (!response.ok || run !== identityPreviewRun.current) return;
+      const data = (await response.json()) as {
+        contact: {
+          recognized: boolean;
+          matchedOn: 'email' | 'phone' | null;
+          possibleMatch: boolean;
+          name: string | null;
+        } | null;
+        account: { name: string; contactCount: number } | null;
+      };
+      if (run !== identityPreviewRun.current) return;
+      setIdentityPreview(data);
+    } catch {
+      // A hint the capturer never sees is a fine failure mode; a blocked
+      // capture over it would not be.
+    }
+  }
+  function currentCaptureFields() {
+    const form = leadForm.current;
+    const value = (name: string) => {
+      const control = form?.elements.namedItem(name);
+      return control instanceof HTMLInputElement ? control.value.trim() : '';
+    };
+    return {
+      fullName: value('fullName'),
+      email: value('email'),
+      phone: value('phone'),
+      company: value('company'),
+    };
+  }
+
   async function prefillContactFromImage(file: File) {
     const run = ++ocrRun.current;
     setReadingAttachment(true);
@@ -2174,6 +2251,7 @@ export default function Home() {
       // disclosure must open, or the user would be saving a field they
       // never saw and never got the chance to correct.
       if (filled.includes('role')) setMoreDetailsOpen(true);
+      if (filled.length) void checkIdentityPreview(currentCaptureFields());
       setLocalOcrStatus(
         filled.length
           ? `${filled.length} field${filled.length === 1 ? '' : 's'} prefilled on this device · verify before saving`
@@ -5509,6 +5587,11 @@ export default function Home() {
                                     ? 'Optional · extract from capture'
                                     : 'e.g. ABC Pharma'
                                 }
+                                onBlur={() =>
+                                  void checkIdentityPreview(
+                                    currentCaptureFields(),
+                                  )
+                                }
                               />
                             </div>
                           </div>
@@ -5521,6 +5604,11 @@ export default function Home() {
                                 type="email"
                                 autoComplete="email"
                                 placeholder="rajesh@company.com"
+                                onBlur={() =>
+                                  void checkIdentityPreview(
+                                    currentCaptureFields(),
+                                  )
+                                }
                               />
                             </div>
                             <div className="field-block">
@@ -5533,9 +5621,65 @@ export default function Home() {
                                 type="tel"
                                 autoComplete="tel"
                                 placeholder="+91 98765 43210"
+                                onBlur={() =>
+                                  void checkIdentityPreview(
+                                    currentCaptureFields(),
+                                  )
+                                }
                               />
                             </div>
                           </div>
+                          {/* What Release A's contact/account resolution
+                              already knows, shown before Save - "assistive,
+                              contextual" only works if the organization the
+                              backend does is visible while it happens. */}
+                          {identityPreview?.contact?.recognized ||
+                          identityPreview?.contact?.possibleMatch ||
+                          identityPreview?.account ? (
+                            <p className="identity-preview" aria-live="polite">
+                              <Sparkles size={13} />
+                              {identityPreview.contact?.recognized ? (
+                                <span>
+                                  You&apos;ve met{' '}
+                                  <strong>
+                                    {identityPreview.contact.name ||
+                                      'this person'}
+                                  </strong>{' '}
+                                  before
+                                  {identityPreview.contact.matchedOn
+                                    ? ` — same ${identityPreview.contact.matchedOn}`
+                                    : ''}
+                                  .
+                                </span>
+                              ) : identityPreview.contact?.possibleMatch ? (
+                                <span>
+                                  This might be{' '}
+                                  <strong>
+                                    {identityPreview.contact.name ||
+                                      'someone you already know'}
+                                  </strong>{' '}
+                                  — saved separately for you to confirm.
+                                </span>
+                              ) : null}
+                              {identityPreview.account ? (
+                                <span>
+                                  {identityPreview.contact?.recognized ||
+                                  identityPreview.contact?.possibleMatch
+                                    ? ' '
+                                    : ''}
+                                  <strong>
+                                    {identityPreview.account.name}
+                                  </strong>{' '}
+                                  is an existing account with{' '}
+                                  {identityPreview.account.contactCount}{' '}
+                                  {identityPreview.account.contactCount === 1
+                                    ? 'contact'
+                                    : 'contacts'}
+                                  .
+                                </span>
+                              ) : null}
+                            </p>
+                          ) : null}
                           <fieldset className="field-block">
                             <legend>Follow-up permission</legend>
                             <label>
@@ -5691,6 +5835,35 @@ export default function Home() {
                               ? 'The original file is stored securely. Review the contact before any extracted detail becomes a confirmed fact.'
                               : 'The conversation is stored as source evidence. No facts have been invented.'}
                         </DialogDescription>
+                        {/* The organization Release A does behind the scenes,
+                            said out loud rather than left invisible - not
+                            shown for an offline-queued save, since contact
+                            resolution only runs once it actually reaches the
+                            server. */}
+                        {savedLead?.contact ? (
+                          <p className="identity-preview identity-preview-result">
+                            <Sparkles size={13} />
+                            <span>
+                              {savedLead.contact.isNew
+                                ? 'Saved as a new contact'
+                                : `Matched to a contact you've met before${
+                                    savedLead.contact.matchedOn
+                                      ? ` (same ${savedLead.contact.matchedOn})`
+                                      : ''
+                                  }`}
+                              {savedLead.contact.accountContactCount
+                                ? ` · ${savedLead.company} now has ${
+                                    savedLead.contact.accountContactCount
+                                  } ${
+                                    savedLead.contact.accountContactCount === 1
+                                      ? 'contact'
+                                      : 'contacts'
+                                  }`
+                                : ''}
+                              .
+                            </span>
+                          </p>
+                        ) : null}
                         <div className="saved-summary">
                           <span>
                             <small>Account</small>

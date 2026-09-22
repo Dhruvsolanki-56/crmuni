@@ -57,6 +57,84 @@ function clean(value: unknown, max: number) {
 
 export async function GET(request: Request) {
   const context = await requireWorkspace(request);
+  const url = new URL(request.url);
+
+  // Read-only identity preview for the capture review step: as soon as an
+  // email/phone/company is known (typed, or filled by on-device OCR), the
+  // form can say "this looks like someone/some company you already know"
+  // before Save is ever pressed. Reuses resolveContact() exactly as the
+  // capture POST below will, but never writes anything - matching evidence,
+  // matching confidence tiers, zero risk of drifting from what Save
+  // actually decides.
+  if (clean(url.searchParams.get('preview'), 20) === 'identity') {
+    requireRole(context, [
+      'owner',
+      'admin',
+      'manager',
+      'salesperson',
+      'marketing',
+    ]);
+    const fullName = clean(url.searchParams.get('fullName'), 120);
+    const email = clean(url.searchParams.get('email'), 254).toLowerCase();
+    const phone = clean(url.searchParams.get('phone'), 40);
+    const company = clean(url.searchParams.get('company'), 160);
+    if (!fullName && !email && !phone && !company)
+      return Response.json({ contact: null, account: null });
+    const account = company
+      ? await accountIdentity(context.workspace.id, company)
+      : null;
+    const [contactMatch, accountRow] = await Promise.all([
+      fullName || email || phone
+        ? resolveContact(database(), context.workspace.id, {
+            fullName: fullName || '(unnamed)',
+            email,
+            phone,
+            accountId: account?.id || null,
+          })
+        : null,
+      account
+        ? database()
+            .prepare(
+              `SELECT a.name, (SELECT COUNT(*) FROM contacts c WHERE c.primary_account_id=a.id AND c.merged_into_id IS NULL) AS contactCount FROM accounts a WHERE a.id=? AND a.workspace_id=?`,
+            )
+            .bind(account.id, context.workspace.id)
+            .first<{ name: string; contactCount: number }>()
+        : null,
+    ]);
+    // A resolveContact() result only means something happened to match on
+    // when it did not have to fall back to "create new" with no evidence at
+    // all (matchedOn set) or when it found a same-account-and-name candidate
+    // worth surfacing (suggestedContactId set) - a bare isNew with neither is
+    // not a match, it's just "nothing known yet".
+    const matchedContactId =
+      contactMatch?.matchedOn ? contactMatch.contactId : contactMatch?.suggestedContactId || null;
+    // A name makes "recognized" actually useful ("met Priya Shah before"
+    // vs. a bare checkmark) - one extra indexed lookup, only when there is
+    // something to name.
+    const matchedName = matchedContactId
+      ? (
+          await database()
+            .prepare(`SELECT full_name FROM contacts WHERE id=? AND workspace_id=?`)
+            .bind(matchedContactId, context.workspace.id)
+            .first<{ full_name: string }>()
+        )?.full_name || null
+      : null;
+    const contactPreview = matchedContactId
+      ? {
+          recognized: !contactMatch!.isNew,
+          matchedOn: contactMatch!.matchedOn,
+          possibleMatch: Boolean(contactMatch!.isNew && contactMatch!.suggestedContactId),
+          name: matchedName,
+        }
+      : null;
+    return Response.json({
+      contact: contactPreview,
+      account: accountRow
+        ? { name: accountRow.name, contactCount: Number(accountRow.contactCount || 0) }
+        : null,
+    });
+  }
+
   const access = eventAccessClause(context, 'l.event_id');
   const result = await database()
     .prepare(`
@@ -649,6 +727,23 @@ export async function POST(request: Request) {
       throw storageLimitResponse(context.workspace.plan);
     throw error;
   }
+  // How the capture was organized, for the success screen to say so -
+  // "organize behind the scenes, but let the user feel it happening" only
+  // works if the resolution Release A already computes is actually shown
+  // somewhere. Counted after the batch commits so a brand-new contact this
+  // same request just created is included.
+  const accountContactCount = account
+    ? Number(
+        (
+          await database()
+            .prepare(
+              `SELECT COUNT(*) AS n FROM contacts WHERE primary_account_id=? AND workspace_id=? AND merged_into_id IS NULL`,
+            )
+            .bind(account.id, context.workspace.id)
+            .first<{ n: number }>()
+        )?.n || 0,
+      )
+    : null;
   return Response.json(
     {
       lead: {
@@ -693,7 +788,11 @@ export async function POST(request: Request) {
       // contact fields - whatever was typed, or filled by on-device OCR,
       // which never touches storage - were saved normally either way; this
       // is purely about the original file and server-side extraction.
-      warning:
+      contact: {
+        isNew: contact.isNew,
+        matchedOn: contact.matchedOn,
+        accountContactCount,
+      },      warning:
         file && !storageOk
           ? localOcrConfirmed
             ? 'File storage is unavailable in this environment, so the original could not be kept. The on-device reading of the contact fields is unaffected.'
