@@ -244,6 +244,10 @@ export async function GET(request: Request) {
   const leadsByEvent = new Map<string, { total: number; confirmed: number }>();
   const qualificationMix = new Map<string, number>();
   const reviewMix = new Map<string, number>();
+  // The same grouped rows also give the review x qualification cross-tab, which
+  // answers a question neither total can on its own: how much of the hot
+  // pipeline is still sitting unconfirmed.
+  const crossTab = new Map<string, number>();
   for (const row of leadGroups.results as Array<Record<string, unknown>>) {
     const eventId = String(row.eventId);
     const total = Number(row.total || 0);
@@ -255,6 +259,8 @@ export async function GET(request: Request) {
     qualificationMix.set(state, (qualificationMix.get(state) || 0) + total);
     const review = String(row.reviewStatus);
     reviewMix.set(review, (reviewMix.get(review) || 0) + total);
+    const cell = `${review}::${state}`;
+    crossTab.set(cell, (crossTab.get(cell) || 0) + total);
   }
 
   const costsByEvent = new Map<string, { planned: number; actual: number }>();
@@ -361,6 +367,10 @@ export async function GET(request: Request) {
       count,
     })),
     reviewMix: [...reviewMix].map(([status, count]) => ({ status, count })),
+    qualificationByReview: [...crossTab].map(([cell, count]) => {
+      const [reviewStatus, qualificationState] = cell.split('::');
+      return { reviewStatus, qualificationState, count };
+    }),
     pipelineStages: OPEN_STAGES.map(stageEntry),
     closedStages: ['won', 'lost'].map(stageEntry),
     costCategories: [...costsByCategory]

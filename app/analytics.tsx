@@ -18,6 +18,7 @@
  */
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -68,6 +69,11 @@ export type AnalyticsPayload = {
   }>;
   qualificationMix: Array<{ state: string; count: number }>;
   reviewMix: Array<{ status: string; count: number }>;
+  qualificationByReview: Array<{
+    reviewStatus: string;
+    qualificationState: string;
+    count: number;
+  }>;
   pipelineStages: Array<{
     stage: string;
     count: number;
@@ -599,7 +605,17 @@ const STAGE_LABELS: Record<string, string> = {
   lost: 'Lost',
 };
 
-function StageBands({
+/**
+ * The open pipeline as one continuous band rather than a stack of bars.
+ *
+ * Each stage's width is its share of open opportunity value and its height is
+ * the average probability at that stage, so the filled area of a stage is
+ * literally its probability-weighted value. The pale block behind it, drawn at
+ * full height, is the same money unweighted — the gap between the two is the
+ * discount probability applies. Reading left to right also walks the pipeline
+ * in stage order, which a set of independent bars cannot express.
+ */
+function PipelineFlow({
   stages,
   closed,
   currency,
@@ -610,73 +626,242 @@ function StageBands({
   currency: string;
   onOpenStage: (stage: string) => void;
 }) {
-  const max = Math.max(
-    ...stages.map((item) => item.value),
-    ...closed.map((item) => item.value),
-    1,
-  );
-  // Won and Lost are outcomes, not pipeline, so they are described against each
-  // other rather than as a share of open value, which would mean nothing.
+  const [active, setActive] = useState<string | null>(null);
+  const present = stages.filter((item) => item.count > 0);
+  const totalValue = present.reduce((total, item) => total + item.value, 0);
   const closedCount = closed.reduce((total, item) => total + item.count, 0);
   const closedValue = closed.reduce((total, item) => total + item.value, 0);
-  const band = (
-    item: AnalyticsPayload['pipelineStages'][number],
-    isClosed: boolean,
-  ) => (
-    <button
-      type="button"
-      className={`an-band${isClosed ? ' an-band-closed' : ''}${item.count ? '' : ' an-band-empty'}`}
-      key={item.stage}
-      onClick={() => item.count && onOpenStage(item.stage)}
-      disabled={!item.count}
-      aria-label={`${STAGE_LABELS[item.stage] || item.stage}: ${count(item.count)} opportunities worth ${money(item.value, currency)}${item.count ? '. Opens the opportunity list filtered to this stage.' : ''}`}
-    >
-      <span className="an-band-head">
-        <b>{STAGE_LABELS[item.stage] || titleCase(item.stage)}</b>
-        <span className="an-band-count">{count(item.count)}</span>
-      </span>
-      <span className="an-band-track">
-        <i className="an-band-value" style={fill(item.value / max)} />
-        {!isClosed ? (
-          <i
-            className="an-band-weighted"
-            style={fill(item.weightedValue / max)}
-          />
-        ) : null}
-      </span>
-      <span className="an-band-foot">
-        <span>{compactMoney(item.value, currency)}</span>
-        {!isClosed ? (
-          <small>
-            {item.averageProbability == null
-              ? 'No probability recorded'
-              : `${compactMoney(item.weightedValue, currency)} weighted · ${item.averageProbability.toFixed(0)}% avg probability`}
-          </small>
-        ) : (
-          <small>
-            {closedCount
-              ? `${count(item.count)} of ${count(closedCount)} closed · ${share(item.value, closedValue)} of closed value`
-              : 'Nothing closed yet'}
-          </small>
-        )}
-      </span>
-    </button>
+  const hovered = present.find((item) => item.stage === active) || null;
+
+  if (!present.length) return null;
+
+  // Every stage keeps a readable minimum width even when its value is tiny, so
+  // a small stage never becomes an unclickable sliver.
+  const MIN_SHARE = 0.055;
+  const raw = present.map((item) =>
+    totalValue > 0 ? item.value / totalValue : 1 / present.length,
   );
+  const lifted = raw.map((value) => Math.max(value, MIN_SHARE));
+  const liftedTotal = lifted.reduce((total, value) => total + value, 0);
+  const widths = lifted.map((value) => value / liftedTotal);
+
   return (
-    <div className="an-bands">
-      <div className="an-bands-list">{stages.map((item) => band(item, false))}</div>
-      <p className="an-bands-key">
-        <span className="an-key an-key-value" /> Opportunity value
-        <span className="an-key an-key-weighted" /> Probability-weighted
-      </p>
-      <div className="an-bands-closed">
-        {closed.map((item) => band(item, true))}
+    <div className="an-flow">
+      <div
+        className="an-flow-track"
+        onMouseLeave={() => setActive(null)}
+        style={{ '--stages': present.length } as React.CSSProperties}
+      >
+        {present.map((item, index) => {
+          const probability = Math.max(
+            0.06,
+            Math.min(1, (item.averageProbability ?? 0) / 100),
+          );
+          return (
+            <button
+              type="button"
+              key={item.stage}
+              className={`an-flow-stage${active === item.stage ? ' is-active' : ''}${active && active !== item.stage ? ' is-dimmed' : ''}`}
+              style={
+                {
+                  '--w': widths[index],
+                  '--p': probability,
+                } as React.CSSProperties
+              }
+              onMouseEnter={() => setActive(item.stage)}
+              onFocus={() => setActive(item.stage)}
+              onBlur={() => setActive(null)}
+              onClick={() => onOpenStage(item.stage)}
+              aria-label={`${STAGE_LABELS[item.stage] || item.stage}: ${count(item.count)} opportunities, ${money(item.value, currency)} of value, ${money(item.weightedValue, currency)} probability-weighted at ${item.averageProbability?.toFixed(0) ?? 0}% average probability. Opens the opportunity list filtered to this stage.`}
+            >
+              <span className="an-flow-col">
+                <i className="an-flow-raw" />
+                <i className="an-flow-weighted" />
+              </span>
+              <span className="an-flow-label">
+                <b>{STAGE_LABELS[item.stage] || titleCase(item.stage)}</b>
+                <small>{compactMoney(item.value, currency)}</small>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* One readout under the band rather than a repeated caption per stage. */}
+      <div className="an-flow-readout" aria-live="polite">
+        {hovered ? (
+          <>
+            <b>{STAGE_LABELS[hovered.stage] || titleCase(hovered.stage)}</b>
+            <span>
+              {count(hovered.count)}{' '}
+              {hovered.count === 1 ? 'opportunity' : 'opportunities'}
+            </span>
+            <span>{money(hovered.value, currency)} of value</span>
+            <span>
+              {money(hovered.weightedValue, currency)} weighted at{' '}
+              {hovered.averageProbability?.toFixed(0) ?? 0}% average probability
+            </span>
+            <span className="an-flow-share">
+              {share(hovered.value, totalValue)} of open pipeline
+            </span>
+          </>
+        ) : (
+          <span className="an-flow-hint">
+            Width is each stage&apos;s share of open value; height is its average
+            probability, so the solid area is the weighted pipeline. Select a
+            stage to open those opportunities.
+          </span>
+        )}
+      </div>
+
+      {/* Won and Lost are outcomes, not pipeline, so they sit apart and are
+          described against each other rather than against open value. */}
+      <div className="an-outcomes">
+        {closed.map((item) => (
+          <button
+            type="button"
+            key={item.stage}
+            className={`an-outcome is-${item.stage}`}
+            onClick={() => item.count && onOpenStage(item.stage)}
+            disabled={!item.count}
+            aria-label={`${STAGE_LABELS[item.stage]}: ${count(item.count)} opportunities worth ${money(item.value, currency)}`}
+          >
+            <span className="an-outcome-head">
+              <i aria-hidden="true" />
+              {STAGE_LABELS[item.stage]}
+            </span>
+            <strong>{compactMoney(item.value, currency)}</strong>
+            <small>
+              {closedCount
+                ? `${count(item.count)} of ${count(closedCount)} closed · ${share(item.value, closedValue)} of closed value`
+                : 'Nothing closed yet'}
+            </small>
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ── lead quality strips ─────────────────────────────────────────────────── */
+/* ── lead quality ────────────────────────────────────────────────────────── */
+
+const QUALIFICATION_ORDER = ['hot', 'warm', 'cold', 'unqualified'];
+const QUALIFICATION_LABELS: Record<string, string> = {
+  hot: 'Hot',
+  warm: 'Warm',
+  cold: 'Cold',
+  unqualified: 'Unqualified',
+};
+const REVIEW_ORDER = ['confirmed', 'needs_review', 'erased'];
+const REVIEW_LABELS: Record<string, string> = {
+  confirmed: 'Confirmed',
+  needs_review: 'Awaiting review',
+  erased: 'Data erased',
+};
+
+/**
+ * Qualification against review status as a cross-tab rather than as two separate
+ * distributions.
+ *
+ * Both are real lead attributes, and they are kept as distinct axes rather than
+ * merged into one score — but crossing them answers something neither total can
+ * on its own: how much of the hot pipeline a salesperson has not confirmed yet.
+ * Cell shading carries magnitude and every cell also prints its count, so the
+ * grid never depends on colour alone.
+ */
+function QualityMatrix({
+  cells,
+  total,
+}: {
+  cells: AnalyticsPayload['qualificationByReview'];
+  total: number;
+}) {
+  const [active, setActive] = useState<string | null>(null);
+  const lookup = new Map(
+    cells.map((cell) => [
+      `${cell.reviewStatus}::${cell.qualificationState}`,
+      cell.count,
+    ]),
+  );
+  const reviews = REVIEW_ORDER.filter((status) =>
+    cells.some((cell) => cell.reviewStatus === status && cell.count > 0),
+  );
+  const qualifications = QUALIFICATION_ORDER.filter((state) =>
+    cells.some((cell) => cell.qualificationState === state && cell.count > 0),
+  );
+  if (!reviews.length || !qualifications.length) return null;
+  const peak = Math.max(...cells.map((cell) => cell.count), 1);
+  const columnTotal = (state: string) =>
+    cells
+      .filter((cell) => cell.qualificationState === state)
+      .reduce((sum, cell) => sum + cell.count, 0);
+  const rowTotal = (status: string) =>
+    cells
+      .filter((cell) => cell.reviewStatus === status)
+      .reduce((sum, cell) => sum + cell.count, 0);
+  const hovered = active ? lookup.get(active) ?? 0 : null;
+  const [hoveredReview, hoveredState] = active ? active.split('::') : [];
+
+  return (
+    <div className="an-matrix">
+      <div
+        className="an-matrix-grid"
+        style={{ '--cols': qualifications.length } as React.CSSProperties}
+        onMouseLeave={() => setActive(null)}
+      >
+        <span className="an-matrix-corner" aria-hidden="true" />
+        {qualifications.map((state) => (
+          <span className="an-matrix-col-head" key={state}>
+            {QUALIFICATION_LABELS[state] || titleCase(state)}
+            <b>{count(columnTotal(state))}</b>
+          </span>
+        ))}
+        {reviews.map((status) => (
+          <Fragment key={status}>
+            <span className="an-matrix-row-head">
+              {REVIEW_LABELS[status] || titleCase(status)}
+              <b>{count(rowTotal(status))}</b>
+            </span>
+            {qualifications.map((state) => {
+              const key = `${status}::${state}`;
+              const value = lookup.get(key) ?? 0;
+              const weight = value / peak;
+              return (
+                <span
+                  className={`an-matrix-cell${active === key ? ' is-active' : ''}${value ? '' : ' is-empty'}`}
+                  key={key}
+                  style={{ '--weight': weight } as React.CSSProperties}
+                  onMouseEnter={() => setActive(key)}
+                  title={`${REVIEW_LABELS[status] || status} · ${QUALIFICATION_LABELS[state] || state}: ${count(value)} leads (${share(value, total)})`}
+                >
+                  {count(value)}
+                </span>
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
+      <p className="an-matrix-readout" aria-live="polite">
+        {hovered != null ? (
+          <>
+            <b>{count(hovered)}</b>
+            <span>
+              {(QUALIFICATION_LABELS[hoveredState] || hoveredState).toLowerCase()}{' '}
+              {hovered === 1 ? 'lead is' : 'leads are'}{' '}
+              {(REVIEW_LABELS[hoveredReview] || hoveredReview).toLowerCase()} ·{' '}
+              {share(hovered, total)} of this scope
+            </span>
+          </>
+        ) : (
+          <span className="an-flow-hint">
+            {count(total)} leads by qualification and review state. Darker cells
+            hold more leads.
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
 
 /**
  * A qualification mix reads better as one continuous strip than as a pie: the
@@ -782,6 +967,7 @@ function CaptureTimeline({
     ? padding.top + plotHeight - (target / peak) * plotHeight
     : null;
   const activePoint = active == null ? null : timeline[active];
+  const drawKey = `${timeline.length}-${timeline[0]?.day}-${timeline[timeline.length - 1]?.day}`;
   return (
     <div className="an-timeline">
       <svg
@@ -814,10 +1000,24 @@ function CaptureTimeline({
             y2={targetY}
           />
         ) : null}
-        <path className="an-timeline-area" d={area} fill="url(#an-capture-fill)" />
-        <path className="an-timeline-line" d={line('captured')} />
+        {/* Keying on the series itself restarts the stroke-dash draw whenever
+            the scope changes, so the line redraws rather than jumping. The
+            point count differs between scopes, so interpolating one path into
+            the other would have to invent geometry. */}
+        <path
+          className="an-timeline-area"
+          key={`area-${drawKey}`}
+          d={area}
+          fill="url(#an-capture-fill)"
+        />
+        <path
+          className="an-timeline-line"
+          key={`captured-${drawKey}`}
+          d={line('captured')}
+        />
         <path
           className="an-timeline-line an-timeline-confirmed"
+          key={`confirmed-${drawKey}`}
           d={line('confirmed')}
         />
         {active != null
@@ -891,63 +1091,198 @@ function CaptureTimeline({
   );
 }
 
-/* ── commercial lifecycle rails ──────────────────────────────────────────── */
+/* ── commercial lifecycles ───────────────────────────────────────────────── */
 
-function LifecycleRail({
-  title,
-  note,
+/**
+ * RFQs as a stepped process track.
+ *
+ * An RFQ carries no money of its own, so the only honest quantity is how many
+ * sit at each step. The track reads left to right as the request actually
+ * travels, each step is a chevron whose fill level is its share of the busiest
+ * step, and the two terminal outcomes branch off the end instead of pretending
+ * to be a sixth and seventh stage of the same queue.
+ */
+function RfqTrack({
+  progression,
+  terminal,
+  rows,
+  total,
+  quoted,
+}: {
+  progression: string[];
+  terminal: string[];
+  rows: Record<string, { total: number; flag?: number }>;
+  total: number;
+  quoted: number;
+}) {
+  const [active, setActive] = useState<string | null>(null);
+  const peak = Math.max(
+    ...progression.map((key) => rows[key]?.total || 0),
+    ...terminal.map((key) => rows[key]?.total || 0),
+    1,
+  );
+  const open = progression.reduce(
+    (sum, key) => sum + (rows[key]?.total || 0),
+    0,
+  );
+  const overdue = progression.reduce(
+    (sum, key) => sum + (rows[key]?.flag || 0),
+    0,
+  );
+  const hovered = active ? rows[active] : null;
+  return (
+    <div className="an-track">
+      <div className="an-track-head">
+        <h3>RFQ lifecycle</h3>
+        <small>Requests for quotation received against this scope</small>
+      </div>
+      <div className="an-track-steps" onMouseLeave={() => setActive(null)}>
+        {progression.map((key) => {
+          const row = rows[key] || { total: 0 };
+          return (
+            <div
+              className={`an-track-step${row.total ? '' : ' is-empty'}${active === key ? ' is-active' : ''}`}
+              key={key}
+              style={
+                { '--level': (row.total || 0) / peak } as React.CSSProperties
+              }
+              onMouseEnter={() => setActive(key)}
+            >
+              <span className="an-track-fill" aria-hidden="true" />
+              <b>{count(row.total || 0)}</b>
+              <small>{titleCase(key)}</small>
+              {row.flag ? <em title={`${row.flag} past due`} /> : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className="an-track-outcomes">
+        {terminal.map((key) => {
+          const row = rows[key] || { total: 0 };
+          return (
+            <span className={`an-track-outcome is-${key}`} key={key}>
+              <i aria-hidden="true" />
+              {titleCase(key)}
+              <b>{count(row.total || 0)}</b>
+            </span>
+          );
+        })}
+      </div>
+      <p className="an-track-readout" aria-live="polite">
+        {hovered ? (
+          <>
+            <b>{count(hovered.total)}</b>
+            <span>
+              {hovered.total === 1 ? 'RFQ is' : 'RFQs are'} at{' '}
+              {titleCase(active || '').toLowerCase()}
+              {hovered.flag ? ` · ${count(hovered.flag)} past its due date` : ''}
+            </span>
+          </>
+        ) : (
+          <span className="an-flow-hint">
+            {count(open)} of {count(total)} still open ·{' '}
+            {count(quoted)} have a quotation raised
+            {overdue ? ` · ${count(overdue)} past due` : ''}
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Quotations as a value ledger rather than a second process track.
+ *
+ * A quotation does carry money, so each status is sized by the value sitting in
+ * it, stacked into one column that totals the quoted book. Rejected and expired
+ * value is drawn separately below the line — it left the book rather than
+ * progressing through it, and stacking it with the live states would overstate
+ * what is still in play.
+ */
+function QuotationLedger({
   progression,
   terminal,
   rows,
   currency,
-  showValue,
-  footer,
 }: {
-  title: string;
-  note: string;
   progression: string[];
   terminal: string[];
   rows: Record<string, { total: number; value?: number; flag?: number }>;
   currency: string;
-  showValue: boolean;
-  footer?: ReactNode;
 }) {
-  const all = [...progression, ...terminal];
-  const max = Math.max(...all.map((key) => rows[key]?.total || 0), 1);
-  const stage = (key: string, isTerminal: boolean) => {
-    const row = rows[key] || { total: 0 };
+  const [active, setActive] = useState<string | null>(null);
+  const live = progression.filter((key) => (rows[key]?.total || 0) > 0);
+  const lost = terminal.filter((key) => (rows[key]?.total || 0) > 0);
+  const liveValue = live.reduce((sum, key) => sum + (rows[key]?.value || 0), 0);
+  const lostValue = lost.reduce((sum, key) => sum + (rows[key]?.value || 0), 0);
+  const scale = Math.max(liveValue, lostValue, 1);
+  const hovered = active ? rows[active] : null;
+  const accepted = rows.accepted?.value || 0;
+  const block = (key: string, isTerminal: boolean) => {
+    const row = rows[key] || { total: 0, value: 0 };
     return (
-      <li
-        className={`an-rail-step${isTerminal ? ' is-terminal' : ''}${row.total ? '' : ' is-empty'}`}
+      <div
+        className={`an-ledger-block${isTerminal ? ' is-terminal' : ''}${active === key ? ' is-active' : ''}`}
         key={key}
+        style={{ '--h': (row.value || 0) / scale } as React.CSSProperties}
+        onMouseEnter={() => setActive(key)}
+        title={`${titleCase(key)}: ${count(row.total)} quotations worth ${money(row.value || 0, currency)}`}
       >
-        <span className="an-rail-label">{titleCase(key)}</span>
-        <span className="an-rail-track">
-          <i style={fill((row.total || 0) / max)} />
+        <span className="an-ledger-bar" aria-hidden="true" />
+        <span className="an-ledger-meta">
+          <b>{titleCase(key)}</b>
+          <small>
+            {count(row.total)} · {compactMoney(row.value || 0, currency)}
+          </small>
         </span>
-        <span className="an-rail-value">
-          <b>{count(row.total || 0)}</b>
-          {showValue && row.value ? (
-            <small>{compactMoney(row.value, currency)}</small>
-          ) : null}
-          {row.flag ? <em>{count(row.flag)} past due</em> : null}
-        </span>
-      </li>
+      </div>
     );
   };
   return (
-    <div className="an-rail">
-      <div className="an-rail-head">
-        <h3>{title}</h3>
-        <small>{note}</small>
+    <div className="an-quotes">
+      <div className="an-track-head">
+        <h3>Quotation lifecycle</h3>
+        <small>
+          A separate document lifecycle — not a continuation of the RFQ stages
+        </small>
       </div>
-      <ol className="an-rail-list">
-        {progression.map((key) => stage(key, false))}
-      </ol>
-      <ol className="an-rail-list an-rail-terminal">
-        {terminal.map((key) => stage(key, true))}
-      </ol>
-      {footer ? <p className="an-rail-foot">{footer}</p> : null}
+      <div className="an-quote-stack" onMouseLeave={() => setActive(null)}>
+        <div className="an-quote-column">
+          <span className="an-quote-caption">In play</span>
+          {live.length ? (
+            live.map((key) => block(key, false))
+          ) : (
+            <p className="an-quote-none">No live quotations</p>
+          )}
+        </div>
+        {lost.length ? (
+          <div className="an-quote-column is-lost">
+            <span className="an-quote-caption">Left the book</span>
+            {lost.map((key) => block(key, true))}
+          </div>
+        ) : null}
+      </div>
+      <p className="an-track-readout" aria-live="polite">
+        {hovered ? (
+          <>
+            <b>{money(hovered.value || 0, currency)}</b>
+            <span>
+              across {count(hovered.total)}{' '}
+              {hovered.total === 1 ? 'quotation' : 'quotations'}{' '}
+              {titleCase(active || '').toLowerCase()}
+              {hovered.flag
+                ? ` · ${count(hovered.flag)} past its validity date`
+                : ''}
+            </span>
+          </>
+        ) : (
+          <span className="an-flow-hint">
+            {money(liveValue, currency)} still in play ·{' '}
+            {money(accepted, currency)} accepted
+            {lostValue ? ` · ${money(lostValue, currency)} rejected or expired` : ''}
+          </span>
+        )}
+      </p>
     </div>
   );
 }
@@ -995,7 +1330,7 @@ function CostComposition({
       </dl>
       <p className="an-note">
         The basis is the highest of the three, so a partial set of invoices
-        cannot overstate ROI. Currently taken from{' '}
+        cannot overstate ROI — here,{' '}
         <strong>
           {report.investmentBasisSource === 'actual_cost_lines'
             ? 'actual cost lines'
@@ -1119,9 +1454,9 @@ function RevenueEvidence({
           <strong className="an-pending">No accepted quotations yet</strong>
         )}
         <small>
-          Total value of quotations the customer accepted. Closed revenue is
-          counted from won opportunities, so these two figures are independent
-          evidence of the same commercial outcome.
+          Accepted quotation value. Closed revenue is counted from won
+          opportunities, so the two are independent evidence of the same
+          outcome.
         </small>
       </div>
       <div className="an-evidence-block">
@@ -1196,7 +1531,14 @@ function RevenueEvidence({
 
 /* ── event comparison ────────────────────────────────────────────────────── */
 
-function EventComparison({
+/**
+ * A comparative matrix: one row per event, one column per measure, each cell
+ * carrying a readable figure over a hairline bar scaled against the strongest
+ * event in that column. The bars make the column scannable at a glance while
+ * the numbers stay at full size, which the previous compressed row of micro
+ * captions did not manage. No event is ranked or crowned.
+ */
+function EventMatrix({
   events,
   currency,
   onScopeChange,
@@ -1206,55 +1548,116 @@ function EventComparison({
   onScopeChange: (id: string) => void;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const maxLeads = Math.max(...events.map((item) => item.totalLeads), 1);
-  const maxPipeline = Math.max(...events.map((item) => item.pipelineValue), 1);
-  const maxRevenue = Math.max(...events.map((item) => item.closedRevenue), 1);
-  const maxInvestment = Math.max(
-    ...events.map((item) => item.investmentBasis),
-    1,
-  );
-  const metric = (
-    value: number,
-    max: number,
-    tone: string,
-    label: string,
-  ) => (
-    <span className="an-compare-metric">
-      <small>{label}</small>
-      <span className="an-compare-track">
-        <i className={`an-tone-${tone}`} style={fill(value / max)} />
-      </span>
-    </span>
-  );
+  const peak = (pick: (event: AnalyticsEvent) => number) =>
+    Math.max(...events.map(pick), 1);
+  const peaks = {
+    leads: peak((event) => event.totalLeads),
+    pipeline: peak((event) => event.pipelineValue),
+    revenue: peak((event) => event.closedRevenue),
+    investment: peak((event) => event.investmentBasis),
+  };
+  const columns: Array<{
+    key: string;
+    label: string;
+    tone: string;
+    read: (event: AnalyticsEvent) => {
+      main: string;
+      sub: string;
+      ratio: number;
+    };
+  }> = [
+    {
+      key: 'leads',
+      label: 'Leads captured',
+      tone: 'quiet',
+      read: (event) => ({
+        main: count(event.totalLeads),
+        sub: `${count(event.qualifiedLeads)} confirmed · ${share(event.qualifiedLeads, event.totalLeads)}`,
+        ratio: event.totalLeads / peaks.leads,
+      }),
+    },
+    {
+      key: 'pipeline',
+      label: 'Open pipeline',
+      tone: 'mid',
+      read: (event) => ({
+        main: compactMoney(event.pipelineValue, currency),
+        sub: `${compactMoney(event.weightedPipelineValue, currency)} weighted`,
+        ratio: event.pipelineValue / peaks.pipeline,
+      }),
+    },
+    {
+      key: 'revenue',
+      label: 'Closed revenue',
+      tone: 'signal',
+      read: (event) => ({
+        main: compactMoney(event.closedRevenue, currency),
+        sub: `${count(event.wonOpportunities)} won`,
+        ratio: event.closedRevenue / peaks.revenue,
+      }),
+    },
+    {
+      key: 'investment',
+      label: 'Investment',
+      tone: 'cost',
+      read: (event) => ({
+        main: compactMoney(event.investmentBasis, currency),
+        sub:
+          event.investmentBasisSource === 'actual_cost_lines'
+            ? 'Actual costs'
+            : event.investmentBasisSource === 'planned_cost_lines'
+              ? 'Planned costs'
+              : 'Event budget',
+        ratio: event.investmentBasis / peaks.investment,
+      }),
+    },
+  ];
   return (
-    <div className="an-compare">
+    <div className="an-matrix-events" onMouseLeave={() => setHovered(null)}>
+      <div className="an-em-head" aria-hidden="true">
+        <span>Event</span>
+        {columns.map((column) => (
+          <span key={column.key}>{column.label}</span>
+        ))}
+        <span className="an-em-roi-head">Revenue ROI</span>
+      </div>
       {events.map((event) => (
         <button
           type="button"
-          className={`an-compare-row${hovered && hovered !== event.id ? ' is-dimmed' : ''}`}
+          className={`an-em-row${hovered && hovered !== event.id ? ' is-dimmed' : ''}`}
           key={event.id}
           onMouseEnter={() => setHovered(event.id)}
-          onMouseLeave={() => setHovered(null)}
           onFocus={() => setHovered(event.id)}
           onBlur={() => setHovered(null)}
           onClick={() => onScopeChange(event.id)}
-          aria-label={`${event.name}: ${count(event.totalLeads)} leads, ${money(event.pipelineValue, currency)} open pipeline, ${money(event.closedRevenue, currency)} closed revenue, ${event.revenueRoiPercent == null ? 'revenue ROI unavailable' : `${percent(event.revenueRoiPercent)} revenue ROI`}. Scopes analytics to this event.`}
+          aria-label={`${event.name}: ${count(event.totalLeads)} leads, ${money(event.pipelineValue, currency)} open pipeline, ${money(event.closedRevenue, currency)} closed revenue, ${money(event.investmentBasis, currency)} invested, ${event.revenueRoiPercent == null ? 'revenue ROI unavailable' : `${percent(event.revenueRoiPercent)} revenue ROI`}. Scopes analytics to this event.`}
         >
-          <span className="an-compare-name">
+          <span className="an-em-name">
             <b>{event.name}</b>
             <small>
               {dateRange(event.startsOn, event.endsOn)} ·{' '}
               {titleCase(event.status)}
             </small>
           </span>
-          <span className="an-compare-metrics">
-            {metric(event.totalLeads, maxLeads, 'quiet', `${count(event.totalLeads)} leads · ${count(event.qualifiedLeads)} confirmed`)}
-            {metric(event.pipelineValue, maxPipeline, 'mid', `${compactMoney(event.pipelineValue, currency)} pipeline · ${compactMoney(event.weightedPipelineValue, currency)} weighted`)}
-            {metric(event.closedRevenue, maxRevenue, 'signal', `${compactMoney(event.closedRevenue, currency)} revenue · ${count(event.wonOpportunities)} won`)}
-            {metric(event.investmentBasis, maxInvestment, 'cost', `${compactMoney(event.investmentBasis, currency)} invested`)}
-          </span>
-          <span className="an-compare-roi">
-            <small>Revenue ROI</small>
+          {columns.map((column) => {
+            const cell = column.read(event);
+            return (
+              <span
+                className="an-em-cell"
+                key={column.key}
+                data-label={column.label}
+              >
+                <b>{cell.main}</b>
+                <i
+                  className={`an-tone-${column.tone}`}
+                  style={fill(cell.ratio)}
+                  aria-hidden="true"
+                />
+                <small>{cell.sub}</small>
+              </span>
+            );
+          })}
+          <span className="an-em-roi">
             <b
               className={
                 event.revenueRoiPercent == null
@@ -1266,8 +1669,13 @@ function EventComparison({
             >
               {event.revenueRoiPercent == null
                 ? 'n/a'
-                : percent(event.revenueRoiPercent)}
+                : percent(event.revenueRoiPercent, 0)}
             </b>
+            <small>
+              {event.profitRoiPercent == null
+                ? 'profit n/a'
+                : `${percent(event.profitRoiPercent, 0)} profit`}
+            </small>
           </span>
         </button>
       ))}
@@ -1337,6 +1745,93 @@ function ExportMenu({ onExport }: { onExport: (kind: string) => void }) {
   );
 }
 
+/* ── chapter navigator ───────────────────────────────────────────────────── */
+
+/**
+ * A slim rail pinned beside the content. The page runs several screens, so this
+ * exists to answer "where am I and what else is there" without adding a second
+ * navigation bar: labels are small, the current chapter is marked from the
+ * scroll position, and a chapter that has no data is simply not listed.
+ */
+function ChapterRail({
+  chapters,
+}: {
+  chapters: Array<{ id: string; label: string }>;
+}) {
+  const [current, setCurrent] = useState(chapters[0]?.id || '');
+  useEffect(() => {
+    const nodes = chapters
+      .map((chapter) => document.getElementById(chapter.id))
+      .filter((node): node is HTMLElement => Boolean(node));
+    if (!nodes.length) return;
+    // The app scrolls inside a container rather than the document, which makes
+    // an IntersectionObserver root fiddly to get right. Measuring viewport
+    // position directly is deterministic: the current chapter is the last one
+    // whose heading has passed a line near the top of the screen.
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const line = window.innerHeight * 0.28;
+      let found = nodes[0].id;
+      for (const node of nodes) {
+        if (node.getBoundingClientRect().top <= line) found = node.id;
+        else break;
+      }
+      setCurrent(found);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    // Scroll events do not bubble, and this page scrolls inside a container, so
+    // the listener goes on every scrollable ancestor rather than only window.
+    const targets: Array<EventTarget> = [window];
+    for (
+      let node: HTMLElement | null = nodes[0].parentElement;
+      node;
+      node = node.parentElement
+    ) {
+      const style = window.getComputedStyle(node);
+      if (
+        /auto|scroll|overlay/.test(style.overflowY + style.overflow) &&
+        node.scrollHeight > node.clientHeight + 4
+      )
+        targets.push(node);
+    }
+    measure();
+    for (const target of targets)
+      target.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      for (const target of targets)
+        target.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [chapters]);
+  if (chapters.length < 3) return null;
+  return (
+    <nav className="an-rail-nav" aria-label="Analytics chapters">
+      {chapters.map((chapter) => (
+        <button
+          type="button"
+          key={chapter.id}
+          className={current === chapter.id ? 'is-current' : ''}
+          aria-current={current === chapter.id ? 'true' : undefined}
+          onClick={() =>
+            document.getElementById(chapter.id)?.scrollIntoView({
+              behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+              block: 'start',
+            })
+          }
+        >
+          <i aria-hidden="true" />
+          <span>{chapter.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 /* ── skeleton ────────────────────────────────────────────────────────────── */
 
 function Skeleton() {
@@ -1375,6 +1870,8 @@ export default function Analytics({
 }: Props) {
   const rootRef = useEnterFlag();
   const [now, setNow] = useState(() => Date.now());
+  const [actionsExpanded, setActionsExpanded] = useState(false);
+  const [ownersExpanded, setOwnersExpanded] = useState(false);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
@@ -1388,49 +1885,6 @@ export default function Analytics({
   // Reporting deliberately excludes archived events. Saying so is better than
   // leaving someone to wonder why an old event's revenue is not counted.
   const archivedCount = scopeEvents.length - selectable.length;
-
-  const qualification = useMemo(() => {
-    const byState = new Map(
-      (analytics?.qualificationMix || []).map((item) => [item.state, item.count]),
-    );
-    return [
-      { key: 'hot', label: 'Hot', value: byState.get('hot') || 0, tone: 'hot' },
-      { key: 'warm', label: 'Warm', value: byState.get('warm') || 0, tone: 'warm' },
-      { key: 'cold', label: 'Cold', value: byState.get('cold') || 0, tone: 'cold' },
-      {
-        key: 'unqualified',
-        label: 'Unqualified',
-        value: byState.get('unqualified') || 0,
-        tone: 'none',
-      },
-    ];
-  }, [analytics]);
-
-  const reviewSegments = useMemo(() => {
-    const byStatus = new Map(
-      (analytics?.reviewMix || []).map((item) => [item.status, item.count]),
-    );
-    return [
-      {
-        key: 'confirmed',
-        label: 'Confirmed',
-        value: byStatus.get('confirmed') || 0,
-        tone: 'hot',
-      },
-      {
-        key: 'needs_review',
-        label: 'Awaiting review',
-        value: byStatus.get('needs_review') || 0,
-        tone: 'warm',
-      },
-      {
-        key: 'erased',
-        label: 'Personal data erased',
-        value: byStatus.get('erased') || 0,
-        tone: 'none',
-      },
-    ];
-  }, [analytics]);
 
   const captureSegments = useMemo(
     () =>
@@ -1572,12 +2026,32 @@ export default function Analytics({
         ? ' is-negative'
         : ' is-positive';
 
+  // Only chapters that actually rendered are offered for navigation.
+  const chapters = [
+    { id: 'an-revenue', label: 'Revenue', when: true },
+    { id: 'an-funnel', label: 'Conversion', when: hasLeads && Boolean(conversion) },
+    { id: 'an-pipeline', label: 'Pipeline', when: hasOpportunities && Boolean(analytics) },
+    { id: 'an-quality', label: 'Lead quality', when: hasLeads && Boolean(analytics) },
+    { id: 'an-momentum', label: 'Momentum', when: hasTimeline && Boolean(analytics) },
+    { id: 'an-commercial', label: 'Commercial', when: hasRfqs || hasQuotations },
+    { id: 'an-investment', label: 'Investment', when: true },
+    { id: 'an-events', label: 'Events', when: Boolean(comparable) },
+    {
+      id: 'an-attention',
+      label: 'Attention',
+      when: actions.length > 0 || (analytics?.leadOwners.length || 0) > 1,
+    },
+  ]
+    .filter((chapter) => chapter.when)
+    .map(({ id, label }) => ({ id, label }));
+
   return (
     <div className="an" ref={rootRef}>
       {scopeBar}
+      <ChapterRail chapters={chapters} />
 
       {/* ── the ledger ──────────────────────────────────────────────────── */}
-      <section className="an-ledger">
+      <section className="an-ledger" id="an-revenue">
         <div className="an-ledger-head">
           <p className="an-eyebrow">
             {hasWins
@@ -1665,7 +2139,7 @@ export default function Analytics({
 
       {/* ── conversion spine ────────────────────────────────────────────── */}
       {hasLeads && conversion ? (
-        <section className="an-block">
+        <section className="an-block" id="an-funnel">
           <SectionHead
             eyebrow="Conversion"
             title="From the floor to the ledger"
@@ -1691,33 +2165,37 @@ export default function Analytics({
 
       {/* ── pipeline + lead quality ─────────────────────────────────────── */}
       {hasOpportunities && analytics ? (
-        <section className="an-block an-split">
+        <section className="an-block" id="an-pipeline">
+          {/* The encoding is explained once, in the chart's own readout. */}
+          <SectionHead eyebrow="Pipeline" title="Where the value is sitting" />
+          <PipelineFlow
+            stages={analytics.pipelineStages}
+            closed={analytics.closedStages}
+            currency={currency}
+            onOpenStage={onOpenStage}
+          />
+        </section>
+      ) : null}
+
+      {/* ── lead quality ────────────────────────────────────────────────── */}
+      {hasLeads && analytics ? (
+        <section className="an-block an-split" id="an-quality">
           <div className="an-sub">
             <SectionHead
-              eyebrow="Pipeline"
-              title="Where the value is sitting"
-              note="Each band shows total opportunity value with the probability-weighted portion inset. Select a stage to open those opportunities."
+              eyebrow="Lead quality"
+              title="Who is in the pipeline"
+              note={
+                hasOpportunities
+                  ? undefined
+                  : 'Pipeline analytics appear once a confirmed conversation is converted into an opportunity.'
+              }
             />
-            <StageBands
-              stages={analytics.pipelineStages}
-              closed={analytics.closedStages}
-              currency={currency}
-              onOpenStage={onOpenStage}
+            <QualityMatrix
+              cells={analytics.qualificationByReview}
+              total={analytics.coverage?.scopedLeads || 0}
             />
           </div>
-          <div className="an-sub">
-            <SectionHead eyebrow="Lead quality" title="Who is in the pipeline" />
-            <DensityStrip
-              title="Qualification"
-              note="Salesperson-assigned state"
-              segments={qualification}
-              total={qualification.reduce((sum, item) => sum + item.value, 0)}
-            />
-            <DensityStrip
-              title="Review status"
-              segments={reviewSegments}
-              total={reviewSegments.reduce((sum, item) => sum + item.value, 0)}
-            />
+          <div className="an-sub an-quality-side">
             {captureSegments.length ? (
               <DensityStrip
                 title="How they were captured"
@@ -1739,44 +2217,11 @@ export default function Analytics({
             ) : null}
           </div>
         </section>
-      ) : hasLeads && analytics ? (
-        <section className="an-block an-split">
-          <div className="an-sub">
-            <SectionHead
-              eyebrow="Lead quality"
-              title="Who is in the pipeline"
-              note="Pipeline analytics appear once a confirmed conversation is converted into an opportunity."
-            />
-            <DensityStrip
-              title="Qualification"
-              note="Salesperson-assigned state"
-              segments={qualification}
-              total={qualification.reduce((sum, item) => sum + item.value, 0)}
-            />
-            <DensityStrip
-              title="Review status"
-              segments={reviewSegments}
-              total={reviewSegments.reduce((sum, item) => sum + item.value, 0)}
-            />
-          </div>
-          <div className="an-sub">
-            {captureSegments.length ? (
-              <DensityStrip
-                title="How they were captured"
-                segments={captureSegments}
-                total={captureSegments.reduce(
-                  (sum, item) => sum + item.value,
-                  0,
-                )}
-              />
-            ) : null}
-          </div>
-        </section>
       ) : null}
 
       {/* ── momentum ────────────────────────────────────────────────────── */}
       {hasTimeline && analytics ? (
-        <section className="an-block">
+        <section className="an-block" id="an-momentum">
           <SectionHead
             eyebrow="Momentum"
             title="Capture volume by day"
@@ -1800,11 +2245,9 @@ export default function Analytics({
 
       {/* ── commercial lifecycles ───────────────────────────────────────── */}
       {hasRfqs || hasQuotations ? (
-        <section className="an-block an-split-even">
+        <section className="an-block an-split-even" id="an-commercial">
           {hasRfqs && analytics ? (
-            <LifecycleRail
-              title="RFQ lifecycle"
-              note="Requests for quotation received against this scope"
+            <RfqTrack
               progression={[
                 'received',
                 'reviewing',
@@ -1814,33 +2257,23 @@ export default function Analytics({
               ]}
               terminal={['won', 'lost']}
               rows={rfqRows}
-              currency={currency}
-              showValue={false}
-              footer={
-                <>
-                  <b>{count(analytics.rfqsWithQuotation)}</b> of{' '}
-                  {count(analytics.rfqTotal)} RFQs have at least one quotation
-                  raised against them.
-                </>
-              }
+              total={analytics.rfqTotal}
+              quoted={analytics.rfqsWithQuotation}
             />
           ) : null}
           {hasQuotations ? (
-            <LifecycleRail
-              title="Quotation lifecycle"
-              note="A separate document lifecycle — not a continuation of the RFQ stages"
+            <QuotationLedger
               progression={['draft', 'approved', 'sent', 'accepted']}
               terminal={['rejected', 'expired']}
               rows={quotationRows}
               currency={currency}
-              showValue
             />
           ) : null}
         </section>
       ) : null}
 
       {/* ── cost + evidence ─────────────────────────────────────────────── */}
-      <section className="an-block an-split">
+      <section className="an-block an-split" id="an-investment">
         <div className="an-sub">
           <SectionHead
             eyebrow="Investment"
@@ -1864,39 +2297,15 @@ export default function Analytics({
         </div>
       </section>
 
-      {/* ── meetings ────────────────────────────────────────────────────── */}
-      {hasMeetings && analytics ? (
-        <section className="an-block an-meetings">
-          <SectionHead eyebrow="Activity" title="Meetings booked from this scope" />
-          <ul className="an-meeting-list">
-            {[...analytics.meetingStatuses]
-              .sort(
-                (left, right) =>
-                  MEETING_ORDER.indexOf(left.status) -
-                  MEETING_ORDER.indexOf(right.status),
-              )
-              .map((item) => (
-                <li key={item.status}>
-                  <b>{count(item.total)}</b>
-                  <span>{titleCase(item.status)}</span>
-                  {item.status === 'scheduled' && item.upcoming ? (
-                    <small>{count(item.upcoming)} still ahead</small>
-                  ) : null}
-                </li>
-              ))}
-          </ul>
-        </section>
-      ) : null}
-
       {/* ── event comparison ────────────────────────────────────────────── */}
       {comparable ? (
-        <section className="an-block">
+        <section className="an-block" id="an-events">
           <SectionHead
             eyebrow="Comparison"
             title="Event by event"
-            note="Each bar is scaled against the strongest event for that measure. Investment basis and ROI are calculated per event, so they will not sum to the totals above. Select an event to scope this page to it."
+            note="Each bar is scaled against the strongest event in that column. Investment basis and ROI are calculated per event, so they will not sum to the totals above. Select an event to scope this page to it."
           />
-          <EventComparison
+          <EventMatrix
             events={comparable}
             currency={currency}
             onScopeChange={handleScope}
@@ -1904,17 +2313,39 @@ export default function Analytics({
         </section>
       ) : null}
 
-      {/* ── attention ───────────────────────────────────────────────────── */}
-      {actions.length ? (
-        <section className="an-block">
+      {/* ── attention, with the team split alongside it ─────────────────── */}
+      {actions.length || (analytics?.leadOwners.length || 0) > 1 ? (
+        <section className="an-block an-split" id="an-attention">
+        {actions.length ? (
+        <div className="an-sub">
           <SectionHead
             eyebrow="Attention"
             title="What the backlog is waiting on"
             note="Ranked by the workspace's own urgency rules. Select one to open the record."
-            aside={<span className="an-count">{actions.length} ranked</span>}
+            aside={
+              hasMeetings && analytics ? (
+                <span className="an-meeting-inline">
+                  {[...analytics.meetingStatuses]
+                    .sort(
+                      (left, right) =>
+                        MEETING_ORDER.indexOf(left.status) -
+                        MEETING_ORDER.indexOf(right.status),
+                    )
+                    .map((item) => (
+                      <span key={item.status}>
+                        <b>{count(item.total)}</b> {titleCase(item.status)}
+                        {item.status === 'scheduled' && item.upcoming
+                          ? ` (${count(item.upcoming)} ahead)`
+                          : ''}
+                      </span>
+                    ))}
+                  <small>meetings</small>
+                </span>
+              ) : null
+            }
           />
           <ul className="an-actions">
-            {actions.slice(0, 8).map((action) => {
+            {actions.slice(0, actionsExpanded ? actions.length : 5).map((action) => {
               const due = dueLabel(action.dueAt, now);
               const overdue = action.dueAt != null && action.dueAt < now;
               return (
@@ -1938,39 +2369,68 @@ export default function Analytics({
               );
             })}
           </ul>
-        </section>
-      ) : null}
+          {/* The ranking is the backend's; expanding only reveals more of it. */}
+          {actions.length > 5 ? (
+            <button
+              type="button"
+              className="an-more"
+              onClick={() => setActionsExpanded((value) => !value)}
+              aria-expanded={actionsExpanded}
+            >
+              {actionsExpanded
+                ? 'Show the top 5'
+                : `View all ${count(actions.length)} ranked actions`}
+            </button>
+          ) : null}
+        </div>
+        ) : null}
 
       {/* ── owners ──────────────────────────────────────────────────────── */}
       {(analytics?.leadOwners.length || 0) > 1 && analytics ? (
-        <section className="an-block">
+        <div className="an-sub">
           <SectionHead
             eyebrow="Team"
             title="Who captured the conversations"
             note="Leads in scope by their assigned owner."
           />
           <ul className="an-owners">
-            {analytics.leadOwners.map((owner) => {
-              const max = Math.max(
-                ...analytics.leadOwners.map((item) => item.total),
-                1,
-              );
-              return (
-                <li key={owner.ownerId}>
-                  <span className="an-owner-name">
-                    {owner.ownerName || owner.ownerId}
-                  </span>
-                  <span className="an-owner-track">
-                    <i style={fill(owner.total / max)} />
-                  </span>
-                  <span className="an-owner-value">
-                    <b>{count(owner.total)}</b>
-                    <small>{count(owner.confirmed)} confirmed</small>
-                  </span>
-                </li>
-              );
-            })}
+            {analytics.leadOwners
+              .slice(0, ownersExpanded ? analytics.leadOwners.length : 5)
+              .map((owner) => {
+                const max = Math.max(
+                  ...analytics.leadOwners.map((item) => item.total),
+                  1,
+                );
+                return (
+                  <li key={owner.ownerId}>
+                    <span className="an-owner-name">
+                      {owner.ownerName || owner.ownerId}
+                    </span>
+                    <span className="an-owner-track">
+                      <i style={fill(owner.total / max)} />
+                    </span>
+                    <span className="an-owner-value">
+                      <b>{count(owner.total)}</b>
+                      <small>{count(owner.confirmed)} confirmed</small>
+                    </span>
+                  </li>
+                );
+              })}
           </ul>
+          {analytics.leadOwners.length > 5 ? (
+            <button
+              type="button"
+              className="an-more"
+              onClick={() => setOwnersExpanded((value) => !value)}
+              aria-expanded={ownersExpanded}
+            >
+              {ownersExpanded
+                ? 'Show the top 5'
+                : `Show all ${count(analytics.leadOwners.length)} owners`}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
         </section>
       ) : null}
 

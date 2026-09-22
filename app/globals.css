@@ -1398,9 +1398,375 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .an-cost-amount { grid-area: amount; }
 }
 
+
+/* ═══ ANALYTICS REFINEMENT ═══════════════════════════════════════════════════
+   Replaces the repeated horizontal-bar treatment in the pipeline, lead quality,
+   commercial lifecycle and event comparison chapters with geometry specific to
+   what each one measures.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── chapter rail ────────────────────────────────────────────────────────── */
+.an-rail-nav {
+  position: sticky; top: 8px; z-index: 15;
+  display: flex; gap: 2px; flex-wrap: wrap;
+  margin: -14px 0 -8px; padding: 5px 0;
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  backdrop-filter: saturate(1.1) blur(6px);
+}
+.an-rail-nav button {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 0; border-radius: var(--radius-pill); padding: 4px 11px 4px 8px;
+  background: transparent; color: var(--text-500);
+  font-size: var(--text-label); line-height: var(--lh-label); cursor: pointer;
+  transition: color var(--ease-ui), background var(--ease-ui);
+}
+.an-rail-nav button i {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--neutral-300);
+  transition: background var(--ease-ui), transform var(--ease-ui);
+}
+.an-rail-nav button:hover { color: var(--brand-800); background: var(--surface-2); }
+.an-rail-nav button:focus-visible { outline: none; box-shadow: var(--ring-brand); }
+.an-rail-nav button.is-current { color: var(--brand-900); font-weight: var(--weight-semibold); }
+.an-rail-nav button.is-current i { background: var(--accent-600); transform: scale(1.5); }
+
+/* ── pipeline flow ───────────────────────────────────────────────────────── */
+/* Width is each stage's share of open value, height is its average
+   probability, so the solid area of a stage IS its weighted pipeline. */
+.an-flow { display: grid; gap: 16px; }
+.an-flow-track {
+  --flow-gap: 3px;
+  display: flex; align-items: flex-end; gap: var(--flow-gap);
+  height: 232px; padding-bottom: 42px;
+  border-bottom: 1px solid var(--line-strong);
+}
+.an-flow-stage {
+  position: relative; display: block; align-self: stretch;
+  /* The gaps have to come out of the share, or the widths sum past 100%
+     and the last stage overhangs the column. */
+  flex: 0 0 auto; min-width: 0;
+  width: calc(var(--w) * (100% - (var(--stages) - 1) * var(--flow-gap)));
+  border: 0; padding: 0 0 42px; margin-bottom: -42px;
+  background: transparent; cursor: pointer; text-align: left;
+  /* Width carries each stage share, so it has to animate for the band to morph
+     between scopes instead of snapping. Seven flex children make this cheap. */
+  transition: opacity var(--ease-ui), width var(--an-grow) var(--an-ease);
+}
+.an-flow-stage.is-dimmed { opacity: .45; }
+.an-flow-stage:focus-visible { outline: none; }
+.an-flow-stage:focus-visible .an-flow-col { box-shadow: var(--ring-brand); }
+.an-flow-col {
+  position: relative; display: block; height: 100%;
+  border-radius: 4px 4px 0 0; overflow: hidden;
+}
+.an-flow-raw,
+.an-flow-weighted {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  transform-origin: bottom center;
+  transition: transform var(--an-grow) var(--an-ease), background var(--ease-ui);
+}
+/* The pale column is the stage's money before probability is applied. */
+.an-flow-raw { top: 0; transform: scaleY(var(--enter)); background: var(--brand-100); }
+/* The solid column is the same money after it. */
+.an-flow-weighted {
+  top: 0; transform: scaleY(calc(var(--p) * var(--enter)));
+  background: var(--brand-700); border-radius: 4px 4px 0 0;
+}
+.an-flow-stage.is-active .an-flow-weighted { background: var(--brand-800); }
+.an-flow-stage:last-child .an-flow-weighted { background: var(--brand-600); }
+.an-flow-label {
+  position: absolute; left: 0; right: 4px; bottom: 12px;
+  display: grid; gap: 1px; overflow: hidden;
+}
+.an-flow-label b {
+  color: var(--text-800); font-size: var(--text-label); line-height: var(--lh-label);
+  font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-flow-label small {
+  color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro);
+  font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-flow-stage.is-active .an-flow-label b { color: var(--brand-900); }
+
+.an-flow-readout,
+.an-track-readout,
+.an-matrix-readout {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  margin: 0; min-height: 40px;
+  color: var(--text-600); font-size: var(--text-sm); line-height: var(--lh-sm);
+  font-variant-numeric: tabular-nums;
+}
+.an-flow-readout b,
+.an-track-readout b,
+.an-matrix-readout b { color: var(--brand-900); font-weight: var(--weight-semibold); }
+.an-flow-hint { color: var(--text-400); max-width: 74ch; }
+.an-flow-share { color: var(--text-400); }
+
+.an-outcomes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.an-outcome {
+  display: grid; gap: 3px; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  padding: 13px 15px; background: transparent; cursor: pointer;
+  transition: background var(--ease-ui), border-color var(--ease-ui);
+}
+.an-outcome:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-2); }
+.an-outcome:focus-visible { outline: none; box-shadow: var(--ring-brand); }
+.an-outcome:disabled { cursor: default; opacity: .55; }
+.an-outcome-head {
+  display: flex; align-items: center; gap: 7px;
+  color: var(--text-600); font-size: var(--text-label); line-height: var(--lh-label);
+}
+.an-outcome-head i { width: 9px; height: 9px; border-radius: 2px; }
+.an-outcome.is-won .an-outcome-head i { background: var(--accent-500); }
+.an-outcome.is-lost .an-outcome-head i { background: var(--neutral-300); }
+.an-outcome strong {
+  color: var(--brand-900); font-size: var(--text-lg); line-height: var(--lh-lg);
+  letter-spacing: -.02em; font-weight: var(--weight-strong); font-variant-numeric: tabular-nums;
+}
+.an-outcome small { color: var(--text-400); font-size: var(--text-micro); line-height: var(--lh-micro); }
+
+/* ── lead quality cross-tab ──────────────────────────────────────────────── */
+.an-matrix { display: grid; gap: 10px; }
+.an-matrix-grid {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) repeat(var(--cols), minmax(0, 1fr));
+  gap: 3px;
+}
+.an-matrix-corner { display: block; }
+.an-matrix-col-head,
+.an-matrix-row-head {
+  display: grid; gap: 1px; align-content: end;
+  padding: 0 2px 5px;
+  color: var(--text-600); font-size: var(--text-label); line-height: var(--lh-label);
+}
+.an-matrix-row-head { align-content: center; padding: 0 10px 0 0; text-align: right; }
+.an-matrix-col-head b,
+.an-matrix-row-head b {
+  color: var(--text-400); font-size: var(--text-micro); line-height: var(--lh-micro);
+  font-weight: var(--weight-normal); font-variant-numeric: tabular-nums;
+}
+.an-matrix-cell {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 52px; border-radius: var(--radius-xs);
+  /* Shading carries magnitude; the printed count carries the value, so the
+     grid never depends on colour alone. */
+  /* The ramp stops well short of full strength so one dark ink stays legible
+     on every cell; shading still carries magnitude across the whole range. */
+  background: color-mix(in srgb, var(--brand-700) calc(var(--weight) * 52%), var(--neutral-50));
+  color: var(--neutral-900);
+  font-size: var(--text-base); line-height: var(--lh-base);
+  font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums;
+  transition: box-shadow var(--ease-ui), transform var(--ease-ui);
+}
+.an-matrix-cell.is-empty { color: var(--text-600); font-weight: var(--weight-normal); }
+.an-matrix-cell.is-active { box-shadow: 0 0 0 2px var(--accent-500); }
+.an-matrix-readout { min-height: 34px; }
+
+.an-quality-side { gap: 22px; }
+
+/* ── RFQ process track ───────────────────────────────────────────────────── */
+/* Chevrons, so the row reads as a request travelling rather than as a ranking. */
+.an-track { display: grid; gap: 14px; align-content: start; }
+.an-track-head h3 { margin: 0; color: var(--brand-900); font-size: var(--text-md); line-height: var(--lh-md); font-weight: var(--weight-semibold); }
+.an-track-head small { display: block; margin-top: 3px; color: var(--text-500); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.an-track-steps { display: flex; gap: 3px; }
+.an-track-step {
+  position: relative; flex: 1 1 0; min-width: 0;
+  display: grid; gap: 1px; align-content: end;
+  height: 104px; padding: 8px 10px 9px 16px;
+  background: var(--neutral-50);
+  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 50%, calc(100% - 11px) 100%, 0 100%, 11px 50%);
+  transition: background var(--ease-ui);
+}
+.an-track-step:first-child { clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 50%, calc(100% - 11px) 100%, 0 100%); padding-left: 12px; }
+.an-track-step:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 11px 50%); }
+.an-track-fill {
+  position: absolute; inset: 0; transform-origin: bottom center;
+  transform: scaleY(calc(var(--level) * var(--enter)));
+  background: var(--brand-200);
+  transition: transform var(--an-grow) var(--an-ease), background var(--ease-ui);
+}
+.an-track-step.is-active .an-track-fill { background: var(--brand-400); }
+.an-track-step.is-empty .an-track-fill { background: transparent; }
+.an-track-step b,
+.an-track-step small { position: relative; z-index: 1; }
+.an-track-step b {
+  color: var(--brand-900); font-size: var(--text-lg); line-height: var(--lh-lg);
+  letter-spacing: -.02em; font-weight: var(--weight-strong); font-variant-numeric: tabular-nums;
+}
+.an-track-step small {
+  color: var(--text-700); font-size: var(--text-micro); line-height: var(--lh-micro);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-track-step.is-empty b { color: var(--text-400); }
+.an-track-step em {
+  position: absolute; top: 8px; right: 12px; z-index: 1;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--danger-500);
+}
+.an-track-outcomes { display: flex; gap: 22px; padding-top: 11px; border-top: 1px dashed var(--line); }
+.an-track-outcome {
+  display: inline-flex; align-items: baseline; gap: 7px;
+  color: var(--text-600); font-size: var(--text-sm); line-height: var(--lh-sm);
+}
+.an-track-outcome i { width: 9px; height: 9px; border-radius: 2px; align-self: center; }
+.an-track-outcome.is-won i { background: var(--accent-500); }
+.an-track-outcome.is-lost i { background: var(--neutral-300); }
+.an-track-outcome b { color: var(--brand-900); font-size: var(--text-md); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+
+/* ── quotation value ledger ──────────────────────────────────────────────── */
+/* Quotations carry money, so their statuses are sized by value, not by count. */
+.an-quotes { display: grid; gap: 14px; align-content: start; }
+.an-quote-stack { display: flex; align-items: flex-end; gap: 26px; min-height: 176px; }
+.an-quote-column { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
+.an-quote-column.is-lost { flex: 0 0 34%; }
+.an-quote-caption {
+  order: -1; margin-bottom: 4px;
+  color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro);
+  letter-spacing: .07em; text-transform: uppercase; font-weight: var(--weight-semibold);
+}
+.an-ledger-block {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  min-height: 28px; height: calc(18px + var(--h) * 104px);
+  transition: height var(--an-grow) var(--an-ease);
+}
+.an-ledger-bar {
+  flex: 0 0 8px; align-self: stretch; border-radius: 3px;
+  background: var(--brand-600);
+  transition: background var(--ease-ui);
+}
+.an-ledger-block.is-terminal .an-ledger-bar { background: var(--neutral-400); }
+.an-ledger-block:last-child:not(.is-terminal) .an-ledger-bar { background: var(--accent-500); }
+.an-ledger-block.is-active .an-ledger-bar { background: var(--brand-800); }
+.an-ledger-block.is-active.is-terminal .an-ledger-bar { background: var(--neutral-500); }
+.an-ledger-meta { display: grid; gap: 1px; min-width: 0; }
+.an-ledger-meta b { color: var(--text-800); font-size: var(--text-sm); line-height: var(--lh-sm); font-weight: var(--weight-medium); }
+.an-ledger-meta small { color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro); font-variant-numeric: tabular-nums; }
+.an-quote-none { margin: 0; color: var(--text-400); font-size: var(--text-sm); }
+
+/* ── event matrix ────────────────────────────────────────────────────────── */
+.an-matrix-events { display: grid; gap: 2px; }
+.an-em-head,
+.an-em-row {
+  display: grid;
+  grid-template-columns: minmax(168px, 1.35fr) repeat(4, minmax(0, 1fr)) minmax(92px, auto);
+  align-items: center; gap: 20px;
+}
+.an-em-head {
+  padding: 0 12px 9px; border-bottom: 1px solid var(--line);
+  color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro);
+  letter-spacing: .07em; text-transform: uppercase; font-weight: var(--weight-semibold);
+}
+.an-em-roi-head { text-align: right; }
+.an-em-row {
+  width: 100%; text-align: left; border: 0; border-radius: var(--radius-md);
+  padding: 14px 12px; background: transparent; cursor: pointer;
+  transition: background var(--ease-ui), opacity var(--ease-ui);
+}
+.an-em-row:hover { background: var(--surface-2); }
+.an-em-row:focus-visible { outline: none; box-shadow: var(--ring-brand); }
+.an-em-row.is-dimmed { opacity: .45; }
+.an-em-name { display: grid; gap: 2px; min-width: 0; }
+.an-em-name b { color: var(--brand-900); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-em-name small { color: var(--text-400); font-size: var(--text-micro); line-height: var(--lh-micro); }
+.an-em-cell { display: grid; gap: 4px; min-width: 0; }
+.an-em-cell b { color: var(--brand-900); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-em-cell i {
+  height: 4px; border-radius: 2px; transform-origin: left center;
+  transform: scaleX(calc(var(--fill) * var(--enter)));
+  transition: transform var(--an-grow) var(--an-ease);
+}
+.an-em-cell small { color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-em-roi { display: grid; gap: 1px; text-align: right; }
+.an-em-roi b { color: var(--text-700); font-size: var(--text-md); line-height: var(--lh-md); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-em-roi b.is-positive { color: #3d5a0c; }
+.an-em-roi b.is-negative { color: var(--danger-700); }
+.an-em-roi small { color: var(--text-400); font-size: var(--text-micro); line-height: var(--lh-micro); font-variant-numeric: tabular-nums; }
+
+/* ── expandable sections ─────────────────────────────────────────────────── */
+.an-more {
+  justify-self: start; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  padding: 6px 15px; background: var(--color-surface); color: var(--text-700);
+  font-size: var(--text-sm); line-height: var(--lh-sm); cursor: pointer;
+  transition: background var(--ease-ui), border-color var(--ease-ui);
+}
+.an-more:hover { border-color: var(--line-strong); background: var(--surface-2); color: var(--brand-800); }
+.an-more:focus-visible { outline: none; box-shadow: var(--ring-brand); }
+
+.an-meeting-inline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; color: var(--text-500); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.an-meeting-inline b { color: var(--brand-900); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.an-meeting-inline small { color: var(--text-400); font-size: var(--text-micro); letter-spacing: .06em; text-transform: uppercase; }
+
+/* ── rhythm: chapters breathe, rows tighten ──────────────────────────────── */
+.an { gap: 34px; }
+.an-block { gap: 18px; padding-top: 28px; }
+.an-split { gap: 48px; }
+.an-ledger { gap: 34px; }
+.an-timeline svg { height: 196px; }
+.an-actions button { padding: 12px 10px; }
+.an-action-copy b { font-size: var(--text-base); line-height: var(--lh-base); }
+.an-action-due { font-size: var(--text-sm); }
+.an-owners li { padding: 9px 0; }
+.an-owner-name { font-size: var(--text-base); }
+.an-rail-foot,
+.an-coverage { font-size: var(--text-sm); }
+
+@media (max-width: 1180px) {
+  /* The column header cannot survive the reflow, so each cell keeps its own
+     label and the figures stay on screen rather than being dropped. */
+  .an-em-head { display: none; }
+  .an-em-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 16px; column-gap: 24px; align-items: start;
+  }
+  .an-em-name { grid-row: 1; grid-column: 1; }
+  .an-em-roi { grid-row: 1; grid-column: 2; }
+  .an-em-cell::before {
+    content: attr(data-label);
+    color: var(--text-500); font-size: var(--text-micro); line-height: var(--lh-micro);
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+}
+@media (max-width: 760px) {
+  .an { gap: 30px; }
+  .an-block { padding-top: 26px; }
+  .an-rail-nav { display: none; }
+  .an-flow-track { height: 190px; --flow-gap: 2px; }
+  .an-flow-label b { font-size: var(--text-micro); }
+  .an-flow-label small { display: none; }
+  .an-outcomes { grid-template-columns: 1fr; }
+  .an-track-steps { flex-direction: column; gap: 2px; }
+  .an-track-step,
+  .an-track-step:first-child,
+  .an-track-step:last-child {
+    height: auto; min-height: 52px; padding: 10px 14px;
+    clip-path: none; border-radius: var(--radius-xs);
+    grid-template-columns: auto minmax(0, 1fr);
+    display: grid; align-items: center; gap: 10px;
+  }
+  .an-track-step small { grid-column: 2; }
+  .an-track-step b { grid-column: 1; grid-row: 1; }
+  .an-track-fill { transform-origin: left center; transform: scaleX(calc(var(--level) * var(--enter))); }
+  .an-quote-stack { flex-direction: column; align-items: stretch; gap: 20px; }
+  .an-quote-column.is-lost { flex: 1 1 auto; }
+  .an-matrix-grid { grid-template-columns: minmax(74px, auto) repeat(var(--cols), minmax(0, 1fr)); gap: 2px; }
+  .an-matrix-cell { min-height: 44px; font-size: var(--text-sm); }
+  .an-matrix-col-head, .an-matrix-row-head { font-size: var(--text-micro); }
+}
+
+
+/* ── timeline: the line draws itself in, once per data change ────────────── */
+.an-timeline-line {
+  stroke-dasharray: 2400; stroke-dashoffset: 2400;
+  animation: an-draw 900ms var(--an-ease) forwards;
+}
+.an-timeline-confirmed { animation-delay: 120ms; }
+.an-timeline-area { opacity: 0; animation: an-fade 700ms var(--an-ease) 240ms forwards; }
+@keyframes an-draw { to { stroke-dashoffset: 0; } }
+@keyframes an-fade { to { opacity: 1; } }
 /* ── reduced motion: the final state, immediately ────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .an { --enter: 1; }
+  .an-timeline-line { stroke-dashoffset: 0; }
+  .an-timeline-area { opacity: 1; }
   .an *, .an *::before, .an *::after {
     transition-duration: 0ms !important;
     animation-duration: 0ms !important;
