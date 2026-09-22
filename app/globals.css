@@ -1072,8 +1072,8 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
    positioned inside the track column, so it shares the bars' scale exactly. */
 .an-ladder-marks { position: absolute; inset: 0; pointer-events: none; display: grid; grid-template-columns: minmax(126px, 168px) minmax(0, 1fr) minmax(104px, auto); gap: 18px; }
 .an-ladder-marks > span { grid-column: 2; position: relative; }
-.an-ladder-mark { position: absolute; top: 6px; bottom: 6px; width: 0; border-left: 1px dashed var(--warm-600); opacity: .8; }
-.an-ladder-mark b { position: absolute; top: -4px; left: 6px; color: var(--warm-700); font-size: var(--text-micro); line-height: var(--lh-micro); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; font-weight: var(--weight-semibold); }
+.an-ladder-mark { position: absolute; top: 14px; bottom: 10px; width: 0; border-left: 1px dashed var(--an-cost); opacity: .55; }
+
 
 /* ── conversion spine ────────────────────────────────────────────────────── */
 .an-spine { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0; list-style: none; }
@@ -1880,12 +1880,18 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 /* The ladder shares the chapter grid so its bars start on the same line as
    every chart below. The rows live in their own relatively-positioned block so
    the investment reference line can cut across exactly the track column. */
-.an-ladder { display: grid; grid-template-columns: 216px minmax(0, 1fr); row-gap: 0; column-gap: 60px; }
-.an-ladder-rows { grid-column: 2; position: relative; display: grid; gap: 0; }
-.an-ladder-row { grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) minmax(112px, auto); gap: 22px; padding: 14px 0; }
+/* The ladder row is itself the chapter grid: its label sits in the header
+   column, its bar starts where every chart starts, and its value ends at the
+   right margin. Indenting the whole ladder into column 2 instead left a wide
+   band of empty page down the left of the hero. */
+.an-ladder { display: block; }
+.an-ladder-rows { position: relative; display: grid; gap: 0; }
+.an-ladder-row { grid-template-columns: 216px minmax(0, 1fr) minmax(112px, auto); column-gap: 60px; row-gap: 0; padding: 14px 0; }
 .an-ladder-track { height: 26px; border-radius: 4px; }
 .an-ladder-track i { border-radius: 4px; }
-.an-ladder-marks { grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) minmax(112px, auto); gap: 22px; inset: 0; }
+/* row-gap, never the gap shorthand: it resets column-gap and drops the
+   reference line 60px left of the track it is meant to cut across. */
+.an-ladder-marks { grid-template-columns: 216px minmax(0, 1fr) minmax(112px, auto); row-gap: 0; column-gap: 60px; inset: 0; }
 .an-ladder-value { font-size: var(--text-md); }
 
 /* ── breathing room inside the visuals ───────────────────────────────────── */
@@ -1896,7 +1902,7 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 /* ── responsive: the header column folds on top ──────────────────────────── */
 @media (max-width: 1240px) {
   .an-block { grid-template-columns: 184px minmax(0, 1fr); column-gap: 40px; }
-  .an-ladder { grid-template-columns: 184px minmax(0, 1fr); column-gap: 40px; }
+  .an-ladder-row, .an-ladder-marks { grid-template-columns: 184px minmax(0, 1fr) minmax(112px, auto); column-gap: 40px; }
   .an-body-split, .an-body-even { grid-template-columns: minmax(0, 1fr); gap: 34px; }
 }
 @media (max-width: 1080px) {
@@ -1906,8 +1912,7 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   }
   .an-head { max-width: 62ch; }
   .an-head-stats { display: flex; gap: 28px; flex-wrap: wrap; }
-  .an-ladder { grid-template-columns: minmax(0, 1fr); }
-  .an-ladder-rows { grid-column: 1; }
+  .an-ladder-row, .an-ladder-marks { grid-template-columns: 150px minmax(0, 1fr) minmax(104px, auto); column-gap: 28px; }
   .an-ladder-marks { display: none; }
 }
 @media (max-width: 760px) {
@@ -1977,9 +1982,29 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .an-cost-entry-list button { grid-area: action; }
 }
 
+
+/* ── numbers in motion ───────────────────────────────────────────────────── */
+/* A figure lifts and fades as it travels to its new value, settling back as
+   it lands.
+   scope change reads as one movement rather than a flicker of digits.
+   Transform and opacity only, so nothing reflows. */
+.an-num { display: inline-block; transition: transform 220ms var(--an-ease), opacity 220ms var(--an-ease); }
+.an-num.is-shifting { transform: translateY(-4px); opacity: .35; }
+
+/* Supporting figures settle in together when the scope changes. */
+@keyframes an-settle {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+.an-facts > div { animation: an-settle 420ms var(--an-ease) both; }
+.an-facts > div:nth-child(2) { animation-delay: 45ms; }
+.an-facts > div:nth-child(3) { animation-delay: 90ms; }
+.an-facts > div:nth-child(4) { animation-delay: 135ms; }
 /* ── reduced motion: the final state, immediately ────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .an { --enter: 1; }
+  .an-num, .an-num.is-shifting { transform: none !important; opacity: 1 !important; }
+  .an-facts > div { animation: none !important; opacity: 1; transform: none; }
   .an-timeline-line { stroke-dashoffset: 0; }
   .an-timeline-area { opacity: 1; }
   .an *, .an *::before, .an *::after {

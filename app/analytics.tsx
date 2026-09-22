@@ -310,6 +310,11 @@ function useCountUp(value: number) {
     prefersReducedMotion() ? value : 0,
   );
   const fromRef = useRef(prefersReducedMotion() ? value : 0);
+  // Digits changing every frame read as noise. Lifting and fading the figure
+  // while it travels, then letting it settle, makes the change feel like one
+  // movement instead of a flicker. Toggled straight on the node so the effect
+  // costs no extra renders on top of the per-frame value update.
+  const nodeRef = useRef<HTMLSpanElement | null>(null);
   useEffect(() => {
     const from = fromRef.current;
     if (from === value) return;
@@ -321,6 +326,8 @@ function useCountUp(value: number) {
       });
       return () => cancelAnimationFrame(frame);
     }
+    const node = nodeRef.current;
+    node?.classList.add('is-shifting');
     const started = performance.now();
     const duration = 620;
     const step = (now: number) => {
@@ -329,12 +336,17 @@ function useCountUp(value: number) {
       const next = from + (value - from) * eased;
       fromRef.current = progress < 1 ? next : value;
       setDisplay(fromRef.current);
+      // Released before the end so the sharpening finishes as the number lands.
+      if (progress > 0.35) node?.classList.remove('is-shifting');
       if (progress < 1) frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      node?.classList.remove('is-shifting');
+    };
   }, [value]);
-  return display;
+  return { display, nodeRef };
 }
 
 function CountMoney({
@@ -346,17 +358,21 @@ function CountMoney({
   currency: string;
   compact?: boolean;
 }) {
-  const shown = useCountUp(value);
+  const { display, nodeRef } = useCountUp(value);
   return (
-    <span className="an-num">
-      {compact ? compactMoney(shown, currency) : money(shown, currency)}
+    <span className="an-num" ref={nodeRef}>
+      {compact ? compactMoney(display, currency) : money(display, currency)}
     </span>
   );
 }
 
 function CountNumber({ value }: { value: number }) {
-  const shown = useCountUp(value);
-  return <span className="an-num">{count(shown)}</span>;
+  const { display, nodeRef } = useCountUp(value);
+  return (
+    <span className="an-num" ref={nodeRef}>
+      {count(display)}
+    </span>
+  );
 }
 
 /** Bars read their proportion from one custom property; CSS does the rest. */
@@ -478,15 +494,16 @@ function ValueLadder({
       {/* The reference line has to share the rows' containing block, or it
           drifts out of the track column it is meant to cut across. */}
       <div className="an-ladder-rows">
+        {/* No caption: the line rises from the end of the Investment bar and
+            that row is named and valued on the same line, so a floating
+            "INVESTED" label only collided with the bar it was labelling. */}
         {report.investmentBasis > 0 && basisRatio < 0.97 ? (
           <div className="an-ladder-marks" aria-hidden="true">
             <span>
               <i
                 className="an-ladder-mark"
                 style={{ left: `${Math.min(100, basisRatio * 100)}%` }}
-              >
-                <b>Invested</b>
-              </i>
+              />
             </span>
           </div>
         ) : null}
@@ -2066,7 +2083,7 @@ export default function Analytics({
           {/* Figures rather than a paragraph: the same facts read faster as a
               row of labelled numbers than as a sentence to be parsed. */}
           {hasWins ? (
-            <dl className="an-facts">
+            <dl className="an-facts" key={scopeEventId || 'all'}>
               <div>
                 <dt>Won</dt>
                 <dd>{count(report.wonOpportunities)}</dd>
@@ -2095,7 +2112,7 @@ export default function Analytics({
               </div>
             </dl>
           ) : hasOpportunities ? (
-            <dl className="an-facts">
+            <dl className="an-facts" key={scopeEventId || 'all'}>
               <div>
                 <dt>Open</dt>
                 <dd>{count(report.openOpportunities)}</dd>
