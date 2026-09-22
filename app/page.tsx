@@ -1210,6 +1210,30 @@ function dueStatus(dueDate: string | undefined, timezone: string) {
   return { label: dueDate, tone: 'neutral' };
 }
 
+// One row per durable contact, not per event/lead encounter (Release C on
+// the exhibitor side, Release D here on the visitor side): the same person
+// met twice is one relationship, shown once, with how many times they were
+// met - not unrelated duplicate rows. Leads without a resolved contactId
+// (pre-migration data) fall back to their own lead id, so nothing merges
+// incorrectly. Single shared implementation so exhibitor and visitor lists
+// can never disagree on what "the same contact" means.
+function dedupeByContact(leads: SavedLead[]): SavedLead[] {
+  const byContact = new Map<string, SavedLead>();
+  for (const lead of leads) {
+    const key = lead.contactId || lead.id;
+    const existing = byContact.get(key);
+    if (!existing || lead.createdAt > existing.createdAt) {
+      byContact.set(key, {
+        ...lead,
+        encounterCount: (existing?.encounterCount || 0) + 1,
+      });
+    } else {
+      existing.encounterCount = (existing.encounterCount || 1) + 1;
+    }
+  }
+  return Array.from(byContact.values());
+}
+
 export default function Home() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [initializing, setInitializing] = useState(true);
@@ -4887,35 +4911,18 @@ export default function Home() {
       .join(' ')
       .toLowerCase()
       .includes(peopleTerm);
-  // One row per durable contact, not per event encounter: the same person
-  // met at two events is one relationship (see lib/contacts.ts), so the
-  // People list must show them once, with how many times they were met -
-  // not as unrelated duplicate rows. Leads without a resolved contactId
-  // (pre-migration data) fall back to their own lead id, so nothing merges
-  // incorrectly.
-  const contactsByIdentity = new Map<string, SavedLead>();
-  for (const lead of capturedLeads
-    .filter((item) => !accountFilter || leadInAccount(item, accountFilter))
-    .filter(matchesContact)
-    .filter((item) =>
-      peopleClass === 'classified'
-        ? Boolean(item.buyingRole)
-        : peopleClass === 'unclassified'
-          ? !item.buyingRole
-          : true,
-    )) {
-    const key = lead.contactId || lead.id;
-    const existing = contactsByIdentity.get(key);
-    if (!existing || lead.createdAt > existing.createdAt) {
-      contactsByIdentity.set(key, {
-        ...lead,
-        encounterCount: (existing?.encounterCount || 0) + 1,
-      });
-    } else {
-      existing.encounterCount = (existing.encounterCount || 1) + 1;
-    }
-  }
-  const contactRows = Array.from(contactsByIdentity.values()).sort((a, b) =>
+  const contactRows = dedupeByContact(
+    capturedLeads
+      .filter((item) => !accountFilter || leadInAccount(item, accountFilter))
+      .filter(matchesContact)
+      .filter((item) =>
+        peopleClass === 'classified'
+          ? Boolean(item.buyingRole)
+          : peopleClass === 'unclassified'
+            ? !item.buyingRole
+            : true,
+      ),
+  ).sort((a, b) =>
     peopleSort === 'az'
       ? a.fullName.localeCompare(b.fullName)
       : peopleSort === 'za'
@@ -11620,15 +11627,22 @@ export default function Home() {
                   <article className="panel records-panel">
                     {(() => {
                       const query = memoryQuery.trim().toLowerCase();
-                      const matches = query
-                        ? capturedLeads.filter((lead) =>
-                            [lead.fullName, lead.company, lead.role, lead.note]
-                              .filter(Boolean)
-                              .join(' ')
-                              .toLowerCase()
-                              .includes(query),
-                          )
-                        : capturedLeads;
+                      const matches = dedupeByContact(
+                        query
+                          ? capturedLeads.filter((lead) =>
+                              [
+                                lead.fullName,
+                                lead.company,
+                                lead.role,
+                                lead.note,
+                              ]
+                                .filter(Boolean)
+                                .join(' ')
+                                .toLowerCase()
+                                .includes(query),
+                            )
+                          : capturedLeads,
+                      );
                       if (!matches.length)
                         return (
                           <div className="empty-state">
@@ -11855,10 +11869,12 @@ export default function Home() {
                       </label>
                     </div>
                     {(() => {
-                      const visible = capturedLeads.filter(
-                        (lead) =>
-                          showArchivedContacts ||
-                          lead.relationshipStatus !== 'archived',
+                      const visible = dedupeByContact(
+                        capturedLeads.filter(
+                          (lead) =>
+                            showArchivedContacts ||
+                            lead.relationshipStatus !== 'archived',
+                        ),
                       );
                       if (!visible.length)
                         return (
@@ -11880,7 +11896,16 @@ export default function Home() {
                                 .slice(0, 2)}
                             </span>
                             <span>
-                              <strong>{lead.fullName}</strong>
+                              <strong>
+                                {lead.fullName}
+                                {lead.encounterCount &&
+                                lead.encounterCount > 1 ? (
+                                  <small className="entity-subtext">
+                                    {' '}
+                                    · met {lead.encounterCount} times
+                                  </small>
+                                ) : null}
+                              </strong>
                               <small>
                                 {lead.role || 'Role not added'} ·{' '}
                                 {lead.company}
@@ -11916,7 +11941,7 @@ export default function Home() {
                     <article className="panel records-panel">
                       <h2>Choose a contact to follow up with</h2>
                       {capturedLeads.length ? (
-                        capturedLeads.map((lead) => (
+                        dedupeByContact(capturedLeads).map((lead) => (
                           <button
                             key={lead.id}
                             className="record-row"
@@ -11962,6 +11987,31 @@ export default function Home() {
                       >
                         ← Choose a different contact
                       </button>
+                      {reviewLeadOtherEncounters.length ? (
+                        <div className="source-note">
+                          <span>
+                            Also met at {reviewLeadOtherEncounters.length}{' '}
+                            other{' '}
+                            {reviewLeadOtherEncounters.length === 1
+                              ? 'event'
+                              : 'events'}
+                          </span>
+                          <ul className="encounter-history-list">
+                            {reviewLeadOtherEncounters.map((lead) => (
+                              <li key={lead.id}>
+                                <span className="encounter-history-date">
+                                  {dateTime(lead.createdAt)}
+                                </span>
+                                <span className="encounter-history-note">
+                                  {lead.note ||
+                                    lead.role ||
+                                    'No note captured'}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                       {analysisError ? (
                         <p className="form-error" role="alert">
                           {analysisError}
