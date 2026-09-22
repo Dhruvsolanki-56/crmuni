@@ -85,6 +85,9 @@ type SavedLead = {
   id: string;
   eventId?: string;
   accountId?: string;
+  // Release C: which durable contacts row this event encounter belongs to
+  // (see lib/contacts.ts). Absent on leads captured before that migration.
+  contactId?: string;
   fullName: string;
   company: string;
   role?: string;
@@ -121,6 +124,9 @@ type SavedLead = {
   ownerName?: string;
   customFields?: Record<string, string>;
   relationshipStatus?: string;
+  // Client-derived only (see contactRows below) - how many event encounters
+  // this contact has, not something the API returns per lead.
+  encounterCount?: number;
 };
 
 type CaptureExtraction = {
@@ -4881,23 +4887,41 @@ export default function Home() {
       .join(' ')
       .toLowerCase()
       .includes(peopleTerm);
-  const contactRows = capturedLeads
-    .filter((lead) => !accountFilter || leadInAccount(lead, accountFilter))
+  // One row per durable contact, not per event encounter: the same person
+  // met at two events is one relationship (see lib/contacts.ts), so the
+  // People list must show them once, with how many times they were met -
+  // not as unrelated duplicate rows. Leads without a resolved contactId
+  // (pre-migration data) fall back to their own lead id, so nothing merges
+  // incorrectly.
+  const contactsByIdentity = new Map<string, SavedLead>();
+  for (const lead of capturedLeads
+    .filter((item) => !accountFilter || leadInAccount(item, accountFilter))
     .filter(matchesContact)
-    .filter((lead) =>
+    .filter((item) =>
       peopleClass === 'classified'
-        ? Boolean(lead.buyingRole)
+        ? Boolean(item.buyingRole)
         : peopleClass === 'unclassified'
-          ? !lead.buyingRole
+          ? !item.buyingRole
           : true,
-    )
-    .sort((a, b) =>
-      peopleSort === 'az'
-        ? a.fullName.localeCompare(b.fullName)
-        : peopleSort === 'za'
-          ? b.fullName.localeCompare(a.fullName)
-          : b.createdAt - a.createdAt,
-    );
+    )) {
+    const key = lead.contactId || lead.id;
+    const existing = contactsByIdentity.get(key);
+    if (!existing || lead.createdAt > existing.createdAt) {
+      contactsByIdentity.set(key, {
+        ...lead,
+        encounterCount: (existing?.encounterCount || 0) + 1,
+      });
+    } else {
+      existing.encounterCount = (existing.encounterCount || 1) + 1;
+    }
+  }
+  const contactRows = Array.from(contactsByIdentity.values()).sort((a, b) =>
+    peopleSort === 'az'
+      ? a.fullName.localeCompare(b.fullName)
+      : peopleSort === 'za'
+        ? b.fullName.localeCompare(a.fullName)
+        : b.createdAt - a.createdAt,
+  );
   const accountRows = accounts
     .filter(
       (account) =>
@@ -4921,6 +4945,19 @@ export default function Home() {
     );
   const peopleRows: (SavedLead | Account)[] =
     peopleTab === 'contacts' ? contactRows : accountRows;
+  // Other times this same durable contact was captured, at any event - the
+  // cross-event history that's the whole point of separating contacts from
+  // leads (Release C). Falls back to nothing for pre-migration leads with
+  // no contactId, rather than guessing by name.
+  const reviewLeadOtherEncounters = reviewLead?.contactId
+    ? capturedLeads
+        .filter(
+          (lead) =>
+            lead.contactId === reviewLead.contactId &&
+            lead.id !== reviewLead.id,
+        )
+        .sort((a, b) => b.createdAt - a.createdAt)
+    : [];
   const peoplePageCount = Math.max(
     1,
     Math.ceil(peopleRows.length / PEOPLE_PAGE_SIZE),
@@ -5964,6 +6001,26 @@ export default function Home() {
                           'No conversation note was captured.'}
                       </p>
                     </div>
+                    {reviewLeadOtherEncounters.length ? (
+                      <div className="source-note">
+                        <span>
+                          Also met at {reviewLeadOtherEncounters.length}{' '}
+                          other {reviewLeadOtherEncounters.length === 1 ? 'event' : 'events'}
+                        </span>
+                        <ul className="encounter-history-list">
+                          {reviewLeadOtherEncounters.map((lead) => (
+                            <li key={lead.id}>
+                              <span className="encounter-history-date">
+                                {dateTime(lead.createdAt)}
+                              </span>
+                              <span className="encounter-history-note">
+                                {lead.note || lead.role || 'No note captured'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                     {reviewLead ? (
                       <div className="review-context-actions">
                         <button
@@ -7370,7 +7427,15 @@ export default function Home() {
                                     .join('')
                                     .slice(0, 2)}
                               </span>
-                              <span>{lead.fullName}</span>
+                              <span>
+                                {lead.fullName}
+                                {lead.encounterCount && lead.encounterCount > 1 ? (
+                                  <small className="entity-subtext">
+                                    {' '}
+                                    · met {lead.encounterCount} times
+                                  </small>
+                                ) : null}
+                              </span>
                             </span>
                             <span data-label="Company">{lead.company}</span>
                             <span data-label="Role">{lead.role || '—'}</span>

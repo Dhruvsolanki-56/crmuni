@@ -727,6 +727,7 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .entity-primary { display: flex; align-items: center; gap: 10px; color: var(--color-text-primary); font-size: var(--text-base); line-height: var(--lh-base); font-weight: var(--weight-semibold); }
 .entity-primary > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .entity-primary .initial-avatar.small { width: 32px; height: 32px; flex: none; font-size: var(--text-micro); }
+.entity-subtext { color: var(--color-text-subtle); font-weight: var(--weight-regular); font-size: var(--text-micro); }
 .entity-num { font-variant-numeric: tabular-nums; }
 
 /* Classify is a quiet affordance, not a button on every row. */
@@ -2025,3 +2026,7 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .stage-filter-bar button { border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 4px 12px; background: var(--color-surface); color: var(--text-700); font-size: var(--text-label); cursor: pointer; }
 .stage-filter-bar button:hover { border-color: var(--line-strong); background: var(--surface-2); }
 .an-cost-entry { display: grid; gap: 16px; }
+.encounter-history-list { display: grid; row-gap: 8px; margin: 7px 0 0; padding: 0; list-style: none; }
+.encounter-history-list li { display: grid; grid-template-columns: minmax(90px, auto) 1fr; column-gap: 12px; align-items: baseline; }
+.encounter-history-date { color: var(--text-500); font-size: var(--text-label); line-height: var(--lh-label); white-space: nowrap; }
+.encounter-history-note { color: var(--text-700); font-size: var(--text-sm); line-height: var(--lh-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

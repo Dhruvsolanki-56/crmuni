@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   const [leadRows, taskRows, opportunityRows, accountRows, mergeRows] =
     await Promise.all([
       db
-        .prepare(`SELECT l.id, l.event_id AS eventId, l.account_id AS accountId,l.owner_id AS ownerId,om.display_name AS ownerName,l.full_name AS fullName, l.company, l.role, l.email, l.phone, s.buying_role AS buyingRole, l.review_status AS reviewStatus,l.qualification_state AS qualificationState,l.qualification_reason AS qualificationReason,
+        .prepare(`SELECT l.id, l.event_id AS eventId, l.account_id AS accountId,l.contact_id AS contactId,l.owner_id AS ownerId,om.display_name AS ownerName,l.full_name AS fullName, l.company, l.role, l.email, l.phone, s.buying_role AS buyingRole, l.review_status AS reviewStatus,l.qualification_state AS qualificationState,l.qualification_reason AS qualificationReason,
       l.created_at AS createdAt, i.note, t.title AS nextAction, t.due_date AS dueDate, q.score, q.rationale AS scoreRationale,
       a.id AS assetId, a.kind AS captureKind, a.processing_status AS captureStatus, a.extracted_json AS extractedJson,d.target_lead_id AS duplicateLeadId,dl.full_name AS duplicateLeadName,dl.company AS duplicateLeadCompany,
       (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='email') AS emailConsentStatus,
@@ -80,7 +80,11 @@ export async function GET(request: Request) {
         .all(),
       db
         .prepare(
-          `SELECT a.id, a.name AS company, a.normalized_name AS normalizedName, COUNT(l.id) AS contacts, MAX(l.created_at) AS latestAt, COUNT(s.id) AS stakeholders FROM accounts a JOIN leads l ON l.account_id=a.id LEFT JOIN account_stakeholders s ON s.lead_id=l.id WHERE a.workspace_id=? AND l.review_status!='merged'${leadAccess.sql} GROUP BY a.id, a.name, a.normalized_name ORDER BY latestAt DESC`,
+          // COUNT(DISTINCT l.contact_id), not COUNT(l.id): the same person
+          // captured at two events is one contact, one relationship - not
+          // two. COUNT(DISTINCT) already drops NULLs, which is correct for
+          // any lead still unresolved to a contact.
+          `SELECT a.id, a.name AS company, a.normalized_name AS normalizedName, COUNT(DISTINCT l.contact_id) AS contacts, MAX(l.created_at) AS latestAt, COUNT(s.id) AS stakeholders FROM accounts a JOIN leads l ON l.account_id=a.id LEFT JOIN account_stakeholders s ON s.lead_id=l.id WHERE a.workspace_id=? AND l.review_status!='merged'${leadAccess.sql} GROUP BY a.id, a.name, a.normalized_name ORDER BY latestAt DESC`,
         )
         .bind(context.workspace.id, ...leadAccess.bindings)
         .all(),
