@@ -1480,6 +1480,10 @@ export default function Home() {
   const [saveError, setSaveError] = useState('');
   const [captureOutcome, setCaptureOutcome] = useState('');
   const [savedLead, setSavedLead] = useState<SavedLead | null>(null);
+  const savedLeadDisplayName =
+    savedLead?.fullName === 'Unidentified visitor'
+      ? savedLead.company
+      : savedLead?.fullName;
   const [capturedLeads, setCapturedLeads] = useState<SavedLead[]>([]);
   const [reviewLead, setReviewLead] = useState<SavedLead | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -5904,6 +5908,9 @@ export default function Home() {
                         <div className="or">
                           <span>or enter the basics</span>
                         </div>
+                        <p className="capture-minimum" role="note">
+                          Start with a name or company. Email, phone, and notes can wait until they matter.
+                        </p>
                         <form
                           ref={leadForm}
                           onSubmit={saveLead}
@@ -5934,7 +5941,7 @@ export default function Home() {
                           </div>
                           <div className="field-grid">
                             <div className="field-block">
-                              <label htmlFor="lead-email">Work email</label>
+                              <label htmlFor="lead-email">Work email <small>(optional)</small></label>
                               <Input
                                 id="lead-email"
                                 name="email"
@@ -5950,7 +5957,7 @@ export default function Home() {
                             </div>
                             <div className="field-block">
                               <label htmlFor="lead-phone">
-                                Phone / WhatsApp
+                                Phone / WhatsApp <small>(optional)</small>
                               </label>
                               <Input
                                 id="lead-phone"
@@ -6159,8 +6166,8 @@ export default function Home() {
                         </p>
                         <DialogTitle className="dialog-title">
                           {localOcrFields.length
-                            ? `${savedLead?.fullName} was saved from on-device OCR`
-                            : `${savedLead?.fullName} is ${
+                            ? `${savedLeadDisplayName} was saved from on-device OCR`
+                            : `${savedLeadDisplayName} is ${
                                 savedLead?.reviewStatus === 'queued_offline'
                                   ? 'waiting to sync'
                                   : 'ready for review'
