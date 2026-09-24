@@ -761,11 +761,13 @@ async function outboxItems() {
 function NavItem({
   icon: Icon,
   label,
+  description,
   active = false,
   onClick,
 }: {
   icon: typeof LayoutDashboard;
   label: string;
+  description?: string;
   active?: boolean;
   onClick: () => void;
 }) {
@@ -774,6 +776,7 @@ function NavItem({
       className={`nav-item ${active ? 'nav-item-active' : ''}`}
       onClick={onClick}
       type="button"
+      title={description}
     >
       <Icon size={18} strokeWidth={1.8} />
       <span>{label}</span>
@@ -5399,24 +5402,28 @@ export default function Home() {
               <NavItem
                 icon={LayoutDashboard}
                 label="Today"
+                description="See your active event and choose the next action"
                 active={activeView === 'visitor-home'}
                 onClick={() => go('visitor-home')}
               />
               <NavItem
                 icon={Camera}
                 label="Capture"
+                description="Scan a card or save a person you meet"
                 active={activeView === 'visitor-capture'}
                 onClick={() => go('visitor-capture')}
               />
               <NavItem
                 icon={Users}
                 label="My contacts"
+                description="Review people and their event conversations"
                 active={activeView === 'visitor-contacts'}
                 onClick={() => go('visitor-contacts')}
               />
               <NavItem
                 icon={FileText}
                 label="Follow-ups"
+                description="Write and track your next messages"
                 active={activeView === 'visitor-followups'}
                 onClick={() => go('visitor-followups')}
               />
@@ -5424,6 +5431,7 @@ export default function Home() {
               <NavItem
                 icon={Settings}
                 label="Settings"
+                description="Manage this personal workspace"
                 active={activeView === 'settings'}
                 onClick={() => go('settings')}
               />
@@ -5434,12 +5442,14 @@ export default function Home() {
               <NavItem
                 icon={LayoutDashboard}
                 label="Today"
+                description="See urgent promises and the best next action"
                 active={activeView === 'today'}
                 onClick={() => go('today')}
               />
               <NavItem
                 icon={Camera}
                 label="Capture"
+                description="Scan a card, badge, or QR and save the conversation"
                 active={captureOpen}
                 onClick={() => {
                   go('today');
@@ -5449,12 +5459,14 @@ export default function Home() {
               <NavItem
                 icon={Users}
                 label="People & accounts"
+                description="Browse companies and the people you met"
                 active={activeView === 'people'}
                 onClick={() => go('people')}
               />
               <NavItem
                 icon={Target}
                 label="Pipeline"
+                description="Track active opportunities and their next steps"
                 active={activeView === 'opportunities'}
                 onClick={() => go('opportunities')}
               />
@@ -5462,12 +5474,14 @@ export default function Home() {
               <NavItem
                 icon={CalendarDays}
                 label="Events"
+                description="Prepare and activate events for capture"
                 active={activeView === 'events'}
                 onClick={() => go('events')}
               />
               <NavItem
                 icon={Settings}
                 label="Settings"
+                description="Manage your revenue workspace"
                 active={activeView === 'settings'}
                 onClick={() => go('settings')}
               />
