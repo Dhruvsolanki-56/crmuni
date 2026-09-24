@@ -4865,6 +4865,9 @@ export default function Home() {
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
   );
+  const activeEventHasActivity = Boolean(
+    metrics.totalLeads || metrics.openTasks || metrics.pipelineValue,
+  );
   const localHour = Number(
     new Intl.DateTimeFormat('en-US', {
       hour: 'numeric',
@@ -5172,7 +5175,7 @@ export default function Home() {
               <p className="nav-label nav-label-spaced">Manage</p>
               <NavItem
                 icon={Settings}
-                label="More"
+                label="Settings"
                 active={activeView === 'settings'}
                 onClick={() => go('settings')}
               />
@@ -5216,7 +5219,7 @@ export default function Home() {
               />
               <NavItem
                 icon={Settings}
-                label="More"
+                label="Settings"
                 active={activeView === 'settings'}
                 onClick={() => go('settings')}
               />
@@ -6982,7 +6985,7 @@ export default function Home() {
                 </Dialog>
               </section>
 
-              {!activeEvent || !capturedLeads.length ? (
+              {!activeEvent || !activeEventHasActivity ? (
                 <section className="panel quick-start-panel" aria-label="Getting started">
                   <div>
                     <p className="eyebrow">Your first event workflow</p>
@@ -7001,10 +7004,10 @@ export default function Home() {
                     <li className={!activeEvent ? 'current' : 'done'}>
                       <span>1</span> Choose an event
                     </li>
-                    <li className={activeEvent && !capturedLeads.length ? 'current' : capturedLeads.length ? 'done' : ''}>
+                    <li className={activeEvent && !activeEventHasActivity ? 'current' : activeEventHasActivity ? 'done' : ''}>
                       <span>2</span> Capture a person or company
                     </li>
-                    <li className={capturedLeads.length ? 'current' : ''}>
+                    <li className={activeEventHasActivity ? 'current' : ''}>
                       <span>3</span> Keep the next promise visible
                     </li>
                   </ol>
@@ -7250,7 +7253,9 @@ export default function Home() {
                   <h2>
                     {metrics.totalLeads
                       ? `${metrics.totalLeads} conversations captured, with ${metrics.qualifiedLeads} confirmed.`
-                      : 'Capture the first conversation to start the briefing.'}
+                      : activeEventHasActivity
+                        ? 'This event already has active revenue work.'
+                        : 'Capture the first conversation to start the briefing.'}
                   </h2>
                   <p>
                     {metrics.openTasks
