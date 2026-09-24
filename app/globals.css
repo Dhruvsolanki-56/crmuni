@@ -714,6 +714,7 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
    rather than two lists side by side inviting comparison.
    ============================================================ */
 .people-workspace { display: grid; gap: 16px; }
+.people-intro { max-width: 680px; margin: -3px 0 0; color: var(--color-text-secondary); font-size: var(--text-base); line-height: var(--lh-base); }
 
 /* Tabs: an underline indicator, not a segmented control. */
 .entity-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--color-line); }

@@ -7437,6 +7437,11 @@ export default function Home() {
               </div>
               {activeView === 'people' ? (
                 <section className="people-workspace">
+                  <p className="people-intro">
+                    Companies group the people you meet. Open an account to
+                    see its contacts; every person keeps their own
+                    conversation, notes and follow-ups.
+                  </p>
                   <nav className="entity-tabs" aria-label="People and accounts">
                     <button
                       type="button"
