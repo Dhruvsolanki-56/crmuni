@@ -6390,6 +6390,10 @@ export default function Home() {
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={
+                              !reviewLead.email &&
+                              reviewLead.emailConsentStatus !== 'granted'
+                            }
                             onClick={() => resetCapture(false)}
                           >
                             Back to today
@@ -12609,7 +12613,9 @@ export default function Home() {
                           >
                             {reviewLead.emailConsentStatus === 'granted'
                               ? 'Withdraw email permission'
-                              : 'Record email permission'}
+                              : reviewLead.email
+                                ? 'Record email permission'
+                                : 'Add email first'}
                           </Button>
                         </div>
                         <div className="consent-cell">
@@ -12621,6 +12627,10 @@ export default function Home() {
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={
+                              !reviewLead.phone &&
+                              reviewLead.whatsappConsentStatus !== 'granted'
+                            }
                             onClick={() =>
                               setContactPermission(
                                 'whatsapp',
@@ -12632,7 +12642,9 @@ export default function Home() {
                           >
                             {reviewLead.whatsappConsentStatus === 'granted'
                               ? 'Withdraw WhatsApp permission'
-                              : 'Record WhatsApp permission'}
+                              : reviewLead.phone
+                                ? 'Record WhatsApp permission'
+                                : 'Add phone first'}
                           </Button>
                         </div>
                       </div>
