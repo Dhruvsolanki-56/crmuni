@@ -1047,9 +1047,7 @@ function VisitorCapture({
   const [saving, setSaving] = useState(false);
   const [lastSavedLead, setLastSavedLead] = useState<SavedLead | null>(null);
 
-  async function handleFile(event: SyntheticEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    if (!file) return;
+  async function readFile(file: File) {
     setLastSavedLead(null);
     setReading(true);
     setOcrStatus('Reading text and QR data on this device…');
@@ -1076,6 +1074,42 @@ function VisitorCapture({
     } finally {
       setReading(false);
     }
+  }
+
+  function handleFile(event: SyntheticEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (file) void readFile(file);
+  }
+
+  function loadDemoCard() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200;
+    canvas.height = 700;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.fillStyle = '#f7f4ee';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#14213d';
+    context.fillRect(0, 0, 34, canvas.height);
+    context.font = '700 54px system-ui';
+    context.fillStyle = '#14213d';
+    context.fillText('Maya Kapoor', 100, 170);
+    context.font = '32px system-ui';
+    context.fillStyle = '#3d4966';
+    context.fillText('Procurement Director', 100, 235);
+    context.font = '700 38px system-ui';
+    context.fillStyle = '#d66b35';
+    context.fillText('ACME PHARMA', 100, 335);
+    context.font = '28px system-ui';
+    context.fillStyle = '#3d4966';
+    context.fillText('maya.kapoor@example.com', 100, 445);
+    context.fillText('+1 415 555 0148', 100, 500);
+    canvas.toBlob((blob) => {
+      if (blob)
+        void readFile(
+          new File([blob], 'revenue-os-demo-card.png', { type: 'image/png' }),
+        );
+    }, 'image/png');
   }
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
@@ -1177,6 +1211,9 @@ function VisitorCapture({
             </span>
           </button>
         </div>
+        <button type="button" className="demo-card-button" onClick={loadDemoCard}>
+          No card nearby? Try the clearly labelled sample card
+        </button>
         <input
           type="file"
           accept="image/*"
