@@ -1804,6 +1804,7 @@ export default function Home() {
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
   const [memoryQuery, setMemoryQuery] = useState('');
+  const [visitorContactQuery, setVisitorContactQuery] = useState('');
   const [showArchivedContacts, setShowArchivedContacts] = useState(false);
   const [nextBestActions, setNextBestActions] = useState<NextBestAction[]>([]);
   /* Analytics keeps its own scope and its own copy of the report. Today's
@@ -5574,6 +5575,19 @@ export default function Home() {
   const pagedMeetings = filteredMeetings.slice(
     meetingStart,
     meetingStart + PEOPLE_PAGE_SIZE,
+  );
+  const visitorFilteredContacts = dedupeByContact(capturedLeads).filter(
+    (lead) => {
+      const query = visitorContactQuery.trim().toLowerCase();
+      return (
+        !query ||
+        [lead.fullName, lead.company, lead.role, lead.email, lead.phone]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(query)
+      );
+    },
   );
 
   const activeEvent = events.find(
@@ -13192,7 +13206,10 @@ export default function Home() {
                 <div className="records-grid">
                   <article className="panel records-panel">
                     <div className="event-list-heading">
-                      <h2>My contacts</h2>
+                      <div>
+                        <h2>My contacts</h2>
+                        <p>Companies keep the people you met together.</p>
+                      </div>
                       <label className="show-archived-toggle">
                         <input
                           type="checkbox"
@@ -13206,18 +13223,46 @@ export default function Home() {
                         Show archived
                       </label>
                     </div>
+                    <label className="entity-search visitor-contact-search">
+                      <Search size={15} />
+                      <input
+                        value={visitorContactQuery}
+                        onChange={(event) =>
+                          setVisitorContactQuery(event.currentTarget.value)
+                        }
+                        placeholder="Find a person or company…"
+                        aria-label="Find a person or company"
+                      />
+                    </label>
                     {(() => {
+                      const query = visitorContactQuery.trim().toLowerCase();
                       const visible = dedupeByContact(
                         capturedLeads.filter(
                           (lead) =>
                             showArchivedContacts ||
                             lead.relationshipStatus !== 'archived',
+                        ).filter(
+                          (lead) =>
+                            !query ||
+                            [
+                              lead.fullName,
+                              lead.company,
+                              lead.role,
+                              lead.email,
+                              lead.phone,
+                            ]
+                              .filter(Boolean)
+                              .join(' ')
+                              .toLowerCase()
+                              .includes(query),
                         ),
                       );
                       if (!visible.length)
                         return (
                           <div className="empty-state">
-                            No contacts saved yet. Use Capture to add one.
+                            {query
+                              ? 'No people or companies match that search.'
+                              : 'No contacts saved yet. Use Capture to add one.'}
                           </div>
                         );
                       const accounts = new Map<
@@ -13315,8 +13360,23 @@ export default function Home() {
                   <div className="records-grid">
                     <article className="panel records-panel">
                       <h2>Choose a contact to follow up with</h2>
-                      {capturedLeads.length ? (
-                        dedupeByContact(capturedLeads).map((lead) => (
+                      <p className="field-help">
+                        Pick the person you spoke with; their company and past
+                        conversations stay connected in the background.
+                      </p>
+                      <label className="entity-search visitor-contact-search">
+                        <Search size={15} />
+                        <input
+                          value={visitorContactQuery}
+                          onChange={(event) =>
+                            setVisitorContactQuery(event.currentTarget.value)
+                          }
+                          placeholder="Find a person or company…"
+                          aria-label="Find a follow-up contact"
+                        />
+                      </label>
+                      {visitorFilteredContacts.length ? (
+                        visitorFilteredContacts.map((lead) => (
                           <button
                             key={lead.id}
                             className="record-row"
@@ -13337,10 +13397,12 @@ export default function Home() {
                               </small>
                             </span>
                           </button>
-                        ))
+                          ))
                       ) : (
                         <div className="empty-state">
-                          No contacts saved yet. Use Capture to add one.
+                          {capturedLeads.length
+                            ? 'No contacts match that search.'
+                            : 'No contacts saved yet. Use Capture to add one.'}
                         </div>
                       )}
                     </article>
