@@ -715,6 +715,70 @@ export async function POST(request: Request) {
       ),
       auditStatement(context, 'event.created', 'event', id),
     ]);
+
+    // A newly-created event always assigns its creator. That is the only
+    // required readiness condition, so do the assessment and activation here
+    // rather than making a first-time user visit two more controls before
+    // they can capture their first real conversation. Optional playbook and
+    // reporting context stays optional and can be added later.
+    const assessment = await assessEventReadiness(context.workspace.id, id);
+    if (!assessment)
+      return Response.json({ error: 'Event could not be assessed.' }, { status: 500 });
+    const snapshotId = crypto.randomUUID();
+    const readinessStatus = assessment.ready ? 'ready' : 'blocked';
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO event_readiness_snapshots (id,workspace_id,event_id,version,config_version,status,checks_json,config_json,config_hash,assessed_by,assessed_at,activated_by,activated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        )
+        .bind(
+          snapshotId,
+          context.workspace.id,
+          id,
+          1,
+          Number(assessment.event.configVersion),
+          readinessStatus,
+          JSON.stringify(assessment.checks),
+          assessment.configJson,
+          assessment.configHash,
+          context.user.id,
+          now,
+          assessment.ready ? context.user.id : null,
+          assessment.ready ? now : null,
+        ),
+      db
+        .prepare(
+          `UPDATE events SET status=?,updated_at=? WHERE id=? AND workspace_id=? AND status='draft'`,
+        )
+        .bind(
+          assessment.ready ? 'active' : 'draft',
+          now,
+          id,
+          context.workspace.id,
+        ),
+      auditStatement(context, 'event.readiness_assessed', 'event', id, {
+        version: 1,
+        configVersion: assessment.event.configVersion,
+        status: readinessStatus,
+        failedChecks: assessment.checks
+          .filter((check) => !check.passed)
+          .map((check) => check.key),
+        automatic: true,
+      }),
+      ...(assessment.ready
+        ? [
+            auditStatement(context, 'event.activated', 'event', id, {
+              readinessVersion: 1,
+              configVersion: assessment.event.configVersion,
+              automatic: true,
+            }),
+          ]
+        : []),
+    ]);
+    return Response.json(
+      { ok: true, id, status: assessment.ready ? 'active' : 'draft' },
+      { status: 201 },
+    );
   } else {
     const result = await db
       .prepare(
@@ -740,8 +804,5 @@ export async function POST(request: Request) {
       auditStatement(context, 'event.updated', 'event', id),
     ]);
   }
-  return Response.json(
-    { ok: true, id },
-    { status: action === 'create' ? 201 : 200 },
-  );
+  return Response.json({ ok: true, id }, { status: 200 });
 }

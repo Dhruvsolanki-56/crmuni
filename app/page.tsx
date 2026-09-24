@@ -3404,7 +3404,11 @@ export default function Home() {
         targetContactId: source.duplicateContactId,
       }),
     });
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as {
+      error?: string;
+      id?: string;
+      status?: string;
+    };
     if (!response.ok) {
       setAnalysisError(data.error || 'Could not combine these profiles.');
       return;
@@ -4505,13 +4509,32 @@ export default function Home() {
     setEditingEventId(null);
     setSimilarEventMatches([]);
     setEventDialogOpen(false);
+    setQuickFixTarget(null);
+    await loadEvents();
+    if (!isEditing && data.id && data.status === 'active') {
+      // The server has stored a passing readiness snapshot and activated this
+      // new event. Make it the capture context immediately; a typed capture
+      // draft will reopen after the Events detour instead of asking the rep
+      // to find their way back through navigation.
+      window.localStorage.setItem('revenue-event-id', data.id);
+      setActiveEventId(data.id);
+      const resumeCapture = Boolean(leadDraftRef.current);
+      go('today');
+      setNotice(
+        resumeCapture
+          ? 'Event is ready. Returning to your capture with the details you entered.'
+          : 'Event is ready for capture. Add playbook details only when useful.',
+      );
+      if (resumeCapture) {
+        window.setTimeout(() => setCaptureOpen(true), 0);
+      }
+      return;
+    }
     setNotice(
       isEditing
         ? 'Event updated · run readiness again before activating'
-        : 'Event created · check it is ready, then activate it to start capturing',
+        : 'Event created · resolve the required readiness check before capture',
     );
-    setQuickFixTarget(null);
-    await loadEvents();
   }
   function openEventQuickFix(
     item: EventItem,
