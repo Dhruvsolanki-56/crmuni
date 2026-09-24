@@ -10257,27 +10257,16 @@ export default function Home() {
                   <p className="workspace-intro">
                     Define the company context used across Revenue OS.
                   </p>
-                  <article
-                    className={`panel onboarding-progress ${knowledgeSetupDone === 4 ? 'complete' : ''}`}
-                  >
+                  <article className="panel onboarding-progress knowledge-guidance">
                     <div>
-                      <span>
-                        {knowledgeSetupDone}
-                        <small>/4</small>
-                      </span>
                       <div>
-                        <h2>Helpful company context</h2>
+                        <h2>Use only the context that helps</h2>
                         <p>
-                          {knowledgeSetupDone === 4
-                            ? 'Useful context is ready when you need personalized drafts or qualification help.'
-                            : knowledge.profile
-                              ? 'Profile saved. Add only the context that will improve a real workflow.'
-                              : 'Add a short description only when you want more relevant AI drafts.'}
+                          {knowledgeSetupDone
+                            ? 'Add or update only what improves a real follow-up, search, qualification decision, or AI draft. Nothing here is required to start capturing.'
+                            : 'You can start capturing without filling this in. Add a short business description later if it will make a real follow-up or AI draft more relevant.'}
                         </p>
                       </div>
-                    </div>
-                    <div className="progress-track">
-                      <i style={{ width: `${knowledgeSetupDone * 25}%` }} />
                     </div>
                   </article>
                   <h3 className="settings-group">Company profile</h3>
