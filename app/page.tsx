@@ -1693,7 +1693,10 @@ export default function Home() {
   const [accountFilter, setAccountFilter] = useState('');
   const [leadScope, setLeadScope] = useState('all');
   const [peopleTab, setPeopleTab] = useState<'accounts' | 'contacts'>(
-    'contacts',
+    // Companies are the stable top-level relationship. A user can drill into
+    // the people they met from there instead of mistaking every card scan for
+    // a new independent account.
+    'accounts',
   );
   const [peopleQuery, setPeopleQuery] = useState('');
   const [peopleClass, setPeopleClass] = useState('all');
@@ -1897,9 +1900,16 @@ export default function Home() {
         },
         annotations: { readOnlyHint: false, untrustedContentHint: false },
         execute: () => {
-          startCapture();
+          const hasActiveEvent = events.some(
+            (event) => event.id === activeEventId && event.status === 'active',
+          );
+          if (hasActiveEvent) setCaptureOpen(true);
+          else {
+            setActiveView('events');
+            if (!events.length) setEventDialogOpen(true);
+          }
           return {
-            status: activeEventId ? 'capture_open' : 'event_setup_needed',
+            status: hasActiveEvent ? 'capture_open' : 'event_setup_needed',
             event: toolEvent,
           };
         },
