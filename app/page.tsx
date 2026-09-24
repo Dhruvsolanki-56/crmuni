@@ -1879,6 +1879,10 @@ export default function Home() {
         await loadEvents();
         await Promise.all([
           loadWorkspace(),
+          // The workspace switcher is part of the primary experience. Load
+          // its choices now instead of making people visit Settings just to
+          // reach their attendee or exhibitor workspace.
+          loadSettings(),
           loadReports(),
           loadOperations(),
           refreshOutbox(),
