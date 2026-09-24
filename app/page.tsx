@@ -1793,6 +1793,7 @@ export default function Home() {
   const [rfqDialogOpen, setRfqDialogOpen] = useState(false);
   const [quotationDialogOpen, setQuotationDialogOpen] = useState(false);
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
+  const [meetingLead, setMeetingLead] = useState<SavedLead | null>(null);
   const [similarEventMatches, setSimilarEventMatches] = useState<
     EventItem[]
   >([]);
@@ -1837,6 +1838,9 @@ export default function Home() {
   const [followups, setFollowups] = useState<FollowupDraft[]>([]);
   const [leadAssets, setLeadAssets] = useState<LeadAsset[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
+  const [meetingQuery, setMeetingQuery] = useState('');
+  const [meetingStatusFilter, setMeetingStatusFilter] = useState('');
+  const [meetingPage, setMeetingPage] = useState(0);
   const [drafting, setDrafting] = useState('');
   const [confirmingContact, setConfirmingContact] = useState(false);
   const [extractingCapture, setExtractingCapture] = useState(false);
@@ -4004,6 +4008,7 @@ export default function Home() {
     setMeetings((current) => [data.meeting!, ...current]);
     form.reset();
     setMeetingDialogOpen(false);
+    setMeetingLead(null);
     setNotice('Meeting scheduled');
   }
 
@@ -5546,6 +5551,31 @@ export default function Home() {
   const rfqStart = rfqSafePage * PEOPLE_PAGE_SIZE;
   const pagedRfqs = filteredRfqs.slice(rfqStart, rfqStart + PEOPLE_PAGE_SIZE);
 
+  const filteredMeetings = meetings.filter((item) => {
+    const query = meetingQuery.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      [item.title, item.leadName, item.company, item.location, item.status]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    return (
+      matchesQuery &&
+      (!meetingStatusFilter || item.status === meetingStatusFilter)
+    );
+  });
+  const meetingPageCount = Math.max(
+    1,
+    Math.ceil(filteredMeetings.length / PEOPLE_PAGE_SIZE),
+  );
+  const meetingSafePage = Math.min(meetingPage, meetingPageCount - 1);
+  const meetingStart = meetingSafePage * PEOPLE_PAGE_SIZE;
+  const pagedMeetings = filteredMeetings.slice(
+    meetingStart,
+    meetingStart + PEOPLE_PAGE_SIZE,
+  );
+
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
   );
@@ -5939,6 +5969,13 @@ export default function Home() {
                 description="Receive requests, create quotes and keep deadlines visible"
                 active={activeView === 'rfqs'}
                 onClick={() => go('rfqs')}
+              />
+              <NavItem
+                icon={CalendarDays}
+                label="Meetings"
+                description="Schedule customer conversations and keep the calendar record"
+                active={activeView === 'meetings'}
+                onClick={() => go('meetings')}
               />
               <p className="nav-label nav-label-spaced">Manage</p>
               <NavItem
@@ -7687,6 +7724,18 @@ export default function Home() {
                               }}
                             >
                               Create opportunity
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setMeetingLead(reviewLead);
+                                setReviewLead(null);
+                                go('meetings');
+                                setMeetingDialogOpen(true);
+                              }}
+                            >
+                              Schedule meeting
                             </Button>
                           </div>
                         </div>
@@ -9708,7 +9757,10 @@ export default function Home() {
                 <div className="meetings-layout">
                   <Dialog
                     open={meetingDialogOpen}
-                    onOpenChange={setMeetingDialogOpen}
+                    onOpenChange={(open) => {
+                      setMeetingDialogOpen(open);
+                      if (!open) setMeetingLead(null);
+                    }}
                   >
                     <DialogContent className="capture-dialog">
                     <div className="settings-heading">
@@ -9728,6 +9780,11 @@ export default function Home() {
                           id="meeting-title"
                           name="title"
                           required
+                          defaultValue={
+                            meetingLead
+                              ? `Follow-up with ${meetingLead.fullName}`
+                              : ''
+                          }
                           placeholder="Machine monitoring architecture review"
                         />
                       </div>
@@ -9754,7 +9811,10 @@ export default function Home() {
                       {/* Title and the two times are all that's required to
                           hold the slot - who's linked, where, and what's on
                           the agenda can all be filled in later. */}
-                      <details className="more-details">
+                      <details
+                        className="more-details"
+                        open={Boolean(meetingLead)}
+                      >
                         <summary>
                           <span>More details</span>
                           <ChevronDown size={14} />
@@ -9767,7 +9827,7 @@ export default function Home() {
                             <select
                               id="meeting-lead"
                               name="leadId"
-                              defaultValue=""
+                              defaultValue={meetingLead?.id || ''}
                             >
                               <option value="">No linked contact</option>
                               {capturedLeads
@@ -9846,14 +9906,48 @@ export default function Home() {
                         <Button
                           type="button"
                           className="capture-button"
-                          onClick={() => setMeetingDialogOpen(true)}
+                          onClick={() => {
+                            setMeetingLead(null);
+                            setMeetingDialogOpen(true);
+                          }}
                         >
                           <Plus /> Schedule meeting
                         </Button>
                       </div>
                     </div>
                     {meetings.length ? (
-                      meetings.map((meeting) => (
+                      <div className="entity-toolbar meeting-toolbar">
+                        <label className="entity-search">
+                          <Search size={15} />
+                          <input
+                            value={meetingQuery}
+                            onChange={(event) => {
+                              setMeetingQuery(event.currentTarget.value);
+                              setMeetingPage(0);
+                            }}
+                            placeholder="Search meetings…"
+                            aria-label="Search meetings"
+                          />
+                        </label>
+                        <div className="entity-toolbar-actions">
+                          <select
+                            aria-label="Filter meetings by status"
+                            value={meetingStatusFilter}
+                            onChange={(event) => {
+                              setMeetingStatusFilter(event.currentTarget.value);
+                              setMeetingPage(0);
+                            }}
+                          >
+                            <option value="">All statuses</option>
+                            <option value="scheduled">Scheduled</option>
+                            <option value="complete">Complete</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </div>
+                      </div>
+                    ) : null}
+                    {meetings.length ? (
+                      pagedMeetings.map((meeting) => (
                         <article
                           className="panel meeting-record"
                           key={meeting.id}
@@ -9944,6 +10038,45 @@ export default function Home() {
                         </p>
                       </article>
                     )}
+                    {meetings.length && !filteredMeetings.length ? (
+                      <article className="panel empty-state large">
+                        <CalendarDays />
+                        <h2>No meetings match this view</h2>
+                        <p>Clear the search or status filter to see the full schedule.</p>
+                      </article>
+                    ) : null}
+                    {filteredMeetings.length > PEOPLE_PAGE_SIZE ? (
+                      <div className="entity-footer meeting-footer">
+                        <span>
+                          Showing {meetingStart + 1}–
+                          {Math.min(
+                            meetingStart + PEOPLE_PAGE_SIZE,
+                            filteredMeetings.length,
+                          )} of {filteredMeetings.length}
+                        </span>
+                        <div className="entity-pagination" aria-label="Meeting pages">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={meetingSafePage === 0}
+                            onClick={() => setMeetingPage(meetingSafePage - 1)}
+                          >
+                            Previous
+                          </Button>
+                          <span>
+                            Page {meetingSafePage + 1} of {meetingPageCount}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={meetingSafePage >= meetingPageCount - 1}
+                            onClick={() => setMeetingPage(meetingSafePage + 1)}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </section>
                 </div>
               ) : null}
