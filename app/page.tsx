@@ -7240,48 +7240,68 @@ export default function Home() {
                             />
                           </div>
                         </div>
-                        <div className="field-grid">
-                          <input
-                            className="review-input"
-                            name="role"
-                            aria-label="Verified role"
-                            defaultValue={
-                              reviewCaptureExtraction?.role ||
-                              reviewLead.role ||
-                              ''
-                            }
-                            onChange={() => markCaptureCorrection('role')}
-                            placeholder="Role"
-                          />
-                          <input
-                            className="review-input"
-                            name="email"
-                            aria-label="Verified work email"
-                            type="text"
-                            inputMode="email"
-                            defaultValue={
-                              reviewCaptureExtraction?.email ||
-                              reviewLead.email ||
-                              ''
-                            }
-                            onChange={() => markCaptureCorrection('email')}
-                            placeholder="Work email"
-                          />
-                        </div>
-                        <input
-                          className="review-input"
-                          name="phone"
-                          aria-label="Verified phone"
-                          type="text"
-                          inputMode="tel"
-                          defaultValue={
-                            reviewCaptureExtraction?.phone ||
-                            reviewLead.phone ||
-                            ''
+                        <details
+                          className="more-details"
+                          open={
+                            reviewLead.captureStatus ===
+                            'completed_pending_review'
                           }
-                          onChange={() => markCaptureCorrection('phone')}
-                          placeholder="Phone / WhatsApp"
-                        />
+                        >
+                          <summary>
+                            <span>
+                              {reviewLead.role ||
+                              reviewLead.email ||
+                              reviewLead.phone
+                                ? `Contact details · ${reviewLead.role || reviewLead.email || reviewLead.phone}`
+                                : 'Add contact details (optional)'}
+                            </span>
+                            <ChevronDown size={14} />
+                          </summary>
+                          <div className="more-details-body">
+                            <div className="field-grid">
+                              <input
+                                className="review-input"
+                                name="role"
+                                aria-label="Verified role"
+                                defaultValue={
+                                  reviewCaptureExtraction?.role ||
+                                  reviewLead.role ||
+                                  ''
+                                }
+                                onChange={() => markCaptureCorrection('role')}
+                                placeholder="Role"
+                              />
+                              <input
+                                className="review-input"
+                                name="email"
+                                aria-label="Verified work email"
+                                type="text"
+                                inputMode="email"
+                                defaultValue={
+                                  reviewCaptureExtraction?.email ||
+                                  reviewLead.email ||
+                                  ''
+                                }
+                                onChange={() => markCaptureCorrection('email')}
+                                placeholder="Work email"
+                              />
+                            </div>
+                            <input
+                              className="review-input"
+                              name="phone"
+                              aria-label="Verified phone"
+                              type="text"
+                              inputMode="tel"
+                              defaultValue={
+                                reviewCaptureExtraction?.phone ||
+                                reviewLead.phone ||
+                                ''
+                              }
+                              onChange={() => markCaptureCorrection('phone')}
+                              placeholder="Phone / WhatsApp"
+                            />
+                          </div>
+                        </details>
                         {events.find((item) => item.id === reviewLead.eventId)
                           ?.leadFieldSchema.length ? (
                           <details className="review-extra-fields">
