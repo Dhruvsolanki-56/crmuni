@@ -7814,15 +7814,23 @@ export default function Home() {
               {!activeEvent || !activeEventHasActivity ? (
                 <section className="panel quick-start-panel" aria-label="Getting started">
                   <div>
-                    <p className="eyebrow">Your first event workflow</p>
+                    <p className="eyebrow">
+                      {!activeEvent && metrics.totalLeads
+                        ? 'Choose your active event'
+                        : 'Your first event workflow'}
+                    </p>
                     <h2>
                       {!activeEvent
-                        ? 'Set up the event, then start capturing.'
+                        ? metrics.totalLeads
+                          ? 'Choose an event before your next capture.'
+                          : 'Set up the event, then start capturing.'
                         : 'Your next useful action is to capture a conversation.'}
                     </h2>
                     <p>
                       {!activeEvent
-                        ? 'An event gives each conversation the right context. You only need its name to begin; the rest can be added later.'
+                        ? metrics.totalLeads
+                          ? 'Your existing contacts and follow-ups stay in the workspace. Pick the event you are working at so new conversations are organized correctly.'
+                          : 'An event gives each conversation the right context. You only need its name to begin; the rest can be added later.'
                         : 'Scan a card or badge, check the details found, add a quick note if useful, and save. Revenue OS will keep the person connected to their company.'}
                     </p>
                   </div>
@@ -7843,9 +7851,13 @@ export default function Home() {
                     onClick={() => {
                       startCapture();
                     }}
-                  >
-                    {activeEvent ? <Camera /> : <CalendarDays />}
-                    {activeEvent ? 'Capture first conversation' : 'Set up event'}
+                    >
+                      {activeEvent ? <Camera /> : <CalendarDays />}
+                    {activeEvent
+                      ? 'Capture first conversation'
+                      : capturableEvents.length
+                        ? 'Choose event'
+                        : 'Set up event'}
                   </Button>
                 </section>
               ) : null}
