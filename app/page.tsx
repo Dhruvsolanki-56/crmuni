@@ -1825,6 +1825,8 @@ export default function Home() {
   // Set when a pipeline stage is selected in Analytics, so that drill-down
   // lands on the matching opportunities instead of the unfiltered list.
   const [opportunityStage, setOpportunityStage] = useState('');
+  const [opportunityQuery, setOpportunityQuery] = useState('');
+  const [opportunityPage, setOpportunityPage] = useState(0);
   const [activeEventId, setActiveEventId] = useState(() =>
     typeof window === 'undefined'
       ? ''
@@ -5481,9 +5483,37 @@ export default function Home() {
     void loadReports();
   }
 
-  const stageOpportunities = opportunityStage
+  const stageOpportunities = (opportunityStage
     ? opportunities.filter((item) => item.stage === opportunityStage)
-    : opportunities;
+    : opportunities
+  ).filter((item) => {
+    const query = opportunityQuery.trim().toLowerCase();
+    return (
+      !query ||
+      [
+        item.title,
+        item.company,
+        item.stage,
+        ...item.contacts.map((contact) => contact.fullName),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    );
+  });
+  const opportunityPageCount = Math.max(
+    1,
+    Math.ceil(stageOpportunities.length / PEOPLE_PAGE_SIZE),
+  );
+  const opportunitySafePage = Math.min(
+    opportunityPage,
+    opportunityPageCount - 1,
+  );
+  const opportunityStart = opportunitySafePage * PEOPLE_PAGE_SIZE;
+  const pagedStageOpportunities = stageOpportunities.slice(
+    opportunityStart,
+    opportunityStart + PEOPLE_PAGE_SIZE,
+  );
 
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
@@ -8585,20 +8615,58 @@ export default function Home() {
               ) : null}
               {activeView === 'opportunities' ? (
                 <article className="panel data-panel">
-                  {opportunityStage ? (
+                  <div className="entity-toolbar opportunity-toolbar">
+                    <label className="entity-search">
+                      <Search size={15} />
+                      <input
+                        value={opportunityQuery}
+                        onChange={(event) => {
+                          setOpportunityQuery(event.currentTarget.value);
+                          setOpportunityPage(0);
+                        }}
+                        placeholder="Search company, opportunity or person…"
+                        aria-label="Search opportunities"
+                      />
+                    </label>
+                    <div className="entity-toolbar-actions">
+                      <select
+                        aria-label="Filter by opportunity stage"
+                        value={opportunityStage}
+                        onChange={(event) => {
+                          setOpportunityStage(event.currentTarget.value);
+                          setOpportunityPage(0);
+                        }}
+                      >
+                        <option value="">All stages</option>
+                        <option value="qualified">Qualified</option>
+                        <option value="requirement">Requirement</option>
+                        <option value="sample">Sample</option>
+                        <option value="rfq">RFQ</option>
+                        <option value="quotation">Quotation</option>
+                        <option value="meeting">Meeting</option>
+                        <option value="negotiation">Negotiation</option>
+                        <option value="won">Won</option>
+                        <option value="lost">Lost</option>
+                      </select>
+                    </div>
+                  </div>
+                  {opportunityStage || opportunityQuery ? (
                     <div className="stage-filter-bar">
                       <span>
-                        Showing <strong>{opportunityStage}</strong>{' '}
-                        opportunities · {stageOpportunities.length} of the{' '}
-                        {opportunities.length} most recently updated across
-                        every event, so this count can differ from an
-                        event-scoped analytics figure
+                        Showing {opportunityStage ? <strong>{opportunityStage}</strong> : 'all stages'}
+                        {opportunityQuery ? ` matching “${opportunityQuery.trim()}”` : ''}
+                        {' · '}{stageOpportunities.length} of {opportunities.length}{' '}
+                        opportunities across every event
                       </span>
                       <button
                         type="button"
-                        onClick={() => setOpportunityStage('')}
+                        onClick={() => {
+                          setOpportunityStage('');
+                          setOpportunityQuery('');
+                          setOpportunityPage(0);
+                        }}
                       >
-                        Clear filter
+                        Clear filters
                       </button>
                     </div>
                   ) : null}
@@ -8610,7 +8678,7 @@ export default function Home() {
                         <span>Value</span>
                         <span>Probability</span>
                       </div>
-                      {stageOpportunities.map((item) => (
+                      {pagedStageOpportunities.map((item) => (
                         <div className="data-row opportunity-row" key={item.id}>
                           <span>
                             <strong>{item.title}</strong>
@@ -8720,20 +8788,54 @@ export default function Home() {
                           <span>{item.probability}%</span>
                         </div>
                       ))}
+                      {stageOpportunities.length > PEOPLE_PAGE_SIZE ? (
+                        <div className="entity-footer opportunity-footer">
+                          <small>
+                            Showing {opportunityStart + 1}–
+                            {Math.min(
+                              opportunityStart + PEOPLE_PAGE_SIZE,
+                              stageOpportunities.length,
+                            )}{' '}
+                            of {stageOpportunities.length}
+                          </small>
+                          <nav className="pager" aria-label="Opportunity pages">
+                            <button
+                              type="button"
+                              disabled={opportunitySafePage === 0}
+                              onClick={() => setOpportunityPage((page) => page - 1)}
+                            >
+                              Previous
+                            </button>
+                            <span>
+                              Page {opportunitySafePage + 1} of {opportunityPageCount}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={opportunitySafePage >= opportunityPageCount - 1}
+                              onClick={() => setOpportunityPage((page) => page + 1)}
+                            >
+                              Next
+                            </button>
+                          </nav>
+                        </div>
+                      ) : null}
                     </>
-                  ) : opportunityStage ? (
+                  ) : opportunityStage || opportunityQuery ? (
                     <div className="empty-state large">
                       <Target />
-                      <h2>No {opportunityStage} opportunities loaded</h2>
+                      <h2>No matching opportunities</h2>
                       <p>
-                        This view holds the 100 most recently updated
-                        opportunities, and none of them are at this stage.
+                        Try another company, contact, or stage.
                       </p>
                       <Button
                         variant="outline"
-                        onClick={() => setOpportunityStage('')}
+                        onClick={() => {
+                          setOpportunityStage('');
+                          setOpportunityQuery('');
+                          setOpportunityPage(0);
+                        }}
                       >
-                        Show every stage
+                        Show all opportunities
                       </Button>
                     </div>
                   ) : (
@@ -13565,69 +13667,77 @@ export default function Home() {
                 placeholder="Machine monitoring rollout"
               />
             </div>
-            <div className="field-grid">
-              <div className="field-block">
-                <label htmlFor="opp-value">
-                  Estimated value ({appContext?.workspace.currency || 'INR'})
-                </label>
-                <Input
-                  id="opp-value"
-                  name="value"
-                  type="number"
-                  min="0"
-                  placeholder="1200000"
-                />
-              </div>
-              <div className="field-block">
-                <label htmlFor="opp-close">Expected close</label>
-                <Input id="opp-close" name="expectedCloseDate" type="date" />
-              </div>
-            </div>
-            <div className="field-block">
-              <label htmlFor="opp-contacts">Opportunity stakeholders</label>
-              {opportunityCandidates.length ? (
-                <>
-                  <select
-                    id="opp-contacts"
-                    name="contactIds"
-                    multiple
-                    defaultValue={opportunityLead ? [opportunityLead.id] : []}
-                  >
-                    {opportunityCandidates.map((lead) => (
-                      <option key={lead.id} value={lead.id}>
-                        {lead.fullName} · {lead.company} ·{' '}
-                        {lead.buyingRole || lead.role || 'Contact'}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="field-help">
-                    Use Ctrl or Command to select multiple stakeholders.
-                    Contacts must belong to the same account and event.
-                  </small>
-                </>
-              ) : (
-                /* An empty multi-select looked broken and gave no way
-                   forward. Explain, and offer the action that fixes it. */
-                <div className="field-empty">
-                  <p>
-                    No captured contacts for{' '}
-                    {activeEvent ? activeEvent.name : 'this event'} yet.
-                    Stakeholders come from contacts captured against the
-                    active event.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setOpportunityOpen(false);
-                      startCapture();
-                    }}
-                  >
-                    Capture a contact
-                  </Button>
+            <details className="more-details">
+              <summary>
+                <span>Add forecast or stakeholders</span>
+                <ChevronDown size={14} />
+              </summary>
+              <div className="more-details-body">
+                <div className="field-grid">
+                  <div className="field-block">
+                    <label htmlFor="opp-value">
+                      Estimated value ({appContext?.workspace.currency || 'INR'})
+                    </label>
+                    <Input
+                      id="opp-value"
+                      name="value"
+                      type="number"
+                      min="0"
+                      placeholder="1200000"
+                    />
+                  </div>
+                  <div className="field-block">
+                    <label htmlFor="opp-close">Expected close</label>
+                    <Input id="opp-close" name="expectedCloseDate" type="date" />
+                  </div>
                 </div>
-              )}
-            </div>
+                <div className="field-block">
+                  <label htmlFor="opp-contacts">Opportunity stakeholders</label>
+                  {opportunityCandidates.length ? (
+                    <>
+                      <select
+                        id="opp-contacts"
+                        name="contactIds"
+                        multiple
+                        defaultValue={opportunityLead ? [opportunityLead.id] : []}
+                      >
+                        {opportunityCandidates.map((lead) => (
+                          <option key={lead.id} value={lead.id}>
+                            {lead.fullName} · {lead.company} ·{' '}
+                            {lead.buyingRole || lead.role || 'Contact'}
+                          </option>
+                        ))}
+                      </select>
+                      <small className="field-help">
+                        The person you converted is already included. Use Ctrl or
+                        Command to add other stakeholders from this account.
+                      </small>
+                    </>
+                  ) : (
+                    /* An empty multi-select looked broken and gave no way
+                       forward. Explain, and offer the action that fixes it. */
+                    <div className="field-empty">
+                      <p>
+                        No captured contacts for{' '}
+                        {activeEvent ? activeEvent.name : 'this event'} yet.
+                        Stakeholders come from contacts captured against the
+                        active event.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setOpportunityOpen(false);
+                          startCapture();
+                        }}
+                      >
+                        Capture a contact
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </details>
             <Button className="save-button" type="submit">
               Create opportunity
             </Button>
