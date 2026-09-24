@@ -9,6 +9,7 @@ import {
   requireWorkspace,
 } from '@/lib/db';
 import { accountIdentity, normalizeCompany } from '@/lib/accounts';
+import { resolveContact } from '@/lib/contacts';
 import { suppressionIdentifier, type ContactChannel } from '@/lib/consent';
 import { runDueJobs } from '@/lib/jobs';
 
@@ -554,12 +555,36 @@ export async function POST(request: Request) {
     await requireLeadAccess(context, id);
     const db = database();
     const existing = await db
-      .prepare(`SELECT email,phone FROM leads WHERE id=? AND workspace_id=?`)
+      .prepare(
+        `SELECT contact_id AS contactId,email,phone FROM leads WHERE id=? AND workspace_id=?`,
+      )
       .bind(id, context.workspace.id)
-      .first<{ email: string | null; phone: string | null }>();
+      .first<{
+        contactId: string | null;
+        email: string | null;
+        phone: string | null;
+      }>();
     const emailChanged = (existing?.email || '') !== email;
     const phoneChanged = (existing?.phone || '') !== phone;
     const account = await accountIdentity(context.workspace.id, company);
+    // A lead is an event encounter. Its durable contact is the current
+    // person profile shared across encounters and events. If this is the
+    // first time a person is identified on an account-only encounter, create
+    // or resolve that profile now; otherwise update the linked profile.
+    const contact = existing?.contactId
+      ? null
+      : await resolveContact(db, context.workspace.id, {
+          fullName,
+          email: email || null,
+          phone: phone || null,
+          accountId: account.id,
+        });
+    const contactId = existing?.contactId || contact?.contactId;
+    if (!contactId)
+      return Response.json(
+        { error: 'Could not resolve this contact profile.' },
+        { status: 500 },
+      );
     const now = Date.now();
     const statements = [
       db
@@ -574,12 +599,45 @@ export async function POST(request: Request) {
           now,
           now,
         ),
+      ...(contact?.isNew
+        ? [
+            db
+              .prepare(
+                `INSERT INTO contacts (id,workspace_id,full_name,email,phone,primary_account_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`,
+              )
+              .bind(
+                contactId,
+                context.workspace.id,
+                fullName,
+                email || null,
+                phone || null,
+                account.id,
+                now,
+                now,
+              ),
+          ]
+        : [
+            db
+              .prepare(
+                `UPDATE contacts SET full_name=?,email=NULLIF(?,''),phone=NULLIF(?,''),primary_account_id=?,updated_at=? WHERE id=? AND workspace_id=? AND merged_into_id IS NULL`,
+              )
+              .bind(
+                fullName,
+                email,
+                phone,
+                account.id,
+                now,
+                contactId,
+                context.workspace.id,
+              ),
+          ]),
       db
         .prepare(
-          `UPDATE leads SET account_id=?,full_name=?,company=?,role=NULLIF(?,''),email=NULLIF(?,''),phone=NULLIF(?,''),custom_fields_json=CASE WHEN ?=1 THEN ? ELSE custom_fields_json END,updated_at=? WHERE id=? AND workspace_id=?`,
+          `UPDATE leads SET account_id=?,contact_id=?,full_name=?,company=?,role=NULLIF(?,''),email=NULLIF(?,''),phone=NULLIF(?,''),custom_fields_json=CASE WHEN ?=1 THEN ? ELSE custom_fields_json END,updated_at=? WHERE id=? AND workspace_id=?`,
         )
         .bind(
           account.id,
+          contactId,
           fullName,
           company,
           role,
@@ -593,6 +651,22 @@ export async function POST(request: Request) {
         ),
       auditStatement(context, 'lead.updated', 'lead', id),
     ];
+    if (contact?.suggestedContactId)
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO contact_duplicate_suggestions (id,workspace_id,source_contact_id,target_contact_id,status,confidence_basis_points,reasons_json,created_at,updated_at) VALUES (?,?,?,?,'pending',8000,?,?,?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            context.workspace.id,
+            contactId,
+            contact.suggestedContactId,
+            JSON.stringify(['same_account_and_name']),
+            now,
+            now,
+          ),
+      );
     // Consent is specific to the reachable address or number presented at the
     // time it was granted. Do not carry it forward if that recipient changes.
     if (emailChanged)
@@ -615,6 +689,7 @@ export async function POST(request: Request) {
     return Response.json({
       lead: {
         id,
+        contactId,
         fullName,
         company,
         role,
