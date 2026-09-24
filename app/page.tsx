@@ -1879,6 +1879,9 @@ export default function Home() {
   >('');
   const [rfqs, setRfqs] = useState<RfqItem[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [rfqQuery, setRfqQuery] = useState('');
+  const [rfqStatusFilter, setRfqStatusFilter] = useState('');
+  const [rfqPage, setRfqPage] = useState(0);
   const [processingRfq, setProcessingRfq] = useState('');
   /* The RFQ workspace has no URL route of its own - every view in this app is
      state driven - so the open RFQ is held by id and always re-read from the
@@ -5515,6 +5518,34 @@ export default function Home() {
     opportunityStart + PEOPLE_PAGE_SIZE,
   );
 
+  // Keep the commercial workspace usable after a busy event. The server
+  // remains the source of every RFQ; this is only a local, reversible view
+  // of the received requests, with the most urgent records still sorted first.
+  const filteredRfqs = rfqs.filter((item) => {
+    const query = rfqQuery.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      [
+        item.title,
+        item.requesterCompany,
+        item.reference,
+        item.contactName,
+        item.status,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    return matchesQuery && (!rfqStatusFilter || item.status === rfqStatusFilter);
+  });
+  const rfqPageCount = Math.max(
+    1,
+    Math.ceil(filteredRfqs.length / PEOPLE_PAGE_SIZE),
+  );
+  const rfqSafePage = Math.min(rfqPage, rfqPageCount - 1);
+  const rfqStart = rfqSafePage * PEOPLE_PAGE_SIZE;
+  const pagedRfqs = filteredRfqs.slice(rfqStart, rfqStart + PEOPLE_PAGE_SIZE);
+
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
   );
@@ -5901,6 +5932,13 @@ export default function Home() {
                 description="Track active opportunities and their next steps"
                 active={activeView === 'opportunities'}
                 onClick={() => go('opportunities')}
+              />
+              <NavItem
+                icon={FileText}
+                label="RFQs & quotes"
+                description="Receive requests, create quotes and keep deadlines visible"
+                active={activeView === 'rfqs'}
+                onClick={() => go('rfqs')}
               />
               <p className="nav-label nav-label-spaced">Manage</p>
               <NavItem
@@ -9115,7 +9153,44 @@ export default function Home() {
                       </div>
                     </div>
                     {rfqs.length ? (
-                      rfqs.map((item) => (
+                      <div className="entity-toolbar rfq-toolbar">
+                        <label className="entity-search">
+                          <Search size={15} />
+                          <input
+                            value={rfqQuery}
+                            onChange={(event) => {
+                              setRfqQuery(event.currentTarget.value);
+                              setRfqPage(0);
+                            }}
+                            placeholder="Search RFQs…"
+                            aria-label="Search RFQs"
+                          />
+                        </label>
+                        <div className="entity-toolbar-actions">
+                          <select
+                            aria-label="Filter RFQs by status"
+                            value={rfqStatusFilter}
+                            onChange={(event) => {
+                              setRfqStatusFilter(event.currentTarget.value);
+                              setRfqPage(0);
+                            }}
+                          >
+                            <option value="">All statuses</option>
+                            <option value="received">Received</option>
+                            <option value="reviewing">Reviewing</option>
+                            <option value="clarification">
+                              Clarification needed
+                            </option>
+                            <option value="ready_to_quote">Ready to quote</option>
+                            <option value="quoted">Quoted</option>
+                            <option value="won">Won</option>
+                            <option value="lost">Lost</option>
+                          </select>
+                        </div>
+                      </div>
+                    ) : null}
+                    {rfqs.length ? (
+                      pagedRfqs.map((item) => (
                         <article className="panel rfq-record" key={item.id}>
                           <button
                             type="button"
@@ -9209,6 +9284,43 @@ export default function Home() {
                         </p>
                       </article>
                     )}
+                    {rfqs.length && !filteredRfqs.length ? (
+                      <article className="panel empty-state large">
+                        <FileText />
+                        <h2>No RFQs match this view</h2>
+                        <p>Clear the search or status filter to see every request.</p>
+                      </article>
+                    ) : null}
+                    {filteredRfqs.length > PEOPLE_PAGE_SIZE ? (
+                      <div className="entity-footer rfq-footer">
+                        <span>
+                          Showing {rfqStart + 1}–
+                          {Math.min(rfqStart + PEOPLE_PAGE_SIZE, filteredRfqs.length)} of{' '}
+                          {filteredRfqs.length}
+                        </span>
+                        <div className="entity-pagination" aria-label="RFQ pages">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={rfqSafePage === 0}
+                            onClick={() => setRfqPage(rfqSafePage - 1)}
+                          >
+                            Previous
+                          </Button>
+                          <span>
+                            Page {rfqSafePage + 1} of {rfqPageCount}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={rfqSafePage >= rfqPageCount - 1}
+                            onClick={() => setRfqPage(rfqSafePage + 1)}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </section>
                 </div>
               ) : null}
