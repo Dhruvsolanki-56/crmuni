@@ -5119,24 +5119,12 @@ export default function Home() {
         <nav aria-label="Main navigation">
           {appContext?.workspace.kind === 'visitor' ? (
             <>
-              <p className="nav-label">Visitor</p>
+              <p className="nav-label">Your event</p>
               <NavItem
                 icon={LayoutDashboard}
-                label="Event home"
+                label="Today"
                 active={activeView === 'visitor-home'}
                 onClick={() => go('visitor-home')}
-              />
-              <NavItem
-                icon={Search}
-                label="Discover"
-                active={activeView === 'visitor-discover'}
-                onClick={() => go('visitor-discover')}
-              />
-              <NavItem
-                icon={CalendarDays}
-                label="My plan"
-                active={activeView === 'visitor-plan'}
-                onClick={() => go('visitor-plan')}
               />
               <NavItem
                 icon={Camera}
@@ -5151,12 +5139,6 @@ export default function Home() {
                 onClick={() => go('visitor-contacts')}
               />
               <NavItem
-                icon={Sparkles}
-                label="Memory"
-                active={activeView === 'visitor-memory'}
-                onClick={() => go('visitor-memory')}
-              />
-              <NavItem
                 icon={FileText}
                 label="Follow-ups"
                 active={activeView === 'visitor-followups'}
@@ -5165,7 +5147,7 @@ export default function Home() {
               <p className="nav-label nav-label-spaced">Manage</p>
               <NavItem
                 icon={Settings}
-                label="Workspace settings"
+                label="More"
                 active={activeView === 'settings'}
                 onClick={() => go('settings')}
               />
@@ -5180,6 +5162,15 @@ export default function Home() {
                 onClick={() => go('today')}
               />
               <NavItem
+                icon={Camera}
+                label="Capture"
+                active={captureOpen}
+                onClick={() => {
+                  go('today');
+                  setCaptureOpen(true);
+                }}
+              />
+              <NavItem
                 icon={Users}
                 label="People & accounts"
                 active={activeView === 'people'}
@@ -5187,21 +5178,9 @@ export default function Home() {
               />
               <NavItem
                 icon={Target}
-                label="Opportunities"
+                label="Pipeline"
                 active={activeView === 'opportunities'}
                 onClick={() => go('opportunities')}
-              />
-              <NavItem
-                icon={FileText}
-                label="RFQs & quotations"
-                active={activeView === 'rfqs'}
-                onClick={() => go('rfqs')}
-              />
-              <NavItem
-                icon={CalendarDays}
-                label="Meetings"
-                active={activeView === 'meetings'}
-                onClick={() => go('meetings')}
               />
               <p className="nav-label nav-label-spaced">Manage</p>
               <NavItem
@@ -5211,20 +5190,8 @@ export default function Home() {
                 onClick={() => go('events')}
               />
               <NavItem
-                icon={BarChart3}
-                label="Revenue analytics"
-                active={activeView === 'roi'}
-                onClick={() => go('roi')}
-              />
-              <NavItem
-                icon={Building2}
-                label="Company knowledge"
-                active={activeView === 'knowledge'}
-                onClick={() => go('knowledge')}
-              />
-              <NavItem
                 icon={Settings}
-                label="Workspace settings"
+                label="More"
                 active={activeView === 'settings'}
                 onClick={() => go('settings')}
               />
