@@ -5754,10 +5754,10 @@ export default function Home() {
                               fields are useful only when the user needs them. */}
                           <details
                             className="more-details"
-                            open={
-                              moreDetailsOpen ||
-                              Boolean(activeEvent?.leadFieldSchema.length)
-                            }
+                            /* Event-specific fields must never turn a quick
+                               capture into a long form. They remain available
+                               after the essential conversation is saved. */
+                            open={moreDetailsOpen}
                             onToggle={(event) =>
                               setMoreDetailsOpen(
                                 (event.target as HTMLDetailsElement).open,
