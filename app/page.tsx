@@ -1691,7 +1691,10 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState('');
-  const [leadScope, setLeadScope] = useState('all');
+  // Today's page is anchored by the selected capture event. Starting the
+  // conversation list at that same scope prevents a zero-event dashboard
+  // from being contradicted by older workspace records below it.
+  const [leadScope, setLeadScope] = useState('event');
   const [peopleTab, setPeopleTab] = useState<'accounts' | 'contacts'>(
     // Companies are the stable top-level relationship. A user can drill into
     // the people they met from there instead of mistaking every card scan for
@@ -7934,9 +7937,9 @@ export default function Home() {
                         setLeadScope(event.currentTarget.value)
                       }
                     >
-                      <option value="all">All leads</option>
-                      <option value="mine">My leads</option>
                       <option value="event">This event</option>
+                      <option value="mine">My leads</option>
+                      <option value="all">All leads</option>
                     </select>
                     <button onClick={() => go('people')}>
                       View all conversations <ArrowRight />

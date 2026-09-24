@@ -44,7 +44,27 @@ export async function GET(request: Request) {
     'opportunities.event_id',
   );
   const mergeAccess = eventAccessClause(context, 'sl.event_id');
-  const [leadRows, taskRows, opportunityRows, accountRows, mergeRows] =
+  const selectedLeadCondition = selectedEventId ? ' AND l.event_id=?' : '';
+  const selectedOpportunityCondition = selectedEventId
+    ? ' AND opportunities.event_id=?'
+    : '';
+  const selectedEventBinding = selectedEventId ? [selectedEventId] : [];
+  // Keep the transport bounded for a fast booth UI, but make the active event
+  // win the limited window. Otherwise a busy workspace can show an event's
+  // true aggregate totals while hiding every one of its recent conversations.
+  const leadOrder = selectedEventId
+    ? 'ORDER BY CASE WHEN l.event_id=? THEN 0 ELSE 1 END, l.created_at DESC LIMIT 100'
+    : 'ORDER BY l.created_at DESC LIMIT 100';
+  const [
+    leadRows,
+    taskRows,
+    opportunityRows,
+    accountRows,
+    mergeRows,
+    leadMetricRow,
+    taskMetricRow,
+    opportunityMetricRow,
+  ] =
     await Promise.all([
       db
         .prepare(`SELECT l.id, l.event_id AS eventId, l.account_id AS accountId,l.contact_id AS contactId,l.owner_id AS ownerId,om.display_name AS ownerName,l.full_name AS fullName, l.company, l.role, l.email, l.phone, s.buying_role AS buyingRole, l.review_status AS reviewStatus,l.qualification_state AS qualificationState,l.qualification_reason AS qualificationReason,
@@ -65,8 +85,12 @@ export async function GET(request: Request) {
       LEFT JOIN lead_capture_assets a ON a.id = (SELECT id FROM lead_capture_assets WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1)
       LEFT JOIN lead_duplicate_suggestions d ON d.id=(SELECT id FROM lead_duplicate_suggestions WHERE source_lead_id=l.id AND workspace_id=l.workspace_id AND status='pending' ORDER BY created_at DESC LIMIT 1)
       LEFT JOIN leads dl ON dl.id=d.target_lead_id AND dl.event_id=l.event_id AND dl.workspace_id=l.workspace_id
-      WHERE l.workspace_id = ? AND l.review_status!='merged'${leadAccess.sql} ORDER BY l.created_at DESC LIMIT 100`)
-        .bind(context.workspace.id, ...leadAccess.bindings)
+      WHERE l.workspace_id = ? AND l.review_status!='merged'${leadAccess.sql} ${leadOrder}`)
+        .bind(
+          context.workspace.id,
+          ...leadAccess.bindings,
+          ...selectedEventBinding,
+        )
         .all(),
       db
         .prepare(`SELECT t.id,t.lead_id AS leadId,t.title,t.due_date AS dueDate,t.status,t.reminder_at AS reminderAt,t.version,
@@ -106,6 +130,46 @@ export async function GET(request: Request) {
           context.role,
         )
         .all(),
+      // The list above is intentionally capped for a responsive workspace.
+      // Dashboard signals must not inherit that cap: an event with older or
+      // high-volume captures still needs honest lead and qualification counts.
+      db
+        .prepare(
+          `SELECT COUNT(*) AS totalLeads,
+            SUM(CASE WHEN l.review_status='confirmed' THEN 1 ELSE 0 END) AS qualifiedLeads
+           FROM leads l
+           WHERE l.workspace_id=? AND l.review_status!='merged'${leadAccess.sql}${selectedLeadCondition}`,
+        )
+        .bind(
+          context.workspace.id,
+          ...leadAccess.bindings,
+          ...selectedEventBinding,
+        )
+        .first(),
+      db
+        .prepare(
+          `SELECT COUNT(*) AS openTasks
+           FROM tasks t JOIN leads l ON l.id=t.lead_id AND l.workspace_id=t.workspace_id
+           WHERE t.workspace_id=? AND t.status='open'${leadAccess.sql}${selectedLeadCondition}`,
+        )
+        .bind(
+          context.workspace.id,
+          ...leadAccess.bindings,
+          ...selectedEventBinding,
+        )
+        .first(),
+      db
+        .prepare(
+          `SELECT COALESCE(SUM(CASE WHEN opportunities.stage NOT IN ('won','lost') THEN opportunities.value ELSE 0 END),0) AS pipelineValue
+           FROM opportunities
+           WHERE opportunities.workspace_id=?${opportunityAccess.sql}${selectedOpportunityCondition}`,
+        )
+        .bind(
+          context.workspace.id,
+          ...opportunityAccess.bindings,
+          ...selectedEventBinding,
+        )
+        .first(),
     ]);
   const leads: Record<string, unknown>[] = leadRows.results.map((row) => {
     const item = row as Record<string, unknown>;
@@ -168,18 +232,6 @@ export async function GET(request: Request) {
     contacts: opportunityContacts(item.contactsJson),
     contactsJson: undefined,
   }));
-  const metricLeads = selectedEventId
-    ? leads.filter((item) => item.eventId === selectedEventId)
-    : leads;
-  const metricTasks = selectedEventId
-    ? taskRows.results.filter((item) => item.eventId === selectedEventId)
-    : taskRows.results;
-  const metricOpportunities = selectedEventId
-    ? opportunities.filter((item) => item.eventId === selectedEventId)
-    : opportunities;
-  const pipelineValue = metricOpportunities
-    .filter((item) => !['won', 'lost'].includes(String(item.stage)))
-    .reduce((sum, item) => sum + Number(item.value || 0), 0);
   return Response.json({
     context: {
       workspace: context.workspace,
@@ -192,12 +244,10 @@ export async function GET(request: Request) {
     opportunities,
     merges: mergeRows.results,
     metrics: {
-      totalLeads: metricLeads.length,
-      qualifiedLeads: metricLeads.filter(
-        (item) => item.reviewStatus === 'confirmed',
-      ).length,
-      openTasks: metricTasks.filter((item) => item.status === 'open').length,
-      pipelineValue,
+      totalLeads: Number(leadMetricRow?.totalLeads || 0),
+      qualifiedLeads: Number(leadMetricRow?.qualifiedLeads || 0),
+      openTasks: Number(taskMetricRow?.openTasks || 0),
+      pipelineValue: Number(opportunityMetricRow?.pipelineValue || 0),
     },
   });
 }
