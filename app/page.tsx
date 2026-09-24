@@ -1244,7 +1244,10 @@ function VisitorCapture({
           disabled={reading}
         />
         {ocrStatus ? (
-          <p className={`local-ocr-status ${reading ? '' : 'ready'}`}>
+          <p
+            className={`local-ocr-status ${reading ? '' : 'ready'}`}
+            aria-live="polite"
+          >
             {reading ? <span className="local-ocr-spinner" /> : <Check size={15} />}
             {ocrStatus}
           </p>
