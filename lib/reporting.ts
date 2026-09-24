@@ -19,7 +19,7 @@ export function rankNextActions(
   candidates: PriorityCandidate[],
   now: number,
 ): RankedAction[] {
-  return candidates
+  const ranked = candidates
     .map((item) => {
       const dueIn = item.dueAt == null ? null : item.dueAt - now;
       if (dueIn != null && dueIn < 0) {
@@ -60,6 +60,18 @@ export function rankNextActions(
         (left.createdAt ?? 0) - (right.createdAt ?? 0) ||
         left.id.localeCompare(right.id),
     );
+  // Separate imports or repeated notes can legitimately create duplicate task
+  // records. They still exist (and remain auditable) in the task workspace,
+  // but repeating the same instruction for the same person on Today turns a
+  // prioritised briefing back into an inbox. The sort above ensures the most
+  // urgent instance is the one that remains actionable here.
+  const seenInstructions = new Set<string>();
+  return ranked.filter((item) => {
+    const identity = [item.kind, item.title, item.subject].join('\u0000');
+    if (seenInstructions.has(identity)) return false;
+    seenInstructions.add(identity);
+    return true;
+  });
 }
 
 export function attributedWithinWindow(

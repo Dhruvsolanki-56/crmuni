@@ -49,6 +49,40 @@ test('next best actions use deterministic urgency rules', () => {
   assert.equal(ranked[2].reason, 'Hot lead without an open commitment');
 });
 
+test('next best actions collapse identical instructions for the same person', () => {
+  const now = Date.UTC(2026, 8, 19, 12);
+  const ranked = rankNextActions(
+    [
+      {
+        id: 'older',
+        kind: 'task',
+        title: 'Send pricing follow-up',
+        subject: 'Simran Hassan',
+        dueAt: now + 4 * 60 * 60 * 1000,
+      },
+      {
+        id: 'newer',
+        kind: 'task',
+        title: 'Send pricing follow-up',
+        subject: 'Simran Hassan',
+        dueAt: now + 2 * 60 * 60 * 1000,
+      },
+      {
+        id: 'other-person',
+        kind: 'task',
+        title: 'Send pricing follow-up',
+        subject: 'Ananya Khanna',
+        dueAt: now + 2 * 60 * 60 * 1000,
+      },
+    ],
+    now,
+  );
+  assert.deepEqual(
+    ranked.map((item) => item.id),
+    ['newer', 'other-person'],
+  );
+});
+
 test('attribution window has an explicit inclusive end', () => {
   assert.equal(
     attributedWithinWindow(
