@@ -1162,7 +1162,11 @@ function VisitorCapture({
         setNotice(result.error || 'Unable to save this contact.');
         return;
       }
-      setNotice(`${result.lead.fullName} saved to My contacts`);
+      const savedLabel =
+        result.lead.fullName === 'Unidentified visitor'
+          ? result.lead.company
+          : result.lead.fullName;
+      setNotice(`${savedLabel} saved to My contacts`);
       formEl.reset();
       setCaptureFields({ fullName: '', company: '', email: '', phone: '', role: '' });
       setOcrStatus('');
@@ -1188,6 +1192,11 @@ function VisitorCapture({
     );
   }
 
+  const savedContactLabel =
+    lastSavedLead?.fullName === 'Unidentified visitor'
+      ? lastSavedLead.company
+      : lastSavedLead?.fullName;
+
   return (
     <div className="visitor-placeholder">
       <article className="panel">
@@ -1208,7 +1217,7 @@ function VisitorCapture({
               <Check size={18} />
             </span>
             <span>
-              <strong>{lastSavedLead.fullName} saved</strong>
+              <strong>{savedContactLabel} saved</strong>
               <small>Ready for the next person. Review this contact whenever you need.</small>
             </span>
             <span className="visitor-capture-saved-actions">
@@ -1258,6 +1267,9 @@ function VisitorCapture({
         <div className="or">
           <span>or enter the basics</span>
         </div>
+        <p className="capture-minimum" role="note">
+          Start with a name or company. Email, phone, and notes can wait until they matter.
+        </p>
         <form
           className="lead-form"
           ref={form}
@@ -1288,7 +1300,7 @@ function VisitorCapture({
           </div>
           <div className="field-grid">
             <div className="field-block">
-              <label htmlFor="visitor-lead-email">Work email</label>
+              <label htmlFor="visitor-lead-email">Work email <small>(optional)</small></label>
               <input
                 id="visitor-lead-email"
                 className="visitor-capture-input"
@@ -1299,7 +1311,7 @@ function VisitorCapture({
               />
             </div>
             <div className="field-block">
-              <label htmlFor="visitor-lead-phone">Phone / WhatsApp</label>
+              <label htmlFor="visitor-lead-phone">Phone / WhatsApp <small>(optional)</small></label>
               <input
                 id="visitor-lead-phone"
                 className="visitor-capture-input"
