@@ -2948,6 +2948,14 @@ export default function Home() {
     go('today');
     setNotice('This commitment is listed below. Its contact is no longer available here.');
   }
+  function openTaskContact(task: TaskItem) {
+    const lead = capturedLeads.find((item) => item.id === task.leadId);
+    if (lead) {
+      openReview(lead);
+      return;
+    }
+    setNotice('The contact for this commitment is no longer available here.');
+  }
   async function loadComments(leadId: string) {
     const response = await apiFetch(
       `/api/comments?leadId=${encodeURIComponent(leadId)}`,
@@ -7771,6 +7779,13 @@ export default function Home() {
                                 {reminderDue ? 'Reminder due' : due.label}
                               </span>
                               <span className="task-actions">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => openTaskContact(task)}
+                                >
+                                  Open contact
+                                </Button>
                                 <Button
                                   type="button"
                                   variant="outline"
