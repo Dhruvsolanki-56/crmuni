@@ -11088,24 +11088,24 @@ export default function Home() {
                     </p>
                   </article>
                   <article
-                    className={`panel settings-card capability-card ${capabilities.aiConfigured ? 'ready' : 'attention'}`}
+                    className={`panel settings-card capability-card ${capabilities.aiConfigured ? 'ready' : 'local-ready'}`}
                   >
                     <div className="settings-heading">
                       <Sparkles />
                       <div>
-                        <h2>AI capability</h2>
+                        <h2>Capture intelligence</h2>
                         <p>
                           {capabilities.aiConfigured
-                            ? 'Transcription, conversation analysis, RFQ extraction and follow-up drafting are configured. Card, badge and QR reading always work locally and never need this.'
-                            : 'AI assistance is unavailable in this environment. Card, badge and QR reading run entirely on-device and are unaffected. Transcription, conversation analysis, RFQ extraction and follow-up drafting need an AI provider key, which is not configured here.'}
+                            ? 'Advanced AI assistance is connected for transcription, conversation analysis, RFQ extraction and follow-up drafting. Card, badge and QR reading remain on-device.'
+                            : 'Card, badge and QR reading are ready on this device and never need an API key. Advanced AI assistance is intentionally not connected in this local demo.'}
                         </p>
                       </div>
                     </div>
                     <span className="capability-state">
                       <i />
                       {capabilities.aiConfigured
-                        ? 'Configured'
-                        : 'Configuration required'}
+                        ? 'Advanced AI connected'
+                        : 'Local capture ready'}
                     </span>
                   </article>
                   <details className="settings-disclosure">
