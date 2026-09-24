@@ -1048,6 +1048,7 @@ function VisitorCapture({
   async function handleFile(event: SyntheticEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
+    setLastSavedName('');
     setReading(true);
     setOcrStatus('Reading text and QR data on this device…');
     try {
@@ -1164,6 +1165,7 @@ function VisitorCapture({
         <input
           type="file"
           accept="image/*"
+          capture="environment"
           hidden
           ref={fileInput}
           onChange={handleFile}
@@ -1178,7 +1180,12 @@ function VisitorCapture({
         <div className="or">
           <span>or enter the basics</span>
         </div>
-        <form className="lead-form" ref={form} onSubmit={submit}>
+        <form
+          className="lead-form"
+          ref={form}
+          onSubmit={submit}
+          onInput={() => lastSavedName && setLastSavedName('')}
+        >
           <div className="field-grid">
             <div className="field-block">
               <label htmlFor="visitor-lead-name">Full name</label>
