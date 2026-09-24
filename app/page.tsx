@@ -7626,7 +7626,7 @@ export default function Home() {
                         setPeoplePage(0);
                       }}
                     >
-                      Contacts <b>{capturedLeads.length}</b>
+                      Contacts <b>{contactRows.length}</b>
                     </button>
                   </nav>
 
