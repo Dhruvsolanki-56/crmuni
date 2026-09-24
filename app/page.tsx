@@ -12509,6 +12509,16 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="visitor-followup-detail">
+                    {(() => {
+                      const canDraftEmail = Boolean(
+                        reviewLead.email &&
+                          reviewLead.emailConsentStatus === 'granted',
+                      );
+                      const canDraftWhatsApp = Boolean(
+                        reviewLead.phone &&
+                          reviewLead.whatsappConsentStatus === 'granted',
+                      );
+                      return (
                     <article className="panel">
                       <div className="settings-heading">
                         <FileText />
@@ -12631,7 +12641,7 @@ export default function Home() {
                           type="button"
                           variant="outline"
                           onClick={() => generateFollowup('email')}
-                          disabled={Boolean(drafting)}
+                          disabled={Boolean(drafting) || !canDraftEmail}
                         >
                           {drafting === 'email' ? 'Drafting…' : 'Draft email'}
                         </Button>
@@ -12639,14 +12649,21 @@ export default function Home() {
                           type="button"
                           variant="outline"
                           onClick={() => generateFollowup('whatsapp')}
-                          disabled={Boolean(drafting)}
+                          disabled={Boolean(drafting) || !canDraftWhatsApp}
                         >
                           {drafting === 'whatsapp'
                             ? 'Drafting…'
                             : 'Draft WhatsApp'}
                         </Button>
                       </div>
+                      {!canDraftEmail && !canDraftWhatsApp ? (
+                        <p className="field-help">
+                          Add a reachable detail and record follow-up permission to draft a message.
+                        </p>
+                      ) : null}
                     </article>
+                      );
+                    })()}
                     {followups.length ? (
                       <section className="followup-list">
                         {followups.map((draft) => (
