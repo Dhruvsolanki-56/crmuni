@@ -5881,6 +5881,13 @@ export default function Home() {
                 onClick={() => go('events')}
               />
               <NavItem
+                icon={FileText}
+                label="Company knowledge"
+                description="Keep only approved context for better follow-ups"
+                active={activeView === 'knowledge'}
+                onClick={() => go('knowledge')}
+              />
+              <NavItem
                 icon={Settings}
                 label="Settings"
                 description="Manage your revenue workspace"
@@ -11076,6 +11083,17 @@ export default function Home() {
                     ) : null}
                   </article>
                   <h3 className="settings-group">Knowledge base</h3>
+                  <details className="knowledge-advanced">
+                    <summary>
+                      <span>
+                        <strong>Optional sales context</strong>
+                        <small>
+                          Claims, offerings, ideal customers, and qualification rules
+                        </small>
+                      </span>
+                      <ChevronDown size={16} />
+                    </summary>
+                    <div className="knowledge-advanced-content">
                   <article className="panel knowledge-card">
                     <h2>Approved claims</h2>
                     <p className="field-help">
@@ -11544,6 +11562,8 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
+                    </div>
+                  </details>
                   <h3 className="settings-group">Evidence</h3>
                   <article
                     id="knowledge-sources"
