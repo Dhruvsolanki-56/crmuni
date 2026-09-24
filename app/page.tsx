@@ -2660,10 +2660,11 @@ export default function Home() {
         filled.push(field);
       }
       setLocalOcrFields(filled);
-      // Role lives behind "More details" - if OCR filled it, that
-      // disclosure must open, or the user would be saving a field they
-      // never saw and never got the chance to correct.
-      if (filled.includes('role')) setMoreDetailsOpen(true);
+      // Reachability and role live behind "More details". If OCR filled any
+      // of them, reveal that section so the capturer can verify the result
+      // instead of saving a field they never saw.
+      if (filled.some((field) => ['email', 'phone', 'role'].includes(field)))
+        setMoreDetailsOpen(true);
       if (filled.length) void checkIdentityPreview(currentCaptureFields());
       setLocalOcrStatus(
         filled.length
@@ -6077,40 +6078,6 @@ export default function Home() {
                               />
                             </div>
                           </div>
-                          <div className="field-grid">
-                            <div className="field-block">
-                              <label htmlFor="lead-email">Work email <small>(optional)</small></label>
-                              <Input
-                                id="lead-email"
-                                name="email"
-                                type="email"
-                                autoComplete="email"
-                                placeholder="rajesh@company.com"
-                                onBlur={() =>
-                                  void checkIdentityPreview(
-                                    currentCaptureFields(),
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className="field-block">
-                              <label htmlFor="lead-phone">
-                                Phone / WhatsApp <small>(optional)</small>
-                              </label>
-                              <Input
-                                id="lead-phone"
-                                name="phone"
-                                type="tel"
-                                autoComplete="tel"
-                                placeholder="+91 98765 43210"
-                                onBlur={() =>
-                                  void checkIdentityPreview(
-                                    currentCaptureFields(),
-                                  )
-                                }
-                              />
-                            </div>
-                          </div>
                           {/* What Release A's contact/account resolution
                               already knows, shown before Save - "assistive,
                               contextual" only works if the organization the
@@ -6187,10 +6154,46 @@ export default function Home() {
                             }
                             >
                             <summary>
-                              <span>Add next step or details</span>
+                              <span>Add contact or next-step details</span>
                               <ChevronDown size={14} />
                             </summary>
                             <div className="more-details-body">
+                              <div className="field-grid">
+                                <div className="field-block">
+                                  <label htmlFor="lead-email">
+                                    Work email <small>(optional)</small>
+                                  </label>
+                                  <Input
+                                    id="lead-email"
+                                    name="email"
+                                    type="email"
+                                    autoComplete="email"
+                                    placeholder="rajesh@company.com"
+                                    onBlur={() =>
+                                      void checkIdentityPreview(
+                                        currentCaptureFields(),
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className="field-block">
+                                  <label htmlFor="lead-phone">
+                                    Phone / WhatsApp <small>(optional)</small>
+                                  </label>
+                                  <Input
+                                    id="lead-phone"
+                                    name="phone"
+                                    type="tel"
+                                    autoComplete="tel"
+                                    placeholder="+91 98765 43210"
+                                    onBlur={() =>
+                                      void checkIdentityPreview(
+                                        currentCaptureFields(),
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
                               <div className="field-grid">
                                 <div className="field-block">
                                   <label htmlFor="lead-action">
