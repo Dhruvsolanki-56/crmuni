@@ -1049,6 +1049,7 @@ function VisitorCapture({
   const [ocrStatus, setOcrStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastSavedLead, setLastSavedLead] = useState<SavedLead | null>(null);
+  const [extraDetailsOpen, setExtraDetailsOpen] = useState(false);
   const [recordingVoiceNote, setRecordingVoiceNote] = useState(false);
   const [voiceNote, setVoiceNote] = useState<{
     file: File;
@@ -1101,6 +1102,8 @@ function VisitorCapture({
         filled += 1;
       }
       setCaptureFields(nextFields);
+      if (['email', 'phone', 'role'].some((field) => nextFields[field]))
+        setExtraDetailsOpen(true);
       if (sampleFields)
         setCaptureFields((current) => ({ ...current, ...sampleFields }));
       setOcrStatus(
@@ -1238,6 +1241,7 @@ function VisitorCapture({
       setNotice(`${savedLabel} saved to My contacts`);
       formEl.reset();
       setCaptureFields({ fullName: '', company: '', email: '', phone: '', role: '' });
+      setExtraDetailsOpen(false);
       setOcrStatus('');
       removeVoiceNote();
       setLastSavedLead(result.lead);
@@ -1405,42 +1409,60 @@ function VisitorCapture({
               />
             </div>
           </div>
-          <div className="field-grid">
-            <div className="field-block">
-              <label htmlFor="visitor-lead-email">Work email <small>(optional)</small></label>
-              <input
-                id="visitor-lead-email"
-                className="visitor-capture-input"
-                name="email"
-                type="email"
-                value={captureFields.email}
-                onChange={(event) => setCaptureFields((current) => ({ ...current, email: event.currentTarget.value }))}
-              />
-            </div>
-            <div className="field-block">
-              <label htmlFor="visitor-lead-phone">Phone / WhatsApp <small>(optional)</small></label>
-              <input
-                id="visitor-lead-phone"
-                className="visitor-capture-input"
-                name="phone"
-                type="tel"
-                value={captureFields.phone}
-                onChange={(event) => setCaptureFields((current) => ({ ...current, phone: event.currentTarget.value }))}
-              />
-            </div>
-          </div>
           <div className="field-block">
             <label htmlFor="visitor-lead-note">
               Notes — what did they say, what did you promise?
             </label>
             <Textarea id="visitor-lead-note" name="note" />
           </div>
-          <details className="more-details">
+          <details
+            className="more-details"
+            open={extraDetailsOpen}
+            onToggle={(event) => setExtraDetailsOpen(event.currentTarget.open)}
+          >
             <summary>
-              <span>Add next step or details</span>
+              <span>Add contact or next-step details</span>
               <ChevronDown size={14} />
             </summary>
             <div className="more-details-body">
+              <div className="field-grid">
+                <div className="field-block">
+                  <label htmlFor="visitor-lead-email">
+                    Work email <small>(optional)</small>
+                  </label>
+                  <input
+                    id="visitor-lead-email"
+                    className="visitor-capture-input"
+                    name="email"
+                    type="email"
+                    value={captureFields.email}
+                    onChange={(event) =>
+                      setCaptureFields((current) => ({
+                        ...current,
+                        email: event.currentTarget.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="field-block">
+                  <label htmlFor="visitor-lead-phone">
+                    Phone / WhatsApp <small>(optional)</small>
+                  </label>
+                  <input
+                    id="visitor-lead-phone"
+                    className="visitor-capture-input"
+                    name="phone"
+                    type="tel"
+                    value={captureFields.phone}
+                    onChange={(event) =>
+                      setCaptureFields((current) => ({
+                        ...current,
+                        phone: event.currentTarget.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
               <div className="field-grid">
                 <div className="field-block">
                   <label htmlFor="visitor-lead-action">Next action</label>
