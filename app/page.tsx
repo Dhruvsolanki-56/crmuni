@@ -6390,10 +6390,6 @@ export default function Home() {
                           <Button
                             type="button"
                             variant="outline"
-                            disabled={
-                              !reviewLead.email &&
-                              reviewLead.emailConsentStatus !== 'granted'
-                            }
                             onClick={() => resetCapture(false)}
                           >
                             Back to today
@@ -11576,6 +11572,10 @@ export default function Home() {
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={
+                              !reviewLead.email &&
+                              reviewLead.emailConsentStatus !== 'granted'
+                            }
                             onClick={() =>
                               operationsAction('acknowledge_alert', alert.id)
                             }
