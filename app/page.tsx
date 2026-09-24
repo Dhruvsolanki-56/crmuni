@@ -1897,8 +1897,11 @@ export default function Home() {
         },
         annotations: { readOnlyHint: false, untrustedContentHint: false },
         execute: () => {
-          setCaptureOpen(true);
-          return { status: 'capture_open', event: toolEvent };
+          startCapture();
+          return {
+            status: activeEventId ? 'capture_open' : 'event_setup_needed',
+            event: toolEvent,
+          };
         },
       },
       { signal: lifecycle.signal },
@@ -2802,6 +2805,26 @@ export default function Home() {
   function scanNext() {
     void resetCapture(false);
     window.setTimeout(() => setCaptureOpen(true), 200);
+  }
+
+  // Capture is an event action. Never open a form that cannot be saved and
+  // make the rep work out why; take them to the one prerequisite instead.
+  function startCapture() {
+    if (activeEvent) {
+      setCaptureOpen(true);
+      return;
+    }
+    go('events');
+    if (!events.length && canManageEvents) {
+      newEvent();
+      setNotice('Start with the event name. You can add the rest later.');
+      return;
+    }
+    setNotice(
+      canManageEvents
+        ? 'Choose or activate an event before capturing a conversation.'
+        : 'Ask an event manager to assign an active event before capturing.',
+    );
   }
 
   async function attachReviewAsset(
@@ -5700,10 +5723,7 @@ export default function Home() {
                 label="Capture"
                 description="Scan a card, badge, or QR and save the conversation"
                 active={captureOpen}
-                onClick={() => {
-                  go('today');
-                  setCaptureOpen(true);
-                }}
+                onClick={startCapture}
               />
               <NavItem
                 icon={Users}
@@ -7614,11 +7634,7 @@ export default function Home() {
                     type="button"
                     className="capture-button"
                     onClick={() => {
-                      if (activeEvent) setCaptureOpen(true);
-                      else {
-                        go('events');
-                        newEvent();
-                      }
+                      startCapture();
                     }}
                   >
                     {activeEvent ? <Camera /> : <CalendarDays />}
@@ -8133,7 +8149,7 @@ export default function Home() {
                       <Button
                         type="button"
                         className="capture-button"
-                        onClick={() => setCaptureOpen(true)}
+                        onClick={startCapture}
                       >
                         <Plus /> Add contact
                       </Button>
@@ -8229,7 +8245,7 @@ export default function Home() {
                               <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => setCaptureOpen(true)}
+                                onClick={startCapture}
                               >
                                 Add contact
                               </Button>
@@ -13328,7 +13344,7 @@ export default function Home() {
                     variant="outline"
                     onClick={() => {
                       setOpportunityOpen(false);
-                      setCaptureOpen(true);
+                      startCapture();
                     }}
                   >
                     Capture a contact
