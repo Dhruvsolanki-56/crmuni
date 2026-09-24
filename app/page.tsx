@@ -7025,7 +7025,10 @@ export default function Home() {
                 </section>
               ) : null}
 
-              <section className="signal-grid" aria-label="Event performance">
+              <section
+                className="signal-grid"
+                aria-label={activeEvent ? 'Event performance' : 'Workspace performance'}
+              >
                 <article className="signal-card primary-signal">
                   <div className="signal-head">
                     <span>Captured leads</span>
@@ -7057,7 +7060,9 @@ export default function Home() {
                 </article>
                 <article className="signal-card">
                   <div className="signal-head">
-                    <span>Event pipeline</span>
+                    <span>
+                      {activeEvent ? 'Event pipeline' : 'Workspace pipeline'}
+                    </span>
                     <span className="mini-icon blue">
                       <Target />
                     </span>
@@ -7069,7 +7074,8 @@ export default function Home() {
                     )}
                   </strong>
                   <small>
-                    Across {activeEventOpportunities.length} opportunit
+                    {activeEvent ? 'At this event' : 'Across the workspace'}{' '}
+                    · {activeEventOpportunities.length} opportunit
                     {activeEventOpportunities.length === 1 ? 'y' : 'ies'}
                   </small>
                   <div className="pipeline-note">
