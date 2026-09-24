@@ -1292,7 +1292,7 @@ function VisitorCapture({
               <small>
                 {canFollowUpNow
                   ? 'Ready for the next person. Review this contact whenever you need.'
-                  : 'Add an email or phone later when you are ready to follow up.'}
+                  : 'Capture a person at this company whenever you meet them.'}
               </small>
             </span>
             <span className="visitor-capture-saved-actions">
