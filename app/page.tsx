@@ -5612,12 +5612,7 @@ export default function Home() {
                               <Input
                                 id="lead-name"
                                 name="fullName"
-                                required={!attachment}
-                                placeholder={
-                                  attachment
-                                    ? 'Optional · extract from capture'
-                                    : 'e.g. Rajesh Mehta'
-                                }
+                                placeholder={attachment ? 'Found from card when available' : 'e.g. Rajesh Mehta'}
                               />
                             </div>
                             <div className="field-block">
@@ -5625,12 +5620,7 @@ export default function Home() {
                               <Input
                                 id="lead-company"
                                 name="company"
-                                required={!attachment}
-                                placeholder={
-                                  attachment
-                                    ? 'Optional · extract from capture'
-                                    : 'e.g. ABC Pharma'
-                                }
+                                placeholder={attachment ? 'Found from card when available' : 'e.g. ABC Pharma'}
                                 onBlur={() =>
                                   void checkIdentityPreview(
                                     currentCaptureFields(),
@@ -5724,27 +5714,6 @@ export default function Home() {
                               ) : null}
                             </p>
                           ) : null}
-                          <fieldset className="field-block">
-                            <legend>Follow-up permission</legend>
-                            <label>
-                              <input type="checkbox" name="emailConsent" />{' '}
-                              Visitor clearly agreed to an email follow-up
-                            </label>
-                            <label>
-                              <input type="checkbox" name="whatsappConsent" />{' '}
-                              Visitor clearly agreed to a WhatsApp follow-up
-                            </label>
-                            <input
-                              type="hidden"
-                              name="consentSource"
-                              value="event_conversation_attestation"
-                            />
-                            <small className="field-help">
-                              Leave unchecked if permission was not clearly
-                              given. The system will block message drafting
-                              until it is recorded.
-                            </small>
-                          </fieldset>
                           <div className="field-block">
                             <label htmlFor="lead-note">Conversation note</label>
                             <Textarea
@@ -5753,12 +5722,10 @@ export default function Home() {
                               placeholder="What did they need, what did you promise, and when?"
                             />
                           </div>
-                          {/* Role, event-specific fields, and next-action
-                              scheduling are real and saved exactly as typed
-                              - they're just not needed to capture the 90% of
-                              visitors where a name, company and a note are
-                              enough. Open by default only when the event
-                              defines its own required fields. */}
+                          {/* The important capture is already complete above:
+                              identity plus optional conversation context.
+                              Next action, permission, role, and event-specific
+                              fields are useful only when the user needs them. */}
                           <details
                             className="more-details"
                             open={
@@ -5770,12 +5737,53 @@ export default function Home() {
                                 (event.target as HTMLDetailsElement).open,
                               )
                             }
-                          >
+                            >
                             <summary>
-                              <span>More details</span>
+                              <span>Add next step or details</span>
                               <ChevronDown size={14} />
                             </summary>
                             <div className="more-details-body">
+                              <div className="field-grid">
+                                <div className="field-block">
+                                  <label htmlFor="lead-action">
+                                    Next action
+                                  </label>
+                                  <Input
+                                    id="lead-action"
+                                    name="nextAction"
+                                    placeholder="e.g. Send preliminary pricing"
+                                  />
+                                </div>
+                                <div className="field-block">
+                                  <label htmlFor="lead-due">Due date</label>
+                                  <Input
+                                    id="lead-due"
+                                    name="dueDate"
+                                    type="date"
+                                  />
+                                </div>
+                              </div>
+                              <fieldset className="field-block">
+                                <legend>Follow-up permission</legend>
+                                <label>
+                                  <input type="checkbox" name="emailConsent" />{' '}
+                                  Visitor clearly agreed to an email follow-up
+                                </label>
+                                <label>
+                                  <input type="checkbox" name="whatsappConsent" />{' '}
+                                  Visitor clearly agreed to a WhatsApp follow-up
+                                </label>
+                                <input
+                                  type="hidden"
+                                  name="consentSource"
+                                  value="event_conversation_attestation"
+                                />
+                                <small className="field-help">
+                                  Only record permission when it was clearly
+                                  given. It is needed before a message can be
+                                  drafted, never to save this conversation.
+                                </small>
+                              </fieldset>
                               <div className="field-block">
                                 <label htmlFor="lead-role">Role</label>
                                 <Input
@@ -5799,26 +5807,6 @@ export default function Home() {
                                   ))}
                                 </div>
                               ) : null}
-                              <div className="field-grid">
-                                <div className="field-block">
-                                  <label htmlFor="lead-action">
-                                    Next action
-                                  </label>
-                                  <Input
-                                    id="lead-action"
-                                    name="nextAction"
-                                    placeholder="e.g. Send preliminary pricing"
-                                  />
-                                </div>
-                                <div className="field-block">
-                                  <label htmlFor="lead-due">Due date</label>
-                                  <Input
-                                    id="lead-due"
-                                    name="dueDate"
-                                    type="date"
-                                  />
-                                </div>
-                              </div>
                             </div>
                           </details>
                           {saveError ? (

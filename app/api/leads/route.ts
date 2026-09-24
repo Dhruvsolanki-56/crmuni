@@ -333,11 +333,15 @@ export async function POST(request: Request) {
     body.localOcrConfirmed === 'true' &&
     Boolean(file?.type.startsWith('image/')) &&
     localOcrFields.length > 0;
-  if ((!suppliedFullName || !suppliedCompany) && !file)
+  // A valuable conversation can identify only a person or only a company.
+  // Do not turn a short manual capture into a CRM form by requiring both.
+  // An entirely empty manual submit is still rejected: there is no source
+  // evidence to recover from later in that case.
+  if (!suppliedFullName && !suppliedCompany && !file)
     return Response.json(
       {
         error:
-          'Add a full name and company, or attach a card, badge, QR image, or recording.',
+          'Add a name or company, or attach a card, badge, QR image, or recording.',
       },
       { status: 400 },
     );
@@ -387,11 +391,11 @@ export async function POST(request: Request) {
   // message instead of silently saving an "Unidentified visitor" record
   // no one can ever recover the real details for.
   const storageOk = filesAvailable();
-  if (file && !storageOk && (!suppliedFullName || !suppliedCompany))
+  if (file && !storageOk && !suppliedFullName && !suppliedCompany)
     return Response.json(
       {
         error:
-          'Automatic reading of images and recordings is unavailable in this environment. Enter the visitor’s name and company to save this lead.',
+          'Automatic reading of images and recordings is unavailable in this environment. Enter a name or company to save this lead.',
         code: 'STORAGE_UNAVAILABLE',
       },
       { status: 503 },
