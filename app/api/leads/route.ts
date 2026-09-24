@@ -12,7 +12,7 @@ import {
 } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
 import { accountIdentity } from '@/lib/accounts';
-import { resolveContact } from '@/lib/contacts';
+import { hasContactIdentity, resolveContact } from '@/lib/contacts';
 import {
   enforceStorageEntitlement,
   isEntitlementConstraint,
@@ -437,6 +437,15 @@ export async function POST(request: Request) {
   const leadId = crypto.randomUUID();
   const fullName = suppliedFullName || 'Unidentified visitor';
   const company = suppliedCompany || 'Company pending';
+  // A company-only capture is useful (it preserves a real conversation), but
+  // it is not evidence of a particular person. Keep that encounter under the
+  // account without manufacturing a durable "Unidentified visitor" contact
+  // that would later look like a duplicate person at the same company.
+  const hasPersonIdentity = hasContactIdentity({
+    fullName: suppliedFullName,
+    email,
+    phone,
+  });
   const account = suppliedCompany
     ? await accountIdentity(context.workspace.id, suppliedCompany)
     : null;
@@ -451,7 +460,7 @@ export async function POST(request: Request) {
       email,
       phone,
       phone,
-      account?.id || null,
+      hasPersonIdentity && suppliedFullName ? account?.id || null : null,
       account?.id || null,
       fullName,
       email,
@@ -469,12 +478,14 @@ export async function POST(request: Request) {
   // Workspace-wide identity resolution, independent of the event-scoped
   // duplicate check above: the same person met at a different event must
   // resolve to the same contact, which an event-scoped query can never see.
-  const contact = await resolveContact(database(), context.workspace.id, {
-    fullName,
-    email,
-    phone,
-    accountId: account?.id || null,
-  });
+  const contact = hasPersonIdentity
+    ? await resolveContact(database(), context.workspace.id, {
+        fullName,
+        email,
+        phone,
+        accountId: account?.id || null,
+      })
+    : null;
   const interactionId = note ? crypto.randomUUID() : null;
   const taskId = nextAction ? crypto.randomUUID() : null;
   const attachmentKind = ['card', 'badge', 'qr', 'audio'].includes(
@@ -510,7 +521,7 @@ export async function POST(request: Request) {
         context.workspace.id,
         eventId,
         account?.id || null,
-        contact.contactId,
+        contact?.contactId || null,
         clientCaptureId || null,
         context.user.id,
         fullName,
@@ -594,7 +605,7 @@ export async function POST(request: Request) {
   // runs last at index 0, so this call must execute BEFORE the account
   // block's unshift() for the final order to come out [account, contact,
   // lead, ...].
-  if (contact.isNew)
+  if (contact?.isNew)
     statements.unshift(
       database()
         .prepare(
@@ -616,7 +627,7 @@ export async function POST(request: Request) {
   // contact above and separately records the match here for a human to
   // confirm or dismiss - the same shape lead_duplicate_suggestions already
   // uses for the equivalent lead-level decision.
-  if (contact.suggestedContactId)
+  if (contact?.suggestedContactId)
     statements.push(
       database()
         .prepare(
@@ -793,11 +804,14 @@ export async function POST(request: Request) {
       // contact fields - whatever was typed, or filled by on-device OCR,
       // which never touches storage - were saved normally either way; this
       // is purely about the original file and server-side extraction.
-      contact: {
-        isNew: contact.isNew,
-        matchedOn: contact.matchedOn,
-        accountContactCount,
-      },      warning:
+      contact: contact
+        ? {
+            isNew: contact.isNew,
+            matchedOn: contact.matchedOn,
+            accountContactCount,
+          }
+        : null,
+      warning:
         file && !storageOk
           ? localOcrConfirmed
             ? 'File storage is unavailable in this environment, so the original could not be kept. The on-device reading of the contact fields is unaffected.'

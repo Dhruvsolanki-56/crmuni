@@ -30,6 +30,21 @@ export type ContactResolution = {
   suggestedReason: 'account_and_name' | null;
 };
 
+/**
+ * An account is not a person. Only create a durable contact when the capture
+ * carries some person-level evidence; otherwise the event encounter remains
+ * attached to the company and can be identified later.
+ */
+export function hasContactIdentity(input: {
+  fullName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  return Boolean(
+    input.fullName?.trim() || input.email?.trim() || input.phone?.trim(),
+  );
+}
+
 export async function resolveContact(
   db: D1Database,
   workspaceId: string,

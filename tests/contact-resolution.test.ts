@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveContact } from '../lib/contacts.ts';
+import { hasContactIdentity, resolveContact } from '../lib/contacts.ts';
 
 type Row = { id: string } | undefined;
 
@@ -58,4 +58,12 @@ test('same company and name is a suggestion, never a silent contact merge', asyn
   assert.equal(result.suggestedContactId, 'contact-existing-rajesh');
   assert.equal(result.suggestedReason, 'account_and_name');
   assert.notEqual(result.contactId, 'contact-existing-rajesh');
+});
+
+test('a company alone is an account encounter, not a fabricated contact', () => {
+  assert.equal(hasContactIdentity({ fullName: '', email: '', phone: '' }), false);
+  assert.equal(hasContactIdentity({ fullName: '  ' }), false);
+  assert.equal(hasContactIdentity({ email: 'procurement@abc.example' }), true);
+  assert.equal(hasContactIdentity({ phone: '+91 9000000000' }), true);
+  assert.equal(hasContactIdentity({ fullName: 'Neha Shah' }), true);
 });
