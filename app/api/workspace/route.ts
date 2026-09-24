@@ -520,7 +520,13 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, status });
   }
   if (action === 'update_lead') {
-    requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
+    requireRole(context, [
+      'owner',
+      'admin',
+      'manager',
+      'salesperson',
+      'visitor',
+    ]);
     const id = clean(body.id, 80);
     const fullName = clean(body.fullName, 120);
     const company = clean(body.company, 160);
@@ -546,10 +552,17 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     await requireLeadAccess(context, id);
+    const db = database();
+    const existing = await db
+      .prepare(`SELECT email,phone FROM leads WHERE id=? AND workspace_id=?`)
+      .bind(id, context.workspace.id)
+      .first<{ email: string | null; phone: string | null }>();
+    const emailChanged = (existing?.email || '') !== email;
+    const phoneChanged = (existing?.phone || '') !== phone;
     const account = await accountIdentity(context.workspace.id, company);
     const now = Date.now();
-    await database().batch([
-      database()
+    const statements = [
+      db
         .prepare(
           `INSERT INTO accounts (id,workspace_id,name,normalized_name,status,created_at,updated_at) VALUES (?,?,?,?,'active',?,?) ON CONFLICT(workspace_id,normalized_name) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at`,
         )
@@ -561,7 +574,7 @@ export async function POST(request: Request) {
           now,
           now,
         ),
-      database()
+      db
         .prepare(
           `UPDATE leads SET account_id=?,full_name=?,company=?,role=NULLIF(?,''),email=NULLIF(?,''),phone=NULLIF(?,''),custom_fields_json=CASE WHEN ?=1 THEN ? ELSE custom_fields_json END,updated_at=? WHERE id=? AND workspace_id=?`,
         )
@@ -579,9 +592,37 @@ export async function POST(request: Request) {
           context.workspace.id,
         ),
       auditStatement(context, 'lead.updated', 'lead', id),
-    ]);
+    ];
+    // Consent is specific to the reachable address or number presented at the
+    // time it was granted. Do not carry it forward if that recipient changes.
+    if (emailChanged)
+      statements.push(
+        db
+          .prepare(
+            `UPDATE lead_consents SET status='withdrawn',source='recipient_changed',withdrawn_at=?,updated_by=?,updated_at=? WHERE workspace_id=? AND lead_id=? AND purpose='follow_up' AND channel='email' AND status='granted'`,
+          )
+          .bind(now, context.user.id, now, context.workspace.id, id),
+      );
+    if (phoneChanged)
+      statements.push(
+        db
+          .prepare(
+            `UPDATE lead_consents SET status='withdrawn',source='recipient_changed',withdrawn_at=?,updated_by=?,updated_at=? WHERE workspace_id=? AND lead_id=? AND purpose='follow_up' AND channel='whatsapp' AND status='granted'`,
+          )
+          .bind(now, context.user.id, now, context.workspace.id, id),
+      );
+    await db.batch(statements);
     return Response.json({
-      lead: { id, fullName, company, role, email, phone },
+      lead: {
+        id,
+        fullName,
+        company,
+        role,
+        email,
+        phone,
+        ...(emailChanged ? { emailConsentStatus: 'withdrawn' } : {}),
+        ...(phoneChanged ? { whatsappConsentStatus: 'withdrawn' } : {}),
+      },
     });
   }
   if (action === 'confirm_contact') {

@@ -12589,6 +12589,67 @@ export default function Home() {
                           {analysisError}
                         </p>
                       ) : null}
+                      {reviewLead.fullName !== 'Unidentified visitor' ? (
+                        <details className="review-extra-fields">
+                          <summary>Add or correct contact details</summary>
+                          <p className="field-help">
+                            Only add what helps you reach this person. Changing
+                            an email or phone number asks you to record
+                            permission again.
+                          </p>
+                          <form
+                            className="visitor-contact-details-form"
+                            onSubmit={saveLeadDetails}
+                          >
+                            <input
+                              name="fullName"
+                              type="hidden"
+                              value={reviewLead.fullName}
+                              readOnly
+                            />
+                            <input
+                              name="company"
+                              type="hidden"
+                              value={reviewLead.company}
+                              readOnly
+                            />
+                            <div className="field-grid">
+                              <input
+                                className="review-input"
+                                name="role"
+                                aria-label="Role"
+                                defaultValue={reviewLead.role || ''}
+                                placeholder="Role (optional)"
+                              />
+                              <input
+                                className="review-input"
+                                name="email"
+                                type="email"
+                                inputMode="email"
+                                aria-label="Work email"
+                                defaultValue={reviewLead.email || ''}
+                                placeholder="Work email (optional)"
+                              />
+                            </div>
+                            <input
+                              className="review-input"
+                              name="phone"
+                              inputMode="tel"
+                              aria-label="Phone or WhatsApp"
+                              defaultValue={reviewLead.phone || ''}
+                              placeholder="Phone / WhatsApp (optional)"
+                            />
+                            <Button type="submit" variant="outline">
+                              Save contact details
+                            </Button>
+                          </form>
+                        </details>
+                      ) : (
+                        <p className="field-help">
+                          This is an account conversation, not a person yet.
+                          Capture the next person you meet at this company.
+                        </p>
+                      )}
                       <div className="field-grid">
                         <div className="consent-cell">
                           <small>
@@ -12670,7 +12731,9 @@ export default function Home() {
                       </div>
                       {!canDraftEmail && !canDraftWhatsApp ? (
                         <p className="field-help">
-                          Add a reachable detail and record follow-up permission to draft a message.
+                          {reviewLead.fullName === 'Unidentified visitor'
+                            ? 'Capture a reachable person, then record follow-up permission to draft a message.'
+                            : 'Add a reachable detail and record follow-up permission to draft a message.'}
                         </p>
                       ) : null}
                     </article>
