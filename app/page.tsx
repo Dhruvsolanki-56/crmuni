@@ -535,6 +535,16 @@ type FollowupDraft = {
   updatedAt?: number;
   handedOffAt?: number;
 };
+type LeadAsset = {
+  id: string;
+  leadId: string;
+  kind: string;
+  originalName: string;
+  contentType?: string;
+  sizeBytes?: number;
+  processingStatus: string;
+  createdAt: number;
+};
 type LeadComment = {
   id: string;
   body: string;
@@ -1774,6 +1784,7 @@ export default function Home() {
   const [outboxCount, setOutboxCount] = useState(0);
   const [outboxNeedsReview, setOutboxNeedsReview] = useState(0);
   const [followups, setFollowups] = useState<FollowupDraft[]>([]);
+  const [leadAssets, setLeadAssets] = useState<LeadAsset[]>([]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [drafting, setDrafting] = useState('');
   const [confirmingContact, setConfirmingContact] = useState(false);
@@ -2882,9 +2893,11 @@ export default function Home() {
     setAnalysisError('');
     setConfirmed(false);
     setFollowups([]);
+    setLeadAssets([]);
     setLeadComments([]);
     setCommentMentions([]);
     void loadFollowups(lead.id);
+    void loadLeadAssets(lead.id);
     void loadComments(lead.id);
     void loadSettings();
   }
@@ -2893,7 +2906,9 @@ export default function Home() {
     setReviewLead(lead);
     setAnalysisError('');
     setFollowups([]);
+    setLeadAssets([]);
     void loadFollowups(lead.id);
+    void loadLeadAssets(lead.id);
   }
   async function loadComments(leadId: string) {
     const response = await apiFetch(
@@ -3132,6 +3147,30 @@ export default function Home() {
     setReviewLead(null);
     setNotice('Contacts merged · undo is available in People');
     await loadWorkspace();
+  }
+  async function loadLeadAssets(leadId: string) {
+    const response = await apiFetch(
+      `/api/lead-assets?leadId=${encodeURIComponent(leadId)}`,
+    );
+    if (!response.ok) return;
+    const data = (await response.json()) as { assets: LeadAsset[] };
+    setLeadAssets(data.assets);
+  }
+  async function downloadLeadAsset(asset: LeadAsset) {
+    const response = await apiFetch(
+      `/api/lead-assets?assetId=${encodeURIComponent(asset.id)}`,
+    );
+    if (!response.ok) {
+      setNotice('This conversation file is unavailable.');
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = asset.originalName || 'conversation-file';
+    link.click();
+    URL.revokeObjectURL(url);
   }
   async function mergeDuplicateContact(source: SavedLead) {
     if (!source.contactId || !source.duplicateContactId) return;
@@ -6460,6 +6499,39 @@ export default function Home() {
                           'No conversation note was captured.'}
                       </p>
                     </div>
+                    {leadAssets.length ? (
+                      <details className="review-extra-fields">
+                        <summary>
+                          Conversation files ({leadAssets.length})
+                        </summary>
+                        <div className="knowledge-records">
+                          {leadAssets.map((asset) => (
+                            <div key={asset.id}>
+                              <span>
+                                <strong>
+                                  {asset.kind === 'audio'
+                                    ? 'Voice note'
+                                    : asset.kind === 'card'
+                                      ? 'Card or badge capture'
+                                      : 'Conversation file'}
+                                </strong>
+                                <small>
+                                  {asset.originalName} ·{' '}
+                                  {asset.processingStatus.replaceAll('_', ' ')}
+                                </small>
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void downloadLeadAsset(asset)}
+                              >
+                                Download
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
                     {reviewLeadOtherEncounters.length ? (
                       <div className="source-note">
                         <span>
@@ -12567,6 +12639,42 @@ export default function Home() {
                       >
                         ← Choose a different contact
                       </button>
+                      {leadAssets.length ? (
+                        <details className="review-extra-fields">
+                          <summary>
+                            Conversation files ({leadAssets.length})
+                          </summary>
+                          <div className="knowledge-records">
+                            {leadAssets.map((asset) => (
+                              <div key={asset.id}>
+                                <span>
+                                  <strong>
+                                    {asset.kind === 'audio'
+                                      ? 'Voice note'
+                                      : asset.kind === 'card'
+                                        ? 'Card or badge capture'
+                                        : 'Conversation file'}
+                                  </strong>
+                                  <small>
+                                    {asset.originalName} ·{' '}
+                                    {asset.processingStatus.replaceAll(
+                                      '_',
+                                      ' ',
+                                    )}
+                                  </small>
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => void downloadLeadAsset(asset)}
+                                >
+                                  Download
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
                       {reviewLeadOtherEncounters.length ? (
                         <div className="source-note">
                           <span>
