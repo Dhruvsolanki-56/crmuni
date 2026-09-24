@@ -1064,6 +1064,8 @@ function VisitorCapture({
   const [saving, setSaving] = useState(false);
   const [lastSavedLead, setLastSavedLead] = useState<SavedLead | null>(null);
   const [extraDetailsOpen, setExtraDetailsOpen] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
   const [recordingVoiceNote, setRecordingVoiceNote] = useState(false);
   const [voiceNote, setVoiceNote] = useState<{
     file: File;
@@ -1259,6 +1261,8 @@ function VisitorCapture({
       formEl.reset();
       setCaptureFields({ fullName: '', company: '', email: '', phone: '', role: '' });
       setExtraDetailsOpen(false);
+      setEditingEmail(false);
+      setEditingPhone(false);
       setOcrStatus('');
       removeVoiceNote();
       setLastSavedLead(result.lead);
@@ -1447,37 +1451,67 @@ function VisitorCapture({
                   <label htmlFor="visitor-lead-email">
                     Work email <small>(optional)</small>
                   </label>
-                  <input
-                    id="visitor-lead-email"
-                    className="visitor-capture-input"
-                    name="email"
-                    type="email"
-                    value={captureFields.email}
-                    onChange={(event) =>
-                      setCaptureFields((current) => ({
-                        ...current,
-                        email: event.currentTarget.value,
-                      }))
-                    }
-                  />
+                  {captureFields.email && !editingEmail ? (
+                    <div className="captured-contact-value">
+                      <output>{captureFields.email}</output>
+                      <input
+                        id="visitor-lead-email"
+                        type="hidden"
+                        name="email"
+                        value={captureFields.email}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCaptureFields((current) => ({ ...current, email: '' }));
+                          setEditingEmail(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <Textarea
+                      id="visitor-lead-email"
+                      className="visitor-capture-input"
+                      name="email"
+                      rows={1}
+                      placeholder="name@company.com"
+                    />
+                  )}
                 </div>
                 <div className="field-block">
                   <label htmlFor="visitor-lead-phone">
                     Phone / WhatsApp <small>(optional)</small>
                   </label>
-                  <input
-                    id="visitor-lead-phone"
-                    className="visitor-capture-input"
-                    name="phone"
-                    type="tel"
-                    value={captureFields.phone}
-                    onChange={(event) =>
-                      setCaptureFields((current) => ({
-                        ...current,
-                        phone: event.currentTarget.value,
-                      }))
-                    }
-                  />
+                  {captureFields.phone && !editingPhone ? (
+                    <div className="captured-contact-value">
+                      <output>{captureFields.phone}</output>
+                      <input
+                        id="visitor-lead-phone"
+                        type="hidden"
+                        name="phone"
+                        value={captureFields.phone}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCaptureFields((current) => ({ ...current, phone: '' }));
+                          setEditingPhone(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <Textarea
+                      id="visitor-lead-phone"
+                      className="visitor-capture-input"
+                      name="phone"
+                      rows={1}
+                      placeholder="+91 98765 43210"
+                    />
+                  )}
                 </div>
               </div>
               <div className="field-grid">
