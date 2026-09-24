@@ -1795,6 +1795,7 @@ export default function Home() {
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
   const [meetingLead, setMeetingLead] = useState<SavedLead | null>(null);
   const [meetingLeadId, setMeetingLeadId] = useState('');
+  const [meetingContactQuery, setMeetingContactQuery] = useState('');
   const [similarEventMatches, setSimilarEventMatches] = useState<
     EventItem[]
   >([]);
@@ -4012,6 +4013,7 @@ export default function Home() {
     setMeetingDialogOpen(false);
     setMeetingLead(null);
     setMeetingLeadId('');
+    setMeetingContactQuery('');
     setNotice('Meeting scheduled');
   }
 
@@ -5591,6 +5593,23 @@ export default function Home() {
       );
     },
   );
+  const meetingContactCandidates = dedupeByContact(
+    capturedLeads.filter(
+      (lead) =>
+        lead.reviewStatus !== 'erased' &&
+        (!activeEventId || lead.eventId === activeEventId),
+    ),
+  ).filter((lead) => {
+    const query = meetingContactQuery.trim().toLowerCase();
+    return (
+      !query ||
+      [lead.fullName, lead.company, lead.role, lead.email, lead.phone]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    );
+  });
 
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
@@ -7769,6 +7788,7 @@ export default function Home() {
                                 const lead = reviewLead;
                                 setMeetingLead(lead);
                                 setMeetingLeadId(lead.id);
+                                setMeetingContactQuery('');
                                 setReviewLead(null);
                                 go('meetings');
                                 setMeetingDialogOpen(true);
@@ -9801,6 +9821,7 @@ export default function Home() {
                       if (!open) {
                         setMeetingLead(null);
                         setMeetingLeadId('');
+                        setMeetingContactQuery('');
                       }
                     }}
                   >
@@ -9862,30 +9883,71 @@ export default function Home() {
                           <ChevronDown size={14} />
                         </summary>
                         <div className="more-details-body">
-                          <div className="field-block">
-                            <label htmlFor="meeting-lead">
-                              Primary contact
-                            </label>
-                            <select
-                              id="meeting-lead"
-                              name="leadId"
-                              value={meetingLeadId}
-                              onChange={(event) =>
-                                setMeetingLeadId(event.currentTarget.value)
-                              }
-                            >
-                              <option value="">No linked contact</option>
-                              {capturedLeads
-                                .filter(
-                                  (lead) => lead.reviewStatus !== 'erased',
-                                )
-                                .map((lead) => (
+                          {meetingLead ? (
+                            <div className="stakeholder-control">
+                              <input
+                                type="hidden"
+                                name="leadId"
+                                value={meetingLeadId}
+                                readOnly
+                              />
+                              <span>
+                                <strong>{meetingLead.fullName}</strong>
+                                <small>
+                                  {meetingLead.company}
+                                  {meetingLead.role
+                                    ? ` · ${meetingLead.role}`
+                                    : ''}{' '}
+                                  · linked from this conversation
+                                </small>
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setMeetingLead(null);
+                                  setMeetingLeadId('');
+                                }}
+                              >
+                                Change contact
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="field-block">
+                              <label htmlFor="meeting-contact-search">
+                                Primary contact <small>(optional)</small>
+                              </label>
+                              <label className="entity-search">
+                                <Search size={15} />
+                                <input
+                                  id="meeting-contact-search"
+                                  value={meetingContactQuery}
+                                  onChange={(event) =>
+                                    setMeetingContactQuery(
+                                      event.currentTarget.value,
+                                    )
+                                  }
+                                  placeholder="Find a person or company…"
+                                  aria-label="Find a meeting contact"
+                                />
+                              </label>
+                              <select
+                                id="meeting-lead"
+                                name="leadId"
+                                value={meetingLeadId}
+                                onChange={(event) =>
+                                  setMeetingLeadId(event.currentTarget.value)
+                                }
+                              >
+                                <option value="">No linked contact</option>
+                                {meetingContactCandidates.map((lead) => (
                                   <option key={lead.id} value={lead.id}>
                                     {lead.fullName} · {lead.company}
                                   </option>
                                 ))}
-                            </select>
-                          </div>
+                              </select>
+                            </div>
+                          )}
                           <div className="field-block">
                             <label htmlFor="meeting-location">
                               Location or call link
@@ -9954,6 +10016,7 @@ export default function Home() {
                           onClick={() => {
                             setMeetingLead(null);
                             setMeetingLeadId('');
+                            setMeetingContactQuery('');
                             setMeetingDialogOpen(true);
                           }}
                         >
