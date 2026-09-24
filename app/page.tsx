@@ -10019,13 +10019,13 @@ export default function Home() {
                         <small>/4</small>
                       </span>
                       <div>
-                        <h2>Company intelligence setup</h2>
+                        <h2>Helpful company context</h2>
                         <p>
                           {knowledgeSetupDone === 4
-                            ? 'All required company context is configured.'
+                            ? 'Useful context is ready when you need personalized drafts or qualification help.'
                             : knowledge.profile
-                              ? 'Profile saved. Add products, target customers and evidence.'
-                              : 'Start by explaining what the company sells and whom it serves.'}
+                              ? 'Profile saved. Add only the context that will improve a real workflow.'
+                              : 'Add a short description only when you want more relevant AI drafts.'}
                         </p>
                       </div>
                     </div>
@@ -10082,55 +10082,32 @@ export default function Home() {
                           placeholder="Describe the products, services and customer outcomes."
                         />
                       </div>
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="target-industries">
-                            Target industries
-                          </label>
-                          <Input
-                            id="target-industries"
-                            name="targetIndustries"
-                            defaultValue={knowledge.profile?.targetIndustries.join(
-                              ', ',
-                            )}
-                            placeholder="Pharma, Automotive, Food processing"
-                          />
+                      <details className="more-details">
+                        <summary>
+                          <span>Add targeting details</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="more-details-body">
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="target-industries">Target industries</label>
+                              <Input id="target-industries" name="targetIndustries" defaultValue={knowledge.profile?.targetIndustries.join(', ')} placeholder="Pharma, Automotive" />
+                            </div>
+                            <div className="field-block">
+                              <label htmlFor="target-regions">Target geographies</label>
+                              <Input id="target-regions" name="targetGeographies" defaultValue={knowledge.profile?.targetGeographies.join(', ')} placeholder="India, GCC" />
+                            </div>
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="event-objective">Primary event objective</label>
+                            <Input id="event-objective" name="eventObjective" defaultValue={knowledge.profile?.eventObjective} placeholder="Book qualified demos" />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="profile-change-reason">Change reason</label>
+                            <Input id="profile-change-reason" name="changeReason" placeholder="Optional note about this update" />
+                          </div>
                         </div>
-                        <div className="field-block">
-                          <label htmlFor="target-regions">
-                            Target geographies
-                          </label>
-                          <Input
-                            id="target-regions"
-                            name="targetGeographies"
-                            defaultValue={knowledge.profile?.targetGeographies.join(
-                              ', ',
-                            )}
-                            placeholder="India, GCC, Southeast Asia"
-                          />
-                        </div>
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="event-objective">
-                          Primary event objective
-                        </label>
-                        <Input
-                          id="event-objective"
-                          name="eventObjective"
-                          defaultValue={knowledge.profile?.eventObjective}
-                          placeholder="Book qualified demos with plant operators"
-                        />
-                      </div>
-                      <div className="field-block">
-                        <label htmlFor="profile-change-reason">
-                          Change reason
-                        </label>
-                        <Input
-                          id="profile-change-reason"
-                          name="changeReason"
-                          placeholder="Why this profile changed"
-                        />
-                      </div>
+                      </details>
                       <Button className="save-button" type="submit">
                         Save business profile
                       </Button>
