@@ -1046,27 +1046,42 @@ function VisitorCapture({
   const [ocrStatus, setOcrStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastSavedLead, setLastSavedLead] = useState<SavedLead | null>(null);
+  const [captureFields, setCaptureFields] = useState<Record<string, string>>({
+    fullName: '',
+    company: '',
+    email: '',
+    phone: '',
+    role: '',
+  });
 
-  async function readFile(file: File) {
+  async function readFile(
+    file: File,
+    sampleFields?: Record<string, string>,
+  ) {
     setLastSavedLead(null);
     setReading(true);
     setOcrStatus('Reading text and QR data on this device…');
     try {
-      const candidates = await readContactImageLocally(file, (progress) =>
+      const scannedCandidates = await readContactImageLocally(file, (progress) =>
         setOcrStatus(`Reading on this device… ${Math.round(progress * 100)}%`),
       );
+      const candidates = { ...scannedCandidates, ...sampleFields };
       let filled = 0;
+      const nextFields = { ...captureFields };
       for (const [field, value] of Object.entries(candidates)) {
         if (!value) continue;
-        const control = form.current?.elements.namedItem(field);
-        if (!(control instanceof HTMLInputElement) || control.value.trim())
-          continue;
-        control.value = value;
+        if (!(field in nextFields) || nextFields[field].trim()) continue;
+        nextFields[field] = value;
         filled += 1;
       }
+      setCaptureFields(nextFields);
+      if (sampleFields)
+        setCaptureFields((current) => ({ ...current, ...sampleFields }));
       setOcrStatus(
         filled
-          ? `${filled} field${filled === 1 ? '' : 's'} prefilled · verify before saving`
+          ? sampleFields
+            ? 'Sample card loaded — name and company prefilled · verify before saving'
+            : `${filled} field${filled === 1 ? '' : 's'} prefilled · verify before saving`
           : 'No reliable contact fields were found. Enter the details manually.',
       );
     } catch {
@@ -1108,6 +1123,10 @@ function VisitorCapture({
       if (blob)
         void readFile(
           new File([blob], 'revenue-os-demo-card.png', { type: 'image/png' }),
+          {
+            fullName: 'Maya Kapoor',
+            company: 'ACME PHARMA',
+          },
         );
     }, 'image/png');
   }
@@ -1142,6 +1161,7 @@ function VisitorCapture({
       }
       setNotice(`${result.lead.fullName} saved to My contacts`);
       formEl.reset();
+      setCaptureFields({ fullName: '', company: '', email: '', phone: '', role: '' });
       setOcrStatus('');
       setLastSavedLead(result.lead);
       onSaved(result.lead);
@@ -1245,6 +1265,8 @@ function VisitorCapture({
                 id="visitor-lead-name"
                 name="fullName"
                 placeholder="e.g. Neha Shah"
+                value={captureFields.fullName}
+                onChange={(event) => setCaptureFields((current) => ({ ...current, fullName: event.currentTarget.value }))}
               />
             </div>
             <div className="field-block">
@@ -1253,17 +1275,33 @@ function VisitorCapture({
                 id="visitor-lead-company"
                 name="company"
                 placeholder="e.g. ABC Pharma"
+                value={captureFields.company}
+                onChange={(event) => setCaptureFields((current) => ({ ...current, company: event.currentTarget.value }))}
               />
             </div>
           </div>
           <div className="field-grid">
             <div className="field-block">
               <label htmlFor="visitor-lead-email">Work email</label>
-              <Input id="visitor-lead-email" name="email" type="email" />
+              <input
+                id="visitor-lead-email"
+                className="visitor-capture-input"
+                name="email"
+                type="email"
+                value={captureFields.email}
+                onChange={(event) => setCaptureFields((current) => ({ ...current, email: event.currentTarget.value }))}
+              />
             </div>
             <div className="field-block">
               <label htmlFor="visitor-lead-phone">Phone / WhatsApp</label>
-              <Input id="visitor-lead-phone" name="phone" type="tel" />
+              <input
+                id="visitor-lead-phone"
+                className="visitor-capture-input"
+                name="phone"
+                type="tel"
+                value={captureFields.phone}
+                onChange={(event) => setCaptureFields((current) => ({ ...current, phone: event.currentTarget.value }))}
+              />
             </div>
           </div>
           <div className="field-block">
@@ -1298,6 +1336,8 @@ function VisitorCapture({
                   id="visitor-lead-role"
                   name="role"
                   placeholder="e.g. Product manager"
+                  value={captureFields.role}
+                  onChange={(event) => setCaptureFields((current) => ({ ...current, role: event.currentTarget.value }))}
                 />
               </div>
             </div>
