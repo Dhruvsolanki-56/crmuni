@@ -760,7 +760,8 @@ export async function POST(request: Request) {
         note,
         nextAction,
         dueDate,
-        reviewStatus: 'needs_review',
+        reviewStatus:
+          context.workspace.kind === 'visitor' ? 'confirmed' : 'needs_review',
         qualificationState: 'unqualified',
         ownerId: context.user.id,
         emailConsentStatus: consentChannels.includes('email')
