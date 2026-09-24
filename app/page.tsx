@@ -110,6 +110,11 @@ type SavedLead = {
   duplicateLeadId?: string;
   duplicateLeadName?: string;
   duplicateLeadCompany?: string;
+  // A same-account-and-name match is intentionally only a suggestion. It
+  // needs a human decision before its event encounters share one profile.
+  duplicateContactId?: string;
+  duplicateContactName?: string;
+  duplicateContactCompany?: string;
   qualificationState?: string;
   // Release B: what identity resolution actually did for this capture,
   // so the success screen can say so instead of the organization being
@@ -304,10 +309,11 @@ type PlanEntitlements = {
   storageBytes: number;
   aiRequestsPerMinute: number;
 };
-type LeadMerge = {
+type ContactMerge = {
   id: string;
-  sourceLeadId: string;
-  targetLeadId: string;
+  kind: 'lead' | 'contact';
+  sourceId: string;
+  targetId: string;
   sourceName: string;
   targetName: string;
   mergedAt: number;
@@ -1290,7 +1296,7 @@ export default function Home() {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [leadMerges, setLeadMerges] = useState<LeadMerge[]>([]);
+  const [contactMerges, setContactMerges] = useState<ContactMerge[]>([]);
   const [metrics, setMetrics] = useState({
     totalLeads: 0,
     qualifiedLeads: 0,
@@ -1571,14 +1577,14 @@ export default function Home() {
         tasks?: TaskItem[];
         opportunities?: Opportunity[];
         accounts?: Account[];
-        merges?: LeadMerge[];
+        merges?: ContactMerge[];
         metrics?: typeof metrics;
       };
       setCapturedLeads(data.leads || []);
       setTasks(data.tasks || []);
       setOpportunities(data.opportunities || []);
       setAccounts(data.accounts || []);
-      setLeadMerges(data.merges || []);
+      setContactMerges(data.merges || []);
       if (data.context) {
         setAppContext(data.context);
         window.localStorage.setItem(
@@ -2787,11 +2793,43 @@ export default function Home() {
     setNotice('Contacts merged · undo is available in People');
     await loadWorkspace();
   }
-  async function revertLeadMerge(id: string) {
+  async function mergeDuplicateContact(source: SavedLead) {
+    if (!source.contactId || !source.duplicateContactId) return;
+    const confirmed = await askUser({
+      title: 'Combine two person profiles',
+      description: `Combine ${source.fullName} with ${source.duplicateContactName || 'the existing person'}? All event conversations stay intact under one person profile. You can undo this from Settings.`,
+      confirmLabel: 'Combine profiles',
+    });
+    if (!confirmed) return;
     const response = await apiFetch('/api/workspace', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'revert_lead_merge', mergeId: id }),
+      body: JSON.stringify({
+        action: 'merge_contacts',
+        sourceContactId: source.contactId,
+        targetContactId: source.duplicateContactId,
+      }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setAnalysisError(data.error || 'Could not combine these profiles.');
+      return;
+    }
+    setReviewLead(null);
+    setNotice('Person profiles combined · all interactions were retained');
+    await loadWorkspace();
+  }
+  async function revertContactMerge(merge: ContactMerge) {
+    const response = await apiFetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action:
+          merge.kind === 'contact'
+            ? 'revert_contact_merge'
+            : 'revert_lead_merge',
+        mergeId: merge.id,
+      }),
     });
     const data = (await response.json()) as { error?: string };
     if (!response.ok) {
@@ -6447,27 +6485,41 @@ export default function Home() {
                         </div>
                       </form>
                     ) : null}
-                    {reviewLead?.duplicateLeadId ? (
+                    {reviewLead?.duplicateLeadId ||
+                    reviewLead?.duplicateContactId ? (
                       <div className="ai-config-warning">
                         <strong>Possible duplicate contact</strong>
                         <span>
                           This may already exist as{' '}
-                          {reviewLead.duplicateLeadName} at{' '}
-                          {reviewLead.duplicateLeadCompany ||
+                          {reviewLead.duplicateContactName ||
+                            reviewLead.duplicateLeadName}{' '}
+                          at{' '}
+                          {reviewLead.duplicateContactCompany ||
+                            reviewLead.duplicateLeadCompany ||
                             reviewLead.company}
                           . Review both records before merging.
                         </span>
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => mergeDuplicateLead(reviewLead)}
+                          onClick={() =>
+                            reviewLead.duplicateContactId
+                              ? mergeDuplicateContact(reviewLead)
+                              : mergeDuplicateLead(reviewLead)
+                          }
                           disabled={
-                            !['owner', 'admin', 'manager'].includes(
-                              appContext?.role || '',
-                            )
+                            reviewLead.duplicateContactId
+                              ? !['owner', 'admin'].includes(
+                                  appContext?.role || '',
+                                )
+                              : !['owner', 'admin', 'manager'].includes(
+                                  appContext?.role || '',
+                                )
                           }
                         >
-                          Merge into existing contact
+                          {reviewLead.duplicateContactId
+                            ? 'Combine person profiles'
+                            : 'Merge into existing contact'}
                         </Button>
                       </div>
                     ) : null}
@@ -10835,20 +10887,20 @@ export default function Home() {
               ) : null}
               {activeView === 'settings' ? (
                 <div className="settings-layout">
-                  {leadMerges.length ? (
+                  {contactMerges.length ? (
                     <article className="panel settings-card">
                       <div className="settings-heading">
                         <Users />
                         <div>
-                          <h2>Reversible contact merges</h2>
-                          <p>
-                            Undo a merge if two visitors were combined
-                            incorrectly.
+                                <h2>Reversible record merges</h2>
+                                <p>
+                            Undo a person or encounter merge if two records
+                            were combined incorrectly.
                           </p>
                         </div>
                       </div>
                       <div className="knowledge-records">
-                        {leadMerges.map((merge) => (
+                        {contactMerges.map((merge) => (
                           <div key={merge.id}>
                             <span>
                               <strong>
@@ -10861,7 +10913,7 @@ export default function Home() {
                             <Button
                               type="button"
                               variant="outline"
-                              onClick={() => revertLeadMerge(merge.id)}
+                              onClick={() => revertContactMerge(merge)}
                             >
                               Undo merge
                             </Button>

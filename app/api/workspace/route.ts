@@ -49,6 +49,9 @@ export async function GET(request: Request) {
         .prepare(`SELECT l.id, l.event_id AS eventId, l.account_id AS accountId,l.contact_id AS contactId,l.owner_id AS ownerId,om.display_name AS ownerName,l.full_name AS fullName, l.company, l.role, l.email, l.phone, s.buying_role AS buyingRole, l.review_status AS reviewStatus,l.qualification_state AS qualificationState,l.qualification_reason AS qualificationReason,
       l.created_at AS createdAt, i.note, t.title AS nextAction, t.due_date AS dueDate, q.score, q.rationale AS scoreRationale,
       a.id AS assetId, a.kind AS captureKind, a.processing_status AS captureStatus, a.extracted_json AS extractedJson,d.target_lead_id AS duplicateLeadId,dl.full_name AS duplicateLeadName,dl.company AS duplicateLeadCompany,
+      (SELECT cds.target_contact_id FROM contact_duplicate_suggestions cds WHERE cds.workspace_id=l.workspace_id AND cds.source_contact_id=l.contact_id AND cds.status='pending' ORDER BY cds.created_at DESC LIMIT 1) AS duplicateContactId,
+      (SELECT tc.full_name FROM contact_duplicate_suggestions cds JOIN contacts tc ON tc.id=cds.target_contact_id AND tc.workspace_id=cds.workspace_id WHERE cds.workspace_id=l.workspace_id AND cds.source_contact_id=l.contact_id AND cds.status='pending' ORDER BY cds.created_at DESC LIMIT 1) AS duplicateContactName,
+      (SELECT ta.name FROM contact_duplicate_suggestions cds JOIN contacts tc ON tc.id=cds.target_contact_id AND tc.workspace_id=cds.workspace_id LEFT JOIN accounts ta ON ta.id=tc.primary_account_id AND ta.workspace_id=tc.workspace_id WHERE cds.workspace_id=l.workspace_id AND cds.source_contact_id=l.contact_id AND cds.status='pending' ORDER BY cds.created_at DESC LIMIT 1) AS duplicateContactCompany,
       (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='email') AS emailConsentStatus,
       (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='whatsapp') AS whatsappConsentStatus,
       l.custom_fields_json AS customFieldsJson, l.relationship_status AS relationshipStatus
@@ -90,9 +93,17 @@ export async function GET(request: Request) {
         .all(),
       db
         .prepare(
-          `SELECT me.id,me.source_lead_id AS sourceLeadId,me.target_lead_id AS targetLeadId,sl.full_name AS sourceName,tl.full_name AS targetName,me.merged_at AS mergedAt FROM lead_merge_events me JOIN leads sl ON sl.id=me.source_lead_id JOIN leads tl ON tl.id=me.target_lead_id WHERE me.workspace_id=? AND me.status='merged'${mergeAccess.sql} ORDER BY me.merged_at DESC LIMIT 20`,
+          `SELECT me.id,'lead' AS kind,me.source_lead_id AS sourceId,me.target_lead_id AS targetId,sl.full_name AS sourceName,tl.full_name AS targetName,me.merged_at AS mergedAt FROM lead_merge_events me JOIN leads sl ON sl.id=me.source_lead_id JOIN leads tl ON tl.id=me.target_lead_id WHERE me.workspace_id=? AND me.status='merged'${mergeAccess.sql}
+           UNION ALL
+           SELECT cme.id,'contact' AS kind,cme.source_contact_id AS sourceId,cme.target_contact_id AS targetId,sc.full_name AS sourceName,tc.full_name AS targetName,cme.merged_at AS mergedAt FROM contact_merge_events cme JOIN contacts sc ON sc.id=cme.source_contact_id JOIN contacts tc ON tc.id=cme.target_contact_id WHERE cme.workspace_id=? AND cme.status='merged' AND ? IN ('owner','admin')
+           ORDER BY mergedAt DESC LIMIT 20`,
         )
-        .bind(context.workspace.id, ...mergeAccess.bindings)
+        .bind(
+          context.workspace.id,
+          ...mergeAccess.bindings,
+          context.workspace.id,
+          context.role,
+        )
         .all(),
     ]);
   const leads: Record<string, unknown>[] = leadRows.results.map((row) => {
@@ -1398,6 +1409,171 @@ export async function POST(request: Request) {
     await auditStatement(context, 'suppression.cleared', 'lead', leadId, {
       channel,
     }).run();
+    return Response.json({ ok: true });
+  }
+  if (action === 'merge_contacts') {
+    // A durable contact is the person; a lead is one event encounter. Merge
+    // only changes the identity link, retaining every encounter, note, task
+    // and document in its original event context. Cross-event identity edits
+    // are deliberately reserved for workspace owners and administrators.
+    requireRole(context, ['owner', 'admin']);
+    const sourceContactId = clean(body.sourceContactId, 80);
+    const targetContactId = clean(body.targetContactId, 80);
+    if (
+      !sourceContactId ||
+      !targetContactId ||
+      sourceContactId === targetContactId
+    )
+      return Response.json(
+        { error: 'Choose two different people.' },
+        { status: 400 },
+      );
+    const db = database();
+    const [source, target, leadRows] = await Promise.all([
+      db
+        .prepare(
+          `SELECT id,merged_into_id AS mergedIntoId FROM contacts WHERE id=? AND workspace_id=?`,
+        )
+        .bind(sourceContactId, context.workspace.id)
+        .first<{ id: string; mergedIntoId: string | null }>(),
+      db
+        .prepare(
+          `SELECT id,merged_into_id AS mergedIntoId FROM contacts WHERE id=? AND workspace_id=?`,
+        )
+        .bind(targetContactId, context.workspace.id)
+        .first<{ id: string; mergedIntoId: string | null }>(),
+      db
+        .prepare(
+          `SELECT id FROM leads WHERE workspace_id=? AND contact_id=? AND review_status!='erased'`,
+        )
+        .bind(context.workspace.id, sourceContactId)
+        .all<{ id: string }>(),
+    ]);
+    if (!source || source.mergedIntoId || !target || target.mergedIntoId)
+      return Response.json(
+        { error: 'One of these people is no longer available to merge.' },
+        { status: 409 },
+      );
+    const now = Date.now();
+    const mergeId = crypto.randomUUID();
+    const leadIds = leadRows.results.map((lead) => lead.id);
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE leads SET contact_id=?,updated_at=? WHERE workspace_id=? AND contact_id=? AND review_status!='erased'`,
+        )
+        .bind(targetContactId, now, context.workspace.id, sourceContactId),
+      db
+        .prepare(
+          `UPDATE contacts SET merged_into_id=?,updated_at=? WHERE id=? AND workspace_id=?`,
+        )
+        .bind(targetContactId, now, sourceContactId, context.workspace.id),
+      db
+        .prepare(
+          `UPDATE contact_duplicate_suggestions SET status='merged',resolved_by=?,resolved_at=?,updated_at=? WHERE workspace_id=? AND source_contact_id=? AND target_contact_id=? AND status='pending'`,
+        )
+        .bind(
+          context.user.id,
+          now,
+          now,
+          context.workspace.id,
+          sourceContactId,
+          targetContactId,
+        ),
+      db
+        .prepare(
+          `INSERT INTO contact_merge_events (id,workspace_id,source_contact_id,target_contact_id,status,snapshot_json,merged_by,merged_at) VALUES (?,?,?,?,'merged',?,?,?)`,
+        )
+        .bind(
+          mergeId,
+          context.workspace.id,
+          sourceContactId,
+          targetContactId,
+          JSON.stringify({ leadIds }),
+          context.user.id,
+          now,
+        ),
+      auditStatement(context, 'contact.merged', 'contact', sourceContactId, {
+        targetContactId,
+        mergeId,
+        encounterCount: leadIds.length,
+      }),
+    ]);
+    return Response.json({ ok: true, mergeId });
+  }
+  if (action === 'revert_contact_merge') {
+    requireRole(context, ['owner', 'admin']);
+    const mergeId = clean(body.mergeId, 80);
+    const db = database();
+    const merge = await db
+      .prepare(
+        `SELECT source_contact_id AS sourceContactId,target_contact_id AS targetContactId,snapshot_json AS snapshotJson FROM contact_merge_events WHERE id=? AND workspace_id=? AND status='merged'`,
+      )
+      .bind(mergeId, context.workspace.id)
+      .first<{
+        sourceContactId: string;
+        targetContactId: string;
+        snapshotJson: string;
+      }>();
+    if (!merge)
+      return Response.json(
+        { error: 'Active contact merge not found.' },
+        { status: 404 },
+      );
+    let leadIds: string[] = [];
+    try {
+      const snapshot = JSON.parse(merge.snapshotJson) as { leadIds?: unknown };
+      leadIds = Array.isArray(snapshot.leadIds)
+        ? snapshot.leadIds.filter((id): id is string => typeof id === 'string')
+        : [];
+    } catch {
+      return Response.json(
+        { error: 'This contact merge cannot be restored safely.' },
+        { status: 409 },
+      );
+    }
+    const now = Date.now();
+    const statements = [
+      db
+        .prepare(
+          `UPDATE contacts SET merged_into_id=NULL,updated_at=? WHERE id=? AND workspace_id=?`,
+        )
+        .bind(now, merge.sourceContactId, context.workspace.id),
+      db
+        .prepare(
+          `UPDATE contact_duplicate_suggestions SET status='pending',resolved_by=NULL,resolved_at=NULL,updated_at=? WHERE workspace_id=? AND source_contact_id=? AND target_contact_id=?`,
+        )
+        .bind(
+          now,
+          context.workspace.id,
+          merge.sourceContactId,
+          merge.targetContactId,
+        ),
+      db
+        .prepare(
+          `UPDATE contact_merge_events SET status='reverted',reverted_by=?,reverted_at=? WHERE id=? AND workspace_id=?`,
+        )
+        .bind(context.user.id, now, mergeId, context.workspace.id),
+      auditStatement(context, 'contact.merge_reverted', 'contact', merge.sourceContactId, {
+        targetContactId: merge.targetContactId,
+        mergeId,
+      }),
+    ];
+    if (leadIds.length)
+      statements.unshift(
+        db
+          .prepare(
+            `UPDATE leads SET contact_id=?,updated_at=? WHERE workspace_id=? AND contact_id=? AND id IN (${leadIds.map(() => '?').join(',')})`,
+          )
+          .bind(
+            merge.sourceContactId,
+            now,
+            context.workspace.id,
+            merge.targetContactId,
+            ...leadIds,
+          ),
+      );
+    await db.batch(statements);
     return Response.json({ ok: true });
   }
   if (action === 'merge_leads') {
