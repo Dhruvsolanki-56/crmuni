@@ -1288,7 +1288,17 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, buyingRole });
   }
   if (action === 'set_consent') {
-    requireRole(context, ['owner', 'admin', 'manager', 'salesperson']);
+    // A visitor can record consent only for a lead inside an event to which
+    // they are assigned. requireLeadAccess below enforces that narrower
+    // boundary; without this role, the visitor follow-up UI could never
+    // complete its own consent step.
+    requireRole(context, [
+      'owner',
+      'admin',
+      'manager',
+      'salesperson',
+      'visitor',
+    ]);
     const leadId = clean(body.leadId, 80);
     const channel = clean(body.channel, 20) as ContactChannel;
     const status = clean(body.status, 20);
