@@ -10877,8 +10877,8 @@ export default function Home() {
                       <div>
                         <h2>Your workspaces</h2>
                         <p>
-                          Switch tenant context or create another trial
-                          workspace.
+                          Switch between companies, or create a separate
+                          workspace for another team.
                         </p>
                       </div>
                     </div>
