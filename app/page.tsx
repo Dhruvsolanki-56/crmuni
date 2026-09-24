@@ -1030,17 +1030,20 @@ function VisitorCapture({
   onSaved,
   setNotice,
   onGoToEventHome,
+  onGoToContacts,
 }: {
   activeEvent: EventItem | undefined;
   onSaved: () => void;
   setNotice: (message: string) => void;
   onGoToEventHome: () => void;
+  onGoToContacts: () => void;
 }) {
   const form = useRef<HTMLFormElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
   const [ocrStatus, setOcrStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const [lastSavedName, setLastSavedName] = useState('');
 
   async function handleFile(event: SyntheticEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -1095,6 +1098,7 @@ function VisitorCapture({
       setNotice(`${result.lead.fullName} saved to My contacts`);
       formEl.reset();
       setOcrStatus('');
+      setLastSavedName(result.lead.fullName);
       onSaved();
     } finally {
       setSaving(false);
@@ -1130,6 +1134,20 @@ function VisitorCapture({
             </p>
           </div>
         </div>
+        {lastSavedName ? (
+          <output className="visitor-capture-saved">
+            <span className="visitor-capture-saved-mark">
+              <Check size={18} />
+            </span>
+            <span>
+              <strong>{lastSavedName} saved</strong>
+              <small>Ready for the next person. Review this contact whenever you need.</small>
+            </span>
+            <Button type="button" variant="outline" onClick={onGoToContacts}>
+              View My contacts
+            </Button>
+          </output>
+        ) : null}
         <div className="capture-methods">
           <button
             type="button"
@@ -1230,6 +1248,68 @@ function VisitorCapture({
           </Button>
         </form>
       </article>
+    </div>
+  );
+}
+
+function VisitorEventSetup({
+  onJoin,
+  onCreate,
+  timezone,
+}: {
+  onJoin: (event: SyntheticEvent<HTMLFormElement>) => void;
+  onCreate: (event: SyntheticEvent<HTMLFormElement>) => void;
+  timezone: string;
+}) {
+  return (
+    <div className="visitor-event-setup-forms">
+      <form className="lead-form" onSubmit={onJoin}>
+        <div className="field-block">
+          <label htmlFor="visitor-join-code">Event code</label>
+          <Input
+            id="visitor-join-code"
+            name="code"
+            placeholder="e.g. 8B860DFE"
+          />
+        </div>
+        <Button type="submit" variant="outline">
+          Join event
+        </Button>
+      </form>
+      <div className="or"><span>or create a private event</span></div>
+      <form className="lead-form" onSubmit={onCreate}>
+        <div className="field-block">
+          <label htmlFor="visitor-event-name">Event name</label>
+          <Input
+            id="visitor-event-name"
+            name="name"
+            required
+            placeholder="IndustrialTech Expo 2027"
+          />
+        </div>
+        <details className="more-details">
+          <summary><span>Add dates or venue</span><ChevronDown size={14} /></summary>
+          <div className="more-details-body">
+            <div className="field-grid">
+              <div className="field-block"><label htmlFor="visitor-event-venue">Venue</label><Input id="visitor-event-venue" name="venue" placeholder="Bombay Exhibition Centre" /></div>
+              <div className="field-block"><label htmlFor="visitor-event-timezone">Timezone</label><Input id="visitor-event-timezone" name="timezone" defaultValue={timezone} /></div>
+            </div>
+            <div className="field-grid">
+              <div className="field-block">
+                <label htmlFor="visitor-event-starts">Starts</label>
+                <Input id="visitor-event-starts" name="startsOn" type="date" />
+              </div>
+              <div className="field-block">
+                <label htmlFor="visitor-event-ends">Ends</label>
+                <Input id="visitor-event-ends" name="endsOn" type="date" />
+              </div>
+            </div>
+          </div>
+        </details>
+        <Button type="submit" className="save-button">
+          Create private event
+        </Button>
+      </form>
     </div>
   );
 }
@@ -11926,84 +12006,61 @@ export default function Home() {
               ) : null}
               {activeView === 'visitor-home' ? (
                 <div className="visitor-home-layout">
-                  <article className="panel">
-                    <div className="settings-heading">
-                      <CalendarDays />
-                      <div>
-                        <h2>Attend an event</h2>
-                        <p>
-                          Join the event using the code an exhibitor shared
-                          with you, or create a private event of your own —
-                          it stays visible only to you.
-                        </p>
+                  {activeEvent ? (
+                    <article className="panel visitor-ready-card">
+                      <div className="settings-heading">
+                        <Camera />
+                        <div>
+                          <h2>Ready to capture at {activeEvent.name}</h2>
+                          <p>
+                            Scan the next person you meet, add a quick note,
+                            and keep moving. Everything stays private to you.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <form
-                      className="lead-form"
-                      onSubmit={joinCanonicalEvent}
-                    >
-                      <div className="field-block">
-                        <label htmlFor="visitor-join-code">Event code</label>
-                        <Input
-                          id="visitor-join-code"
-                          name="code"
-                          placeholder="e.g. 8B860DFE"
+                      <div className="visitor-ready-actions">
+                        <Button type="button" onClick={() => go('visitor-capture')}>
+                          <Camera /> Capture a contact
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => go('visitor-contacts')}
+                        >
+                          My contacts
+                        </Button>
+                      </div>
+                      <details className="visitor-event-setup">
+                        <summary>
+                          <span>Join or add another event</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <VisitorEventSetup
+                          onJoin={joinCanonicalEvent}
+                          onCreate={createVisitorEvent}
+                          timezone={appContext?.workspace.timezone || 'Asia/Kolkata'}
                         />
-                      </div>
-                      <Button type="submit" variant="outline">
-                        Join event
-                      </Button>
-                    </form>
-                    <div className="or"><span>or create a private event</span></div>
-                    <form
-                      className="lead-form"
-                      onSubmit={createVisitorEvent}
-                    >
-                      <div className="field-block">
-                        <label htmlFor="visitor-event-name">
-                          Event name
-                        </label>
-                        <Input
-                          id="visitor-event-name"
-                          name="name"
-                          required
-                          placeholder="IndustrialTech Expo 2027"
-                        />
-                      </div>
-                      <details className="more-details">
-                        <summary><span>Add dates or venue</span><ChevronDown size={14} /></summary>
-                        <div className="more-details-body">
-                        <div className="field-grid">
-                          <div className="field-block"><label htmlFor="visitor-event-venue">Venue</label><Input id="visitor-event-venue" name="venue" placeholder="Bombay Exhibition Centre" /></div>
-                          <div className="field-block"><label htmlFor="visitor-event-timezone">Timezone</label><Input id="visitor-event-timezone" name="timezone" defaultValue={appContext?.workspace.timezone || 'Asia/Kolkata'} /></div>
-                        </div>
-                        <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="visitor-event-starts">
-                            Starts
-                          </label>
-                          <Input
-                            id="visitor-event-starts"
-                            name="startsOn"
-                            type="date"
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="visitor-event-ends">Ends</label>
-                          <Input
-                            id="visitor-event-ends"
-                            name="endsOn"
-                            type="date"
-                          />
-                        </div>
-                        </div>
-                        </div>
                       </details>
-                      <Button type="submit" className="save-button">
-                        Create private event
-                      </Button>
-                    </form>
-                  </article>
+                    </article>
+                  ) : (
+                    <article className="panel">
+                      <div className="settings-heading">
+                        <CalendarDays />
+                        <div>
+                          <h2>Attend an event</h2>
+                          <p>
+                            Join using the code an exhibitor shared, or create
+                            a private event that stays visible only to you.
+                          </p>
+                        </div>
+                      </div>
+                      <VisitorEventSetup
+                        onJoin={joinCanonicalEvent}
+                        onCreate={createVisitorEvent}
+                        timezone={appContext?.workspace.timezone || 'Asia/Kolkata'}
+                      />
+                    </article>
+                  )}
                   <section className="event-list" aria-label="Your events">
                     <div className="event-list-heading">
                       <div>
@@ -12081,6 +12138,7 @@ export default function Home() {
                   onSaved={() => void loadWorkspace()}
                   setNotice={setNotice}
                   onGoToEventHome={() => go('visitor-home')}
+                  onGoToContacts={() => go('visitor-contacts')}
                 />
               ) : null}
               {activeView === 'visitor-contacts' ? (
