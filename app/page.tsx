@@ -1560,6 +1560,12 @@ function dedupeByContact(leads: SavedLead[]): SavedLead[] {
   return Array.from(byContact.values());
 }
 
+function contactLabel(lead: Pick<SavedLead, 'fullName'>) {
+  return lead.fullName === 'Unidentified visitor'
+    ? 'Contact pending'
+    : lead.fullName;
+}
+
 export default function Home() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [initializing, setInitializing] = useState(true);
@@ -12206,14 +12212,14 @@ export default function Home() {
                       return matches.map((lead) => (
                         <div className="record-row" key={lead.id}>
                           <span className="initial-avatar">
-                            {lead.fullName
+                            {contactLabel(lead)
                               .split(' ')
                               .map((word) => word[0])
                               .join('')
                               .slice(0, 2)}
                           </span>
                           <span>
-                            <strong>{lead.fullName}</strong>
+                            <strong>{contactLabel(lead)}</strong>
                             <small>
                               {lead.company}
                               {lead.note ? ` · ${lead.note}` : ''}
@@ -12402,7 +12408,7 @@ export default function Home() {
                             onClick={() => openVisitorContact(lead)}
                           >
                             <span className="initial-avatar">
-                              {lead.fullName
+                              {contactLabel(lead)
                                 .split(' ')
                                 .map((word) => word[0])
                                 .join('')
@@ -12410,7 +12416,7 @@ export default function Home() {
                             </span>
                             <span>
                               <strong>
-                                {lead.fullName}
+                                {contactLabel(lead)}
                                 {lead.encounterCount &&
                                 lead.encounterCount > 1 ? (
                                   <small className="entity-subtext">
@@ -12461,14 +12467,14 @@ export default function Home() {
                             onClick={() => openVisitorContact(lead)}
                           >
                             <span className="initial-avatar">
-                              {lead.fullName
+                              {contactLabel(lead)
                                 .split(' ')
                                 .map((word) => word[0])
                                 .join('')
                                 .slice(0, 2)}
                             </span>
                             <span>
-                              <strong>{lead.fullName}</strong>
+                              <strong>{contactLabel(lead)}</strong>
                               <small>
                                 {lead.role || 'Role not added'} ·{' '}
                                 {lead.company}
@@ -12489,7 +12495,7 @@ export default function Home() {
                       <div className="settings-heading">
                         <FileText />
                         <div>
-                          <h2>{reviewLead.fullName}</h2>
+                          <h2>{contactLabel(reviewLead)}</h2>
                           <p>{reviewLead.company}</p>
                         </div>
                       </div>
