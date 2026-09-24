@@ -1063,12 +1063,21 @@ function VisitorCapture({
   });
   const voiceRecorder = useRef<MediaRecorder | null>(null);
   const voiceChunks = useRef<Blob[]>([]);
+  const voiceStream = useRef<MediaStream | null>(null);
 
   useEffect(
     () => () => {
       if (voiceNote?.url) URL.revokeObjectURL(voiceNote.url);
     },
     [voiceNote],
+  );
+  useEffect(
+    () => () => {
+      if (voiceRecorder.current?.state === 'recording') voiceRecorder.current.stop();
+      voiceStream.current?.getTracks().forEach((track) => track.stop());
+      voiceStream.current = null;
+    },
+    [],
   );
 
   async function readFile(
@@ -1160,6 +1169,7 @@ function VisitorCapture({
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceStream.current = stream;
       const nextRecorder = new MediaRecorder(stream);
       voiceChunks.current = [];
       nextRecorder.ondataavailable = (event) => {
@@ -1170,6 +1180,7 @@ function VisitorCapture({
           type: nextRecorder.mimeType || 'audio/webm',
         });
         stream.getTracks().forEach((track) => track.stop());
+        voiceStream.current = null;
         setRecordingVoiceNote(false);
         if (!blob.size) return;
         const file = new File([blob], `conversation-${Date.now()}.webm`, {
