@@ -11087,7 +11087,18 @@ export default function Home() {
                         : 'Configuration required'}
                     </span>
                   </article>
-                  <h3 className="settings-group">Operations</h3>
+                  <details className="settings-disclosure">
+                    <summary>
+                      <span>
+                        <Activity />
+                        <strong>Operations &amp; support</strong>
+                      </span>
+                      <small>
+                        Monitor background work or grant time-limited support access.
+                      </small>
+                      <ChevronDown />
+                    </summary>
+                    <div className="settings-disclosure-content">
                   {operations ? (
                     <article className="panel settings-card">
                       <div className="settings-heading">
@@ -11265,7 +11276,18 @@ export default function Home() {
                       </div>
                     </article>
                   ) : null}
-                  <h3 className="settings-group">Team and access</h3>
+                    </div>
+                  </details>
+                  <details className="settings-disclosure">
+                    <summary>
+                      <span>
+                        <UserPlus />
+                        <strong>Team &amp; access</strong>
+                      </span>
+                      <small>Invite teammates and manage their workspace roles.</small>
+                      <ChevronDown />
+                    </summary>
+                    <div className="settings-disclosure-content">
                   <article className="panel settings-card">
                     <div className="settings-heading">
                       <UserPlus />
@@ -11378,7 +11400,18 @@ export default function Home() {
                       ))}
                     </div>
                   </article>
-                  <h3 className="settings-group">Security and data</h3>
+                    </div>
+                  </details>
+                  <details className="settings-disclosure settings-disclosure-security">
+                    <summary>
+                      <span>
+                        <ShieldCheck />
+                        <strong>Security &amp; data</strong>
+                      </span>
+                      <small>Review security activity, exports and irreversible workspace controls.</small>
+                      <ChevronDown />
+                    </summary>
+                    <div className="settings-disclosure-content">
                   {appContext?.role === 'owner' ? (
                     <article className="panel settings-card danger-card">
                       <div className="settings-heading">
@@ -11511,6 +11544,8 @@ export default function Home() {
                       </div>
                     )}
                   </article>
+                    </div>
+                  </details>
                 </div>
               ) : null}
               {activeView === 'visitor-discover' ? (
