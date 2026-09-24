@@ -6902,6 +6902,49 @@ export default function Home() {
                 </Dialog>
               </section>
 
+              {!activeEvent || !capturedLeads.length ? (
+                <section className="panel quick-start-panel" aria-label="Getting started">
+                  <div>
+                    <p className="eyebrow">Your first event workflow</p>
+                    <h2>
+                      {!activeEvent
+                        ? 'Set up the event, then start capturing.'
+                        : 'Your next useful action is to capture a conversation.'}
+                    </h2>
+                    <p>
+                      {!activeEvent
+                        ? 'An event gives each conversation the right context. You only need its name to begin; the rest can be added later.'
+                        : 'Scan a card or badge, check the details found, add a quick note if useful, and save. Revenue OS will keep the person connected to their company.'}
+                    </p>
+                  </div>
+                  <ol>
+                    <li className={!activeEvent ? 'current' : 'done'}>
+                      <span>1</span> Choose an event
+                    </li>
+                    <li className={activeEvent && !capturedLeads.length ? 'current' : capturedLeads.length ? 'done' : ''}>
+                      <span>2</span> Capture a person or company
+                    </li>
+                    <li className={capturedLeads.length ? 'current' : ''}>
+                      <span>3</span> Keep the next promise visible
+                    </li>
+                  </ol>
+                  <Button
+                    type="button"
+                    className="capture-button"
+                    onClick={() => {
+                      if (activeEvent) setCaptureOpen(true);
+                      else {
+                        go('events');
+                        newEvent();
+                      }
+                    }}
+                  >
+                    {activeEvent ? <Camera /> : <CalendarDays />}
+                    {activeEvent ? 'Capture first conversation' : 'Set up event'}
+                  </Button>
+                </section>
+              ) : null}
+
               <section className="signal-grid" aria-label="Event performance">
                 <article className="signal-card primary-signal">
                   <div className="signal-head">
@@ -8725,15 +8768,10 @@ export default function Home() {
                       <div>
                         <strong>No event is active yet</strong>
                         <p>
-                          Leads can&apos;t be captured until one event is
-                          activated and selected. 1) Click{' '}
-                          <b>New event</b> below and fill in the details.
-                          2) On the created event, click{' '}
-                          <b>Run readiness</b>. 3) Once checks pass, click{' '}
-                          <b>Activate for capture</b>, then{' '}
-                          <b>Use for capture</b>. 4) Go back to Today and
-                          click Capture lead again — anything you&apos;d
-                          already typed there is restored automatically.
+                          Create the event, run readiness, then activate it
+                          for capture. Only access and attribution safeguards
+                          block you; product context, qualification, and
+                          commercial details can be improved later.
                         </p>
                       </div>
                     </div>
@@ -8833,16 +8871,10 @@ export default function Home() {
                           />
                         </div>
                       </div>
-                      {/* Only 4 fields have to be typed to create a draft
-                          event - everything below either has a working
-                          default or is genuinely optional at creation time.
-                          The readiness checklist already names exactly what's
-                          still missing (Venue and booth, Event objective,
-                          Event offerings, ...) with a working link back here,
-                          so hiding them costs nothing and the wall of 14
-                          fields doesn't have to be read to create something.
-                          Editing an existing event opens it by default - nothing
-                          already configured should look like it went missing. */}
+                      {/* Only the compact event identity is needed to create
+                          a draft. The rest improves routing, automation, and
+                          reporting later; it must never become a wall before
+                          a real conversation can be captured. */}
                       <details
                         className="more-details"
                         open={Boolean(editingEventId)}

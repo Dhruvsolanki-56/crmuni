@@ -42,7 +42,10 @@ type ReadinessCheck = {
   label: string;
   passed: boolean;
   detail: string;
-  required: true;
+  // Only safety and attribution prerequisites can prevent capture. Sales
+  // context makes automation better, but a booth user must be able to save a
+  // real conversation before the workspace has finished its playbook.
+  required: boolean;
 };
 
 async function hashConfig(configJson: string) {
@@ -115,7 +118,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: profile
         ? 'Company identity and offering are described.'
         : 'Add the company profile and offering description.',
-      required: true,
+      required: false,
     },
     {
       key: 'active_offering',
@@ -124,7 +127,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: Number(products?.count || 0)
         ? `${products?.count} active offering(s).`
         : 'Add at least one active product or service.',
-      required: true,
+      required: false,
     },
     {
       key: 'ideal_customer',
@@ -133,7 +136,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: Number(icps?.count || 0)
         ? `${icps?.count} ICP(s) configured.`
         : 'Add at least one ideal customer profile.',
-      required: true,
+      required: false,
     },
     {
       key: 'qualification_rules',
@@ -142,7 +145,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: Number(rules?.count || 0)
         ? `${rules?.count} active rule(s).`
         : 'Add at least one active qualification rule.',
-      required: true,
+      required: false,
     },
     {
       key: 'approved_evidence',
@@ -151,7 +154,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: Number(evidence?.count || 0)
         ? `${evidence?.count} approved source(s).`
         : 'Approve at least one reviewed knowledge source.',
-      required: true,
+      required: false,
     },
     {
       key: 'event_location',
@@ -161,7 +164,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
         venue && booth
           ? `${venue} · Booth ${booth}`
           : 'Add the venue and booth location.',
-      required: true,
+      required: false,
     },
     {
       key: 'event_objective',
@@ -170,7 +173,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: event.objective
         ? 'A measurable booth objective is configured.'
         : 'Add the business objective for this event.',
-      required: true,
+      required: false,
     },
     {
       key: 'event_products',
@@ -179,7 +182,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: productsList.length
         ? `${productsList.length} offering(s) selected.`
         : 'Select at least one product or service for the event.',
-      required: true,
+      required: false,
     },
     {
       key: 'qualification_questions',
@@ -188,7 +191,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
       detail: questions.length
         ? `${questions.length} question(s) configured.`
         : 'Add at least one qualification question.',
-      required: true,
+      required: false,
     },
     {
       key: 'assigned_team',
@@ -225,7 +228,7 @@ async function assessEventReadiness(workspaceId: string, eventId: string) {
   return {
     event,
     checks,
-    ready: checks.every((check) => check.passed),
+    ready: checks.filter((check) => check.required).every((check) => check.passed),
     config,
     configJson,
     configHash: await hashConfig(configJson),
