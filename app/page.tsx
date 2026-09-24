@@ -1796,6 +1796,7 @@ export default function Home() {
   const [meetingLead, setMeetingLead] = useState<SavedLead | null>(null);
   const [meetingLeadId, setMeetingLeadId] = useState('');
   const [meetingContactQuery, setMeetingContactQuery] = useState('');
+  const [meetingDetailsOpen, setMeetingDetailsOpen] = useState(false);
   const [similarEventMatches, setSimilarEventMatches] = useState<
     EventItem[]
   >([]);
@@ -4014,6 +4015,7 @@ export default function Home() {
     setMeetingLead(null);
     setMeetingLeadId('');
     setMeetingContactQuery('');
+    setMeetingDetailsOpen(false);
     setNotice('Meeting scheduled');
   }
 
@@ -5601,14 +5603,11 @@ export default function Home() {
     ),
   ).filter((lead) => {
     const query = meetingContactQuery.trim().toLowerCase();
-    return (
-      !query ||
-      [lead.fullName, lead.company, lead.role, lead.email, lead.phone]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(query)
-    );
+    return Boolean(query) && [lead.fullName, lead.company, lead.role, lead.email, lead.phone]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
   });
 
   const activeEvent = events.find(
@@ -7789,6 +7788,7 @@ export default function Home() {
                                 setMeetingLead(lead);
                                 setMeetingLeadId(lead.id);
                                 setMeetingContactQuery('');
+                                setMeetingDetailsOpen(true);
                                 setReviewLead(null);
                                 go('meetings');
                                 setMeetingDialogOpen(true);
@@ -9822,6 +9822,7 @@ export default function Home() {
                         setMeetingLead(null);
                         setMeetingLeadId('');
                         setMeetingContactQuery('');
+                        setMeetingDetailsOpen(false);
                       }
                     }}
                   >
@@ -9876,7 +9877,10 @@ export default function Home() {
                           the agenda can all be filled in later. */}
                       <details
                         className="more-details"
-                        open={Boolean(meetingLead)}
+                        open={meetingDetailsOpen}
+                        onToggle={(event) =>
+                          setMeetingDetailsOpen(event.currentTarget.open)
+                        }
                       >
                         <summary>
                           <span>More details</span>
@@ -9907,6 +9911,7 @@ export default function Home() {
                                 onClick={() => {
                                   setMeetingLead(null);
                                   setMeetingLeadId('');
+                                  setMeetingDetailsOpen(true);
                                 }}
                               >
                                 Change contact
@@ -9935,17 +9940,28 @@ export default function Home() {
                                 id="meeting-lead"
                                 name="leadId"
                                 value={meetingLeadId}
+                                disabled={!meetingContactQuery.trim()}
                                 onChange={(event) =>
                                   setMeetingLeadId(event.currentTarget.value)
                                 }
                               >
-                                <option value="">No linked contact</option>
+                                <option value="">
+                                  {meetingContactQuery.trim()
+                                    ? meetingContactCandidates.length
+                                      ? 'Choose a matching contact'
+                                      : 'No matching contacts'
+                                    : 'Search before choosing a contact'}
+                                </option>
                                 {meetingContactCandidates.map((lead) => (
                                   <option key={lead.id} value={lead.id}>
                                     {lead.fullName} · {lead.company}
                                   </option>
                                 ))}
                               </select>
+                              <small className="field-help">
+                                Search first so only relevant people appear.
+                                Leaving this blank keeps the meeting unlinked.
+                              </small>
                             </div>
                           )}
                           <div className="field-block">
@@ -10017,6 +10033,7 @@ export default function Home() {
                             setMeetingLead(null);
                             setMeetingLeadId('');
                             setMeetingContactQuery('');
+                            setMeetingDetailsOpen(false);
                             setMeetingDialogOpen(true);
                           }}
                         >
