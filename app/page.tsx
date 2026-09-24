@@ -1158,16 +1158,20 @@ function VisitorCapture({
           <div className="field-grid">
             <div className="field-block">
               <label htmlFor="visitor-lead-name">Full name</label>
-              <Input id="visitor-lead-name" name="fullName" required />
+              <Input
+                id="visitor-lead-name"
+                name="fullName"
+                placeholder="e.g. Neha Shah"
+              />
             </div>
             <div className="field-block">
               <label htmlFor="visitor-lead-company">Company</label>
-              <Input id="visitor-lead-company" name="company" required />
+              <Input
+                id="visitor-lead-company"
+                name="company"
+                placeholder="e.g. ABC Pharma"
+              />
             </div>
-          </div>
-          <div className="field-block">
-            <label htmlFor="visitor-lead-role">Role</label>
-            <Input id="visitor-lead-role" name="role" />
           </div>
           <div className="field-grid">
             <div className="field-block">
@@ -1185,6 +1189,36 @@ function VisitorCapture({
             </label>
             <Textarea id="visitor-lead-note" name="note" />
           </div>
+          <details className="more-details">
+            <summary>
+              <span>Add next step or details</span>
+              <ChevronDown size={14} />
+            </summary>
+            <div className="more-details-body">
+              <div className="field-grid">
+                <div className="field-block">
+                  <label htmlFor="visitor-lead-action">Next action</label>
+                  <Input
+                    id="visitor-lead-action"
+                    name="nextAction"
+                    placeholder="e.g. Send a note tomorrow"
+                  />
+                </div>
+                <div className="field-block">
+                  <label htmlFor="visitor-lead-due">Due date</label>
+                  <Input id="visitor-lead-due" name="dueDate" type="date" />
+                </div>
+              </div>
+              <div className="field-block">
+                <label htmlFor="visitor-lead-role">Role</label>
+                <Input
+                  id="visitor-lead-role"
+                  name="role"
+                  placeholder="e.g. Product manager"
+                />
+              </div>
+            </div>
+          </details>
           <Button type="submit" className="save-button" disabled={saving}>
             {saving ? 'Saving…' : 'Save contact'}
           </Button>
