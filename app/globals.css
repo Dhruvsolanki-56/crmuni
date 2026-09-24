@@ -304,6 +304,8 @@ h2 { letter-spacing: -.015em; }
 .notification-empty { padding: 18px 14px; margin: 0; color: var(--text-500); font-size: var(--text-sm); text-align: center; line-height: var(--lh-sm); }
 .comment-section { margin-top: 6px; padding-top: 16px; border-top: 1px solid var(--divider); }
 .comment-section h3 { margin: 0 0 3px; font-size: var(--text-base); line-height: var(--lh-base); }
+.team-notes-details summary { cursor:pointer; color:var(--color-text-muted); font-size:var(--text-sm); font-weight:var(--weight-semibold); line-height:var(--lh-sm); }
+.team-notes-details[open] summary { margin-bottom:3px; color:var(--color-text-primary); }
 .comment-list { display: grid; gap: 10px; margin: 10px 0; }
 .comment-row { display: flex; gap: 9px; }
 .comment-row .initial-avatar.small { flex-shrink: 0; }
@@ -495,6 +497,13 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .review-dialog .review-contact-form > button,
 .review-dialog .task-quick-add > button { justify-self: end; width: auto; min-width: 168px; }
 .review-dialog .privacy-erase { justify-self: end; width: auto; min-width: 168px; padding: 0 14px; }
+.review-extra-fields { margin-top: 2px; }
+.review-extra-fields summary,
+.review-advanced-details summary { color: var(--color-text-muted); cursor: pointer; font-size: var(--text-sm); font-weight: var(--weight-semibold); line-height: var(--lh-sm); }
+.review-extra-fields .field-grid { margin-top: 12px; }
+.review-advanced-details { padding-top: 20px; border-top: 1px solid var(--color-line); }
+.review-advanced-details > p { margin: 5px 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.review-advanced-details-body { display: grid; gap: 18px; margin-top: 14px; }
 .review-dialog .analysis-empty { padding-top: 20px; border-top: 1px solid var(--color-line); }
 
 /* Three saturated blocks stacked at the top read as three alerts competing
@@ -723,7 +732,11 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .entity-search input::placeholder { color: var(--color-text-muted); font-style: italic; }
 .entity-toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .entity-toolbar-actions select { height: 40px; padding: 0 28px 0 11px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background-color: var(--color-surface); color: var(--color-text-secondary); font-size: var(--text-sm); }
-.entity-filter-note { display: flex; }
+.account-contacts-context { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 16px; border:1px solid var(--green-200); border-radius:var(--radius-lg); background:var(--green-50); }
+.account-contacts-context .eyebrow { margin:0 0 3px; color:var(--green-700); }
+.account-contacts-context h2 { margin:0; color:var(--color-text-primary); font-size:var(--text-lg); line-height:var(--lh-md); }
+.account-contacts-context p:not(.eyebrow) { margin:4px 0 0; color:var(--color-text-secondary); font-size:var(--text-sm); line-height:var(--lh-sm); }
+.account-contacts-context .filter-pill { flex:0 0 auto; }
 
 /* Table — a bordered surface, not a floating card. */
 .entity-table { border: 1px solid var(--color-line); border-radius: var(--radius-lg); background: var(--color-surface); overflow: hidden; }
@@ -772,6 +785,8 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
   .entity-toolbar-actions select { flex: 1 1 140px; min-width: 0; }
   .entity-toolbar-actions .capture-button { flex: 1 1 100%; }
   .entity-tabs { gap: 16px; }
+  .account-contacts-context { align-items: flex-start; flex-direction: column; }
+  .account-contacts-context .filter-pill { width: 100%; justify-content: center; }
   .entity-row > span { white-space: normal; }
   .entity-primary { flex: 1 1 100%; }
   .entity-row > span[data-label]::before { content: attr(data-label) ': '; color: var(--color-text-subtle); }

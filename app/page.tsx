@@ -6323,7 +6323,11 @@ export default function Home() {
                             aria-label="Verified work email"
                             type="text"
                             inputMode="email"
-                            defaultValue=""
+                            defaultValue={
+                              reviewCaptureExtraction?.email ||
+                              reviewLead.email ||
+                              ''
+                            }
                             onChange={() => markCaptureCorrection('email')}
                             placeholder="Work email"
                           />
@@ -6334,33 +6338,40 @@ export default function Home() {
                           aria-label="Verified phone"
                           type="text"
                           inputMode="tel"
-                          defaultValue=""
+                          defaultValue={
+                            reviewCaptureExtraction?.phone ||
+                            reviewLead.phone ||
+                            ''
+                          }
                           onChange={() => markCaptureCorrection('phone')}
                           placeholder="Phone / WhatsApp"
                         />
                         {events.find((item) => item.id === reviewLead.eventId)
                           ?.leadFieldSchema.length ? (
-                          <div className="field-grid">
-                            {events
-                              .find((item) => item.id === reviewLead.eventId)
-                              ?.leadFieldSchema.map((label) => (
-                                <div className="field-block" key={label}>
-                                  <label
-                                    htmlFor={`review-custom-${label}`}
-                                  >
-                                    {label}
-                                  </label>
-                                  <input
-                                    className="review-input"
-                                    id={`review-custom-${label}`}
-                                    name={`custom:${label}`}
-                                    defaultValue={
-                                      reviewLead.customFields?.[label] || ''
-                                    }
-                                  />
-                                </div>
-                              ))}
-                          </div>
+                          <details className="review-extra-fields">
+                            <summary>Add event-specific details</summary>
+                            <div className="field-grid">
+                              {events
+                                .find((item) => item.id === reviewLead.eventId)
+                                ?.leadFieldSchema.map((label) => (
+                                  <div className="field-block" key={label}>
+                                    <label
+                                      htmlFor={`review-custom-${label}`}
+                                    >
+                                      {label}
+                                    </label>
+                                    <input
+                                      className="review-input"
+                                      id={`review-custom-${label}`}
+                                      name={`custom:${label}`}
+                                      defaultValue={
+                                        reviewLead.customFields?.[label] || ''
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                            </div>
+                          </details>
                         ) : null}
                         <Button type="submit" variant="outline">
                           {reviewLead.captureStatus ===
@@ -6453,6 +6464,15 @@ export default function Home() {
                         </Button>
                       </div>
                     ) : null}
+                    <details className="review-advanced-details">
+                      <summary>
+                        Manage qualification, ownership and commitments
+                      </summary>
+                      <p>
+                        Use these only when the conversation is ready to move
+                        beyond capture and follow-up.
+                      </p>
+                      <div className="review-advanced-details-body">
                     {reviewLead ? (
                       <form
                         className="lead-form task-quick-add"
@@ -6578,6 +6598,8 @@ export default function Home() {
                         </Button>
                       </form>
                     ) : null}
+                      </div>
+                    </details>
                     {reviewLead &&
                     ['owner', 'admin'].includes(appContext?.role || '') ? (
                       <button
@@ -6864,8 +6886,11 @@ export default function Home() {
                       </section>
                     ) : null}
                     {reviewLead ? (
-                      <section className="comment-section">
-                        <h3>Team notes</h3>
+                      <details
+                        className="comment-section team-notes-details"
+                        open={leadComments.length > 0}
+                      >
+                        <summary>Team notes</summary>
                         <p className="field-help">
                           Visible to everyone with access to this event.
                           Mention a colleague to notify them.
@@ -6951,7 +6976,7 @@ export default function Home() {
                             {postingComment ? 'Posting…' : 'Post comment'}
                           </Button>
                         </form>
-                      </section>
+                      </details>
                     ) : null}
                   </DialogContent>
                 </Dialog>
@@ -7485,13 +7510,22 @@ export default function Home() {
                   </div>
 
                   {accountFilter && peopleTab === 'contacts' ? (
-                    <div className="entity-filter-note">
+                    <div className="account-contacts-context">
+                      <div>
+                        <p className="eyebrow">People at this account</p>
+                        <h2>{filteredAccount?.company || 'Filtered account'}</h2>
+                        <p>
+                          Each person keeps their own conversations, notes and
+                          follow-ups while staying connected to this company.
+                        </p>
+                      </div>
                       <button
                         type="button"
                         className="filter-pill"
                         onClick={() => setAccountFilter('')}
+                        aria-label="Show all accounts and contacts"
                       >
-                        {filteredAccount?.company || 'Filtered'}
+                        All people and accounts
                         <X size={13} />
                       </button>
                     </div>
