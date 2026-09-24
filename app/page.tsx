@@ -12841,55 +12841,92 @@ export default function Home() {
                             No contacts saved yet. Use Capture to add one.
                           </div>
                         );
-                      return visible.map((lead) => (
-                        <div className="contact-row-wrap" key={lead.id}>
-                          <button
-                            className="record-row"
-                            onClick={() => openVisitorContact(lead)}
-                          >
-                            <span className="initial-avatar">
-                              {contactLabel(lead)
-                                .split(' ')
-                                .map((word) => word[0])
-                                .join('')
-                                .slice(0, 2)}
-                            </span>
-                            <span>
-                              <strong>
-                                {contactLabel(lead)}
-                                {lead.encounterCount &&
-                                lead.encounterCount > 1 ? (
-                                  <small className="entity-subtext">
-                                    {' '}
-                                    · met {lead.encounterCount} times
-                                  </small>
-                                ) : null}
-                              </strong>
-                              <small>
-                                {lead.role || 'Role not added'} ·{' '}
-                                {lead.company}
-                              </small>
-                            </span>
-                            <small>{lead.email || lead.phone || ''}</small>
-                          </button>
-                          <button
-                            type="button"
-                            className="contact-archive-toggle"
-                            onClick={() =>
-                              setRelationshipStatus(
-                                lead,
-                                lead.relationshipStatus === 'archived'
-                                  ? 'active'
-                                  : 'archived',
-                              )
-                            }
-                          >
-                            {lead.relationshipStatus === 'archived'
-                              ? 'Reopen'
-                              : 'Archive'}
-                          </button>
-                        </div>
-                      ));
+                      const accounts = new Map<
+                        string,
+                        { name: string; contacts: SavedLead[] }
+                      >();
+                      visible.forEach((lead) => {
+                        const key = normalizeCompany(lead.company) || lead.company;
+                        const account = accounts.get(key);
+                        if (account) account.contacts.push(lead);
+                        else accounts.set(key, { name: lead.company, contacts: [lead] });
+                      });
+                      return Array.from(accounts.values())
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((account) => {
+                          const people = account.contacts.filter(
+                            (lead) => lead.fullName !== 'Unidentified visitor',
+                          );
+                          return (
+                            <section
+                              className="account-contact-group"
+                              key={normalizeCompany(account.name) || account.name}
+                              aria-label={`${account.name} contacts`}
+                            >
+                              <div className="account-contact-group-heading">
+                                <span>
+                                  <small>Company</small>
+                                  <strong>{account.name}</strong>
+                                </span>
+                                <small>
+                                  {people.length
+                                    ? `${people.length} ${people.length === 1 ? 'person' : 'people'}`
+                                    : 'Company conversation'}
+                                </small>
+                              </div>
+                              {account.contacts.map((lead) => (
+                                <div className="contact-row-wrap" key={lead.id}>
+                                  <button
+                                    className="record-row"
+                                    onClick={() => openVisitorContact(lead)}
+                                  >
+                                    <span className="initial-avatar">
+                                      {contactLabel(lead)
+                                        .split(' ')
+                                        .map((word) => word[0])
+                                        .join('')
+                                        .slice(0, 2)}
+                                    </span>
+                                    <span>
+                                      <strong>
+                                        {contactLabel(lead)}
+                                        {lead.encounterCount &&
+                                        lead.encounterCount > 1 ? (
+                                          <small className="entity-subtext">
+                                            {' '}
+                                            · met {lead.encounterCount} times
+                                          </small>
+                                        ) : null}
+                                      </strong>
+                                      <small>
+                                        {lead.fullName === 'Unidentified visitor'
+                                          ? 'Company conversation · add a person when you meet one'
+                                          : lead.role || 'Role not added'}
+                                      </small>
+                                    </span>
+                                    <small>{lead.email || lead.phone || ''}</small>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="contact-archive-toggle"
+                                    onClick={() =>
+                                      setRelationshipStatus(
+                                        lead,
+                                        lead.relationshipStatus === 'archived'
+                                          ? 'active'
+                                          : 'archived',
+                                      )
+                                    }
+                                  >
+                                    {lead.relationshipStatus === 'archived'
+                                      ? 'Reopen'
+                                      : 'Archive'}
+                                  </button>
+                                </div>
+                              ))}
+                            </section>
+                          );
+                        });
                     })()}
                   </article>
                 </div>
