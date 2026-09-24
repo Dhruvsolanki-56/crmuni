@@ -4865,6 +4865,19 @@ export default function Home() {
   const activeEvent = events.find(
     (item) => item.id === activeEventId && item.status !== 'archived',
   );
+  const localHour = Number(
+    new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      hourCycle: 'h23',
+      timeZone: appContext?.workspace.timezone || 'UTC',
+    }).format(new Date(clockNow)),
+  );
+  const greeting =
+    localHour < 12
+      ? 'Good morning.'
+      : localHour < 18
+        ? 'Good afternoon.'
+        : 'Good evening.';
   const capturableEvents = events.filter((item) => item.status === 'active');
   // A rapid-capture queue without any new backend concept: every lead this
   // salesperson hasn't confirmed yet, oldest first, is already exactly that
@@ -5397,7 +5410,7 @@ export default function Home() {
                       timeZone: appContext?.workspace.timezone || 'UTC',
                     }).format(new Date())}
                   </p>
-                  <h1>Good afternoon.</h1>
+                  <h1>{greeting}</h1>
                   <p className="subtle">
                     {metrics.openTasks
                       ? `${metrics.openTasks} commitment${metrics.openTasks === 1 ? '' : 's'} ${metrics.openTasks === 1 ? 'needs' : 'need'} attention.`
