@@ -1081,6 +1081,14 @@ function VisitorCapture({
     if (!activeEvent) return;
     const formEl = event.currentTarget;
     const data = new FormData(formEl);
+    const nameValue = data.get('fullName');
+    const companyValue = data.get('company');
+    const fullName = typeof nameValue === 'string' ? nameValue.trim() : '';
+    const company = typeof companyValue === 'string' ? companyValue.trim() : '';
+    if (!fullName && !company) {
+      setNotice('Add a name or company so you can find this contact later.');
+      return;
+    }
     data.set('clientCaptureId', crypto.randomUUID());
     setSaving(true);
     try {
@@ -2084,8 +2092,8 @@ export default function Home() {
       return typeof value === 'string' ? value.trim() : '';
     };
     const missing: string[] = [];
-    if (!attachment && !fieldValue('fullName')) missing.push('Full name');
-    if (!attachment && !fieldValue('company')) missing.push('Company');
+    if (!attachment && !fieldValue('fullName') && !fieldValue('company'))
+      missing.push('a name or company');
     const emailValue = fieldValue('email');
     if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailValue)) {
       setNotice('Enter a valid work email address.');
@@ -2093,7 +2101,7 @@ export default function Home() {
       return;
     }
     if (missing.length) {
-      setNotice(`Please fill in: ${missing.join(', ')}`);
+      setNotice(`Please add ${missing.join(', ')} so you can find this conversation later.`);
       setTimeout(() => setNotice(''), 2600);
       return;
     }
