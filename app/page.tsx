@@ -513,6 +513,7 @@ type RevenueReport = {
 type NextBestAction = {
   id: string;
   kind: string;
+  leadId?: string;
   title: string;
   subject: string;
   priority: number;
@@ -1824,6 +1825,7 @@ export default function Home() {
      state driven - so the open RFQ is held by id and always re-read from the
      loaded list, never from a snapshot captured at click time. */
   const [openRfqId, setOpenRfqId] = useState('');
+  const [quotationFocusId, setQuotationFocusId] = useState('');
   const [knowledgeState, setKnowledgeState] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle');
@@ -2911,6 +2913,40 @@ export default function Home() {
     void loadFollowups(lead.id);
     void loadLeadAssets(lead.id);
     void loadMeetings();
+  }
+  /**
+   * The briefing is a decision surface, not a second inbox. Every item takes
+   * a rep to the conversation or commercial record that needs attention.
+   */
+  function openNextBestAction(action: NextBestAction) {
+    const leadId = action.kind === 'lead' ? action.id : action.leadId;
+    const lead = leadId
+      ? capturedLeads.find((item) => item.id === leadId)
+      : undefined;
+    if (lead) {
+      openReview(lead);
+      return;
+    }
+    if (action.kind === 'rfq') {
+      setQuotationFocusId('');
+      setOpenRfqId(action.id);
+      go('rfqs');
+      return;
+    }
+    if (action.kind === 'quotation') {
+      setOpenRfqId('');
+      setQuotationFocusId(action.id);
+      go('rfqs');
+      window.setTimeout(() => {
+        document.getElementById(`quotation-${action.id}`)?.focus();
+      }, 0);
+      return;
+    }
+    // A restricted or deleted contact may no longer be in the local list.
+    // Keep the user in the one place where the original task is visible.
+    setShowAllTasks(true);
+    go('today');
+    setNotice('This commitment is listed below. Its contact is no longer available here.');
   }
   async function loadComments(leadId: string) {
     const response = await apiFetch(
@@ -7683,6 +7719,15 @@ export default function Home() {
                                   ? 'High'
                                   : 'Normal'}
                             </span>
+                            <span className="task-actions">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => openNextBestAction(action)}
+                              >
+                                Open
+                              </Button>
+                            </span>
                           </article>
                         ))
                       : null}
@@ -8833,7 +8878,12 @@ export default function Home() {
                     <div className="quotation-list">
                       {quotations.length ? (
                         quotations.map((item) => (
-                          <article className="panel quote-record" key={item.id}>
+                          <article
+                            className={`panel quote-record${quotationFocusId === item.id ? ' is-focused' : ''}`}
+                            id={`quotation-${item.id}`}
+                            key={item.id}
+                            tabIndex={-1}
+                          >
                             <div>
                               <span>
                                 <strong>{item.quoteNumber}</strong>
@@ -10473,12 +10523,7 @@ export default function Home() {
                     go('opportunities');
                   }}
                   onOpenAction={(action) => {
-                    if (action.kind === 'task') go('today');
-                    else if (action.kind === 'rfq') {
-                      setOpenRfqId(action.id);
-                      go('rfqs');
-                    } else if (action.kind === 'quotation') go('rfqs');
-                    else go('people');
+                    openNextBestAction(action);
                   }}
                   costEntry={
                     <div className="an-cost-entry">

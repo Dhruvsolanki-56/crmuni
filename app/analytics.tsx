@@ -165,6 +165,7 @@ export type AnalyticsCost = {
 export type AnalyticsAction = {
   id: string;
   kind: string;
+  leadId?: string;
   title: string;
   subject: string;
   priority: number;
