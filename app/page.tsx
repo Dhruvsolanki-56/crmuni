@@ -1049,6 +1049,11 @@ function VisitorCapture({
   const [ocrStatus, setOcrStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastSavedLead, setLastSavedLead] = useState<SavedLead | null>(null);
+  const [recordingVoiceNote, setRecordingVoiceNote] = useState(false);
+  const [voiceNote, setVoiceNote] = useState<{
+    file: File;
+    url: string;
+  } | null>(null);
   const [captureFields, setCaptureFields] = useState<Record<string, string>>({
     fullName: '',
     company: '',
@@ -1056,6 +1061,8 @@ function VisitorCapture({
     phone: '',
     role: '',
   });
+  const voiceRecorder = useRef<MediaRecorder | null>(null);
+  const voiceChunks = useRef<Blob[]>([]);
 
   async function readFile(
     file: File,
@@ -1134,6 +1141,46 @@ function VisitorCapture({
     }, 'image/png');
   }
 
+  function removeVoiceNote() {
+    if (voiceNote?.url) URL.revokeObjectURL(voiceNote.url);
+    setVoiceNote(null);
+  }
+
+  async function toggleVoiceNote() {
+    if (recordingVoiceNote) {
+      voiceRecorder.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const nextRecorder = new MediaRecorder(stream);
+      voiceChunks.current = [];
+      nextRecorder.ondataavailable = (event) => {
+        if (event.data.size) voiceChunks.current.push(event.data);
+      };
+      nextRecorder.onstop = () => {
+        const blob = new Blob(voiceChunks.current, {
+          type: nextRecorder.mimeType || 'audio/webm',
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoiceNote(false);
+        if (!blob.size) return;
+        const file = new File([blob], `conversation-${Date.now()}.webm`, {
+          type: blob.type,
+        });
+        setVoiceNote((current) => {
+          if (current?.url) URL.revokeObjectURL(current.url);
+          return { file, url: URL.createObjectURL(file) };
+        });
+      };
+      voiceRecorder.current = nextRecorder;
+      nextRecorder.start();
+      setRecordingVoiceNote(true);
+    } catch {
+      setNotice('Microphone access is unavailable. You can still type a quick note.');
+    }
+  }
+
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeEvent) return;
@@ -1143,11 +1190,15 @@ function VisitorCapture({
     const companyValue = data.get('company');
     const fullName = typeof nameValue === 'string' ? nameValue.trim() : '';
     const company = typeof companyValue === 'string' ? companyValue.trim() : '';
-    if (!fullName && !company) {
+    if (!fullName && !company && !voiceNote) {
       setNotice('Add a name or company so you can find this contact later.');
       return;
     }
     data.set('clientCaptureId', crypto.randomUUID());
+    if (voiceNote) {
+      data.set('attachment', voiceNote.file);
+      data.set('attachmentKind', 'audio');
+    }
     setSaving(true);
     try {
       const response = await apiFetch('/api/leads', {
@@ -1170,6 +1221,7 @@ function VisitorCapture({
       formEl.reset();
       setCaptureFields({ fullName: '', company: '', email: '', phone: '', role: '' });
       setOcrStatus('');
+      removeVoiceNote();
       setLastSavedLead(result.lead);
       onSaved(result.lead);
     } finally {
@@ -1230,7 +1282,7 @@ function VisitorCapture({
             </span>
           </output>
         ) : null}
-        <div className="capture-methods">
+        <div className="capture-methods visitor-capture-methods">
           <button
             type="button"
             onClick={() => fileInput.current?.click()}
@@ -1240,6 +1292,22 @@ function VisitorCapture({
             <span>
               <strong>Upload card or badge</strong>
               <small>Choose or photograph an image</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={recordingVoiceNote ? 'recording' : ''}
+            onClick={() => void toggleVoiceNote()}
+            disabled={reading || saving}
+          >
+            {recordingVoiceNote ? <Square size={20} /> : <Mic size={20} />}
+            <span>
+              <strong>{recordingVoiceNote ? 'Stop recording' : 'Record voice note'}</strong>
+              <small>
+                {recordingVoiceNote
+                  ? 'Recording on this device…'
+                  : 'Save the context while it is fresh'}
+              </small>
             </span>
           </button>
         </div>
@@ -1263,6 +1331,20 @@ function VisitorCapture({
             {reading ? <span className="local-ocr-spinner" /> : <Check size={15} />}
             {ocrStatus}
           </p>
+        ) : null}
+        {voiceNote ? (
+          <div className="attachment-preview visitor-voice-preview">
+            <audio aria-label="Voice note preview" controls src={voiceNote.url}>
+              <track kind="captions" label="Transcript unavailable" />
+            </audio>
+            <span>
+              <strong>Voice note ready</strong>
+              <small>It will be saved with this conversation.</small>
+            </span>
+            <button type="button" onClick={removeVoiceNote}>
+              Remove
+            </button>
+          </div>
         ) : null}
         <div className="or">
           <span>or enter the basics</span>
