@@ -135,6 +135,58 @@ export async function GET(request: Request) {
     });
   }
 
+  // Lists are deliberately bounded for a fast booth workspace. Actions such
+  // as an overdue task must still open their exact person, even when that
+  // encounter sits outside the current list window.
+  const requestedLeadId = clean(url.searchParams.get('leadId'), 80);
+  if (requestedLeadId) {
+    await requireLeadAccess(context, requestedLeadId);
+    const lead = await database()
+      .prepare(
+        `SELECT l.id, l.event_id AS eventId, l.account_id AS accountId, l.contact_id AS contactId,
+          l.owner_id AS ownerId, om.display_name AS ownerName, l.full_name AS fullName,
+          l.company, l.role, l.email, l.phone, s.buying_role AS buyingRole,
+          l.review_status AS reviewStatus, l.qualification_state AS qualificationState,
+          l.qualification_reason AS qualificationReason, l.created_at AS createdAt,
+          i.note, t.title AS nextAction, t.due_date AS dueDate, q.score,
+          q.rationale AS scoreRationale, a.id AS assetId, a.kind AS captureKind,
+          a.processing_status AS captureStatus, a.extracted_json AS extractedJson,
+          d.target_lead_id AS duplicateLeadId, dl.full_name AS duplicateLeadName,
+          dl.company AS duplicateLeadCompany,
+          (SELECT cds.target_contact_id FROM contact_duplicate_suggestions cds WHERE cds.workspace_id=l.workspace_id AND cds.source_contact_id=l.contact_id AND cds.status='pending' ORDER BY cds.created_at DESC LIMIT 1) AS duplicateContactId,
+          (SELECT tc.full_name FROM contact_duplicate_suggestions cds JOIN contacts tc ON tc.id=cds.target_contact_id AND tc.workspace_id=cds.workspace_id WHERE cds.workspace_id=l.workspace_id AND cds.source_contact_id=l.contact_id AND cds.status='pending' ORDER BY cds.created_at DESC LIMIT 1) AS duplicateContactName,
+          (SELECT ta.name FROM contact_duplicate_suggestions cds JOIN contacts tc ON tc.id=cds.target_contact_id AND tc.workspace_id=cds.workspace_id LEFT JOIN accounts ta ON ta.id=tc.primary_account_id AND ta.workspace_id=tc.workspace_id WHERE cds.workspace_id=l.workspace_id AND cds.source_contact_id=l.contact_id AND cds.status='pending' ORDER BY cds.created_at DESC LIMIT 1) AS duplicateContactCompany,
+          (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='email') AS emailConsentStatus,
+          (SELECT status FROM lead_consents WHERE workspace_id=l.workspace_id AND lead_id=l.id AND purpose='follow_up' AND channel='whatsapp') AS whatsappConsentStatus,
+          l.custom_fields_json AS customFieldsJson, l.relationship_status AS relationshipStatus
+         FROM leads l
+         LEFT JOIN account_stakeholders s ON s.lead_id=l.id AND s.workspace_id=l.workspace_id
+         LEFT JOIN memberships om ON om.workspace_id=l.workspace_id AND om.user_id=l.owner_id
+         LEFT JOIN interactions i ON i.id=(SELECT id FROM interactions WHERE lead_id=l.id ORDER BY created_at DESC LIMIT 1)
+         LEFT JOIN tasks t ON t.id=(SELECT id FROM tasks WHERE lead_id=l.id AND status='open' ORDER BY created_at DESC LIMIT 1)
+         LEFT JOIN qualification_scores q ON q.id=(SELECT id FROM qualification_scores WHERE lead_id=l.id ORDER BY created_at DESC LIMIT 1)
+         LEFT JOIN lead_capture_assets a ON a.id=(SELECT id FROM lead_capture_assets WHERE lead_id=l.id ORDER BY created_at DESC LIMIT 1)
+         LEFT JOIN lead_duplicate_suggestions d ON d.id=(SELECT id FROM lead_duplicate_suggestions WHERE source_lead_id=l.id AND workspace_id=l.workspace_id AND status='pending' ORDER BY created_at DESC LIMIT 1)
+         LEFT JOIN leads dl ON dl.id=d.target_lead_id AND dl.event_id=l.event_id AND dl.workspace_id=l.workspace_id
+         WHERE l.id=? AND l.workspace_id=? AND l.review_status NOT IN ('merged','erased')`,
+      )
+      .bind(requestedLeadId, context.workspace.id)
+      .first<Record<string, unknown>>();
+    if (!lead) return Response.json({ error: 'Lead not found.' }, { status: 404 });
+    let customFields: Record<string, string> = {};
+    try {
+      customFields =
+        typeof lead.customFieldsJson === 'string' && lead.customFieldsJson
+          ? JSON.parse(lead.customFieldsJson)
+          : {};
+    } catch {
+      customFields = {};
+    }
+    return Response.json({
+      lead: { ...lead, customFieldsJson: undefined, customFields },
+    });
+  }
+
   const access = eventAccessClause(context, 'l.event_id');
   const result = await database()
     .prepare(`

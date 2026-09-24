@@ -2950,6 +2950,25 @@ export default function Home() {
     void loadLeadAssets(lead.id);
     void loadMeetings();
   }
+  async function openLeadById(leadId: string) {
+    const response = await apiFetch(
+      `/api/leads?leadId=${encodeURIComponent(leadId)}`,
+    );
+    const data = (await response.json().catch(() => ({}))) as {
+      lead?: SavedLead;
+      error?: string;
+    };
+    if (!response.ok || !data.lead) {
+      setNotice(data.error || 'This contact is no longer available here.');
+      return;
+    }
+    setCapturedLeads((current) =>
+      current.some((item) => item.id === data.lead!.id)
+        ? current.map((item) => (item.id === data.lead!.id ? data.lead! : item))
+        : [data.lead!, ...current],
+    );
+    openReview(data.lead);
+  }
   /**
    * The briefing is a decision surface, not a second inbox. Every item takes
    * a rep to the conversation or commercial record that needs attention.
@@ -2961,6 +2980,10 @@ export default function Home() {
       : undefined;
     if (lead) {
       openReview(lead);
+      return;
+    }
+    if (leadId) {
+      void openLeadById(leadId);
       return;
     }
     if (action.kind === 'rfq') {
@@ -2990,7 +3013,7 @@ export default function Home() {
       openReview(lead);
       return;
     }
-    setNotice('The contact for this commitment is no longer available here.');
+    void openLeadById(task.leadId);
   }
   async function loadComments(leadId: string) {
     const response = await apiFetch(
