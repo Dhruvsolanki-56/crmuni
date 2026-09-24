@@ -10914,19 +10914,34 @@ export default function Home() {
                         </button>
                       ))}
                     </div>
-                    <form className="invite-form" onSubmit={createWorkspace}>
-                      <Input
-                        name="name"
-                        placeholder="New company workspace"
-                        required
-                      />
-                      <Input
-                        name="timezone"
-                        value={appContext?.workspace.timezone || 'Asia/Kolkata'}
-                        readOnly
-                      />
-                      <Button type="submit">Create</Button>
-                    </form>
+                    <details className="workspace-create">
+                      <summary>
+                        <span>Create another workspace</span>
+                        <small>For a separate company or team.</small>
+                        <ChevronDown />
+                      </summary>
+                      <form onSubmit={createWorkspace}>
+                        <label htmlFor="new-workspace-name">
+                          Company or team name
+                        </label>
+                        <div>
+                          <Input
+                            id="new-workspace-name"
+                            name="name"
+                            placeholder="e.g. Acme Industries"
+                            required
+                          />
+                          <input
+                            name="timezone"
+                            type="hidden"
+                            value={
+                              appContext?.workspace.timezone || 'Asia/Kolkata'
+                            }
+                          />
+                          <Button type="submit">Create workspace</Button>
+                        </div>
+                      </form>
+                    </details>
                     {!availableWorkspaces.some(
                       (workspace) => workspace.kind === 'visitor',
                     ) ? (
@@ -10946,8 +10961,8 @@ export default function Home() {
                       <div>
                         <h2>Workspace identity</h2>
                         <p>
-                          Tenant-specific defaults used by dates, reports and
-                          revenue.
+                          Keep the workspace name current. Regional defaults
+                          are available when you need them.
                         </p>
                       </div>
                     </div>
@@ -10966,27 +10981,33 @@ export default function Home() {
                           required
                         />
                       </div>
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="workspace-timezone">Timezone</label>
-                          <Input
-                            id="workspace-timezone"
-                            name="timezone"
-                            defaultValue={appContext?.workspace.timezone}
-                            required
-                          />
+                      <details className="settings-inline-disclosure">
+                        <summary>
+                          <span>Change timezone or currency</span>
+                          <ChevronDown />
+                        </summary>
+                        <div className="field-grid">
+                          <div className="field-block">
+                            <label htmlFor="workspace-timezone">Timezone</label>
+                            <Input
+                              id="workspace-timezone"
+                              name="timezone"
+                              defaultValue={appContext?.workspace.timezone}
+                              required
+                            />
+                          </div>
+                          <div className="field-block">
+                            <label htmlFor="workspace-currency">Currency</label>
+                            <Input
+                              id="workspace-currency"
+                              name="currency"
+                              defaultValue={appContext?.workspace.currency}
+                              maxLength={3}
+                              required
+                            />
+                          </div>
                         </div>
-                        <div className="field-block">
-                          <label htmlFor="workspace-currency">Currency</label>
-                          <Input
-                            id="workspace-currency"
-                            name="currency"
-                            defaultValue={appContext?.workspace.currency}
-                            maxLength={3}
-                            required
-                          />
-                        </div>
-                      </div>
+                      </details>
                       <div className="settings-actions">
                         <Button
                           className="save-button"
