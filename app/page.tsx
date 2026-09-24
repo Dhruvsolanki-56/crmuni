@@ -1266,6 +1266,7 @@ function VisitorCapture({
     lastSavedLead?.fullName === 'Unidentified visitor'
       ? lastSavedLead.company
       : lastSavedLead?.fullName;
+  const canFollowUpNow = Boolean(lastSavedLead?.email || lastSavedLead?.phone);
 
   return (
     <div className="visitor-placeholder">
@@ -1288,12 +1289,18 @@ function VisitorCapture({
             </span>
             <span>
               <strong>{savedContactLabel} saved</strong>
-              <small>Ready for the next person. Review this contact whenever you need.</small>
+              <small>
+                {canFollowUpNow
+                  ? 'Ready for the next person. Review this contact whenever you need.'
+                  : 'Add an email or phone later when you are ready to follow up.'}
+              </small>
             </span>
             <span className="visitor-capture-saved-actions">
-              <Button type="button" variant="outline" onClick={() => onGoToFollowUp(lastSavedLead)}>
-                Follow up now
-              </Button>
+              {canFollowUpNow ? (
+                <Button type="button" variant="outline" onClick={() => onGoToFollowUp(lastSavedLead)}>
+                  Follow up now
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={onGoToContacts}>
                 View My contacts
               </Button>
