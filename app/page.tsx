@@ -1307,6 +1307,11 @@ function VisitorCapture({
             </p>
           </div>
         </div>
+        <ol className="capture-journey" aria-label="How capture works">
+          <li><b>1</b> Scan or enter the basics</li>
+          <li><b>2</b> Check only what matters</li>
+          <li><b>3</b> Add context, save, and continue</li>
+        </ol>
         {lastSavedLead ? (
           <output className="visitor-capture-saved">
             <span className="visitor-capture-saved-mark">
@@ -6125,6 +6130,11 @@ export default function Home() {
                             conversation immediately after.
                           </DialogDescription>
                         </DialogHeader>
+                        <ol className="capture-journey" aria-label="How capture works">
+                          <li><b>1</b> Scan or enter the basics</li>
+                          <li><b>2</b> Check only what matters</li>
+                          <li><b>3</b> Add context, save, and continue</li>
+                        </ol>
                         {pendingReviewLeads.length ? (
                           <button
                             type="button"
