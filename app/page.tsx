@@ -521,6 +521,9 @@ type NextBestAction = {
 };
 type FollowupDraft = {
   id: string;
+  leadId?: string;
+  eventId?: string;
+  eventName?: string;
   channel: string;
   recipient: string;
   subject?: string;
@@ -7249,6 +7252,11 @@ export default function Home() {
                                     ? 'Approved'
                                     : 'Draft'}{' '}
                                 · v{draft.version}
+                                {draft.leadId &&
+                                reviewLead &&
+                                draft.leadId !== reviewLead.id
+                                  ? ` · ${draft.eventName || 'another event'}`
+                                  : ''}
                               </small>
                             </span>
                             <form

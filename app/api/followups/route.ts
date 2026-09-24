@@ -1,4 +1,13 @@
-import { auditStatement, database, enforceRateLimit, requireLeadAccess, requireRole, requireWorkspace, revenueEnv } from '@/lib/db';
+import {
+  auditStatement,
+  database,
+  enforceRateLimit,
+  eventAccessClause,
+  requireLeadAccess,
+  requireRole,
+  requireWorkspace,
+  revenueEnv,
+} from '@/lib/db';
 import { suppressionIdentifier, type ContactChannel } from '@/lib/consent';
 import { entitlementsFor } from '@/lib/entitlements';
 
@@ -6,8 +15,46 @@ const clean = (value: unknown, max: number) => typeof value === 'string' ? value
 function outputText(payload: { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }) { return payload.output?.flatMap((item) => item.content || []).find((part) => part.type === 'output_text')?.text; }
 
 export async function GET(request: Request) {
-  const context = await requireWorkspace(request); const leadId = clean(new URL(request.url).searchParams.get('leadId'), 80); if (!leadId) return Response.json({ error: 'Lead ID is required.' }, { status: 400 }); await requireLeadAccess(context,leadId);
-  const drafts = await database().prepare(`SELECT id,channel,recipient,subject,body,status,model,version,created_at AS createdAt,updated_at AS updatedAt,approved_at AS approvedAt,handed_off_at AS handedOffAt FROM communication_drafts WHERE workspace_id=? AND lead_id=? ORDER BY created_at DESC`).bind(context.workspace.id, leadId).all(); return Response.json({ drafts: drafts.results });
+  const context = await requireWorkspace(request);
+  const leadId = clean(new URL(request.url).searchParams.get('leadId'), 80);
+  if (!leadId)
+    return Response.json({ error: 'Lead ID is required.' }, { status: 400 });
+  await requireLeadAccess(context, leadId);
+  const db = database();
+  const lead = await db
+    .prepare(`SELECT contact_id AS contactId FROM leads WHERE id=? AND workspace_id=?`)
+    .bind(leadId, context.workspace.id)
+    .first<{ contactId: string | null }>();
+  if (!lead)
+    return Response.json({ error: 'Lead not found.' }, { status: 404 });
+
+  // Follow-ups belong to encounters in storage, but a durable contact can be
+  // met at more than one event. Showing the accessible encounter history
+  // together gives the person one communication record without granting a
+  // visitor visibility into events they are not assigned to.
+  if (lead.contactId) {
+    const access = eventAccessClause(context, 'l.event_id');
+    const drafts = await db
+      .prepare(
+        `SELECT d.id,d.lead_id AS leadId,l.event_id AS eventId,e.name AS eventName,d.channel,d.recipient,d.subject,d.body,d.status,d.model,d.version,d.created_at AS createdAt,d.updated_at AS updatedAt,d.approved_at AS approvedAt,d.handed_off_at AS handedOffAt
+         FROM communication_drafts d
+         JOIN leads l ON l.id=d.lead_id AND l.workspace_id=d.workspace_id
+         LEFT JOIN events e ON e.id=l.event_id AND e.workspace_id=l.workspace_id
+         WHERE d.workspace_id=? AND l.contact_id=?${access.sql}
+         ORDER BY d.created_at DESC`,
+      )
+      .bind(context.workspace.id, lead.contactId, ...access.bindings)
+      .all();
+    return Response.json({ drafts: drafts.results });
+  }
+
+  const drafts = await db
+    .prepare(
+      `SELECT id,lead_id AS leadId,channel,recipient,subject,body,status,model,version,created_at AS createdAt,updated_at AS updatedAt,approved_at AS approvedAt,handed_off_at AS handedOffAt FROM communication_drafts WHERE workspace_id=? AND lead_id=? ORDER BY created_at DESC`,
+    )
+    .bind(context.workspace.id, leadId)
+    .all();
+  return Response.json({ drafts: drafts.results });
 }
 
 export async function POST(request: Request) {
