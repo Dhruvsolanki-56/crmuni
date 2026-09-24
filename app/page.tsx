@@ -3997,7 +3997,7 @@ export default function Home() {
     setNotice(
       isEditing
         ? 'Event updated · run readiness again before activating'
-        : 'Event created · run readiness, then activate it for capture',
+        : 'Event created · check it is ready, then activate it to start capturing',
     );
     setQuickFixTarget(null);
     await loadEvents();
@@ -9046,10 +9046,10 @@ export default function Home() {
                       <div>
                         <strong>No event is active yet</strong>
                         <p>
-                          Create the event, run readiness, then activate it
-                          for capture. Only access and attribution safeguards
-                          block you; product context, qualification, and
-                          commercial details can be improved later.
+                          Start with the event name. Next, we check the few
+                          essentials needed to capture safely. Activate it,
+                          then your team can scan and save conversations.
+                          Playbook and reporting details can wait.
                         </p>
                       </div>
                     </div>
