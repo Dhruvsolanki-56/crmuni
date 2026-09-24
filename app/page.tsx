@@ -1031,24 +1031,26 @@ function VisitorCapture({
   setNotice,
   onGoToEventHome,
   onGoToContacts,
+  onGoToFollowUp,
 }: {
   activeEvent: EventItem | undefined;
-  onSaved: () => void;
+  onSaved: (lead: SavedLead) => void;
   setNotice: (message: string) => void;
   onGoToEventHome: () => void;
   onGoToContacts: () => void;
+  onGoToFollowUp: (lead: SavedLead) => void;
 }) {
   const form = useRef<HTMLFormElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
   const [ocrStatus, setOcrStatus] = useState('');
   const [saving, setSaving] = useState(false);
-  const [lastSavedName, setLastSavedName] = useState('');
+  const [lastSavedLead, setLastSavedLead] = useState<SavedLead | null>(null);
 
   async function handleFile(event: SyntheticEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
-    setLastSavedName('');
+    setLastSavedLead(null);
     setReading(true);
     setOcrStatus('Reading text and QR data on this device…');
     try {
@@ -1097,7 +1099,7 @@ function VisitorCapture({
         body: data,
       });
       const result = (await response.json()) as {
-        lead?: { fullName: string };
+        lead?: SavedLead;
         error?: string;
       };
       if (!response.ok || !result.lead) {
@@ -1107,8 +1109,8 @@ function VisitorCapture({
       setNotice(`${result.lead.fullName} saved to My contacts`);
       formEl.reset();
       setOcrStatus('');
-      setLastSavedName(result.lead.fullName);
-      onSaved();
+      setLastSavedLead(result.lead);
+      onSaved(result.lead);
     } finally {
       setSaving(false);
     }
@@ -1143,18 +1145,23 @@ function VisitorCapture({
             </p>
           </div>
         </div>
-        {lastSavedName ? (
+        {lastSavedLead ? (
           <output className="visitor-capture-saved">
             <span className="visitor-capture-saved-mark">
               <Check size={18} />
             </span>
             <span>
-              <strong>{lastSavedName} saved</strong>
+              <strong>{lastSavedLead.fullName} saved</strong>
               <small>Ready for the next person. Review this contact whenever you need.</small>
             </span>
-            <Button type="button" variant="outline" onClick={onGoToContacts}>
-              View My contacts
-            </Button>
+            <span className="visitor-capture-saved-actions">
+              <Button type="button" variant="outline" onClick={() => onGoToFollowUp(lastSavedLead)}>
+                Follow up now
+              </Button>
+              <Button type="button" variant="outline" onClick={onGoToContacts}>
+                View My contacts
+              </Button>
+            </span>
           </output>
         ) : null}
         <div className="capture-methods">
@@ -1192,7 +1199,7 @@ function VisitorCapture({
           className="lead-form"
           ref={form}
           onSubmit={submit}
-          onInput={() => lastSavedName && setLastSavedName('')}
+          onInput={() => lastSavedLead && setLastSavedLead(null)}
         >
           <div className="field-grid">
             <div className="field-block">
@@ -12143,6 +12150,7 @@ export default function Home() {
                   setNotice={setNotice}
                   onGoToEventHome={() => go('visitor-home')}
                   onGoToContacts={() => go('visitor-contacts')}
+                  onGoToFollowUp={openVisitorContact}
                 />
               ) : null}
               {activeView === 'visitor-contacts' ? (
