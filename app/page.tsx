@@ -1064,6 +1064,13 @@ function VisitorCapture({
   const voiceRecorder = useRef<MediaRecorder | null>(null);
   const voiceChunks = useRef<Blob[]>([]);
 
+  useEffect(
+    () => () => {
+      if (voiceNote?.url) URL.revokeObjectURL(voiceNote.url);
+    },
+    [voiceNote],
+  );
+
   async function readFile(
     file: File,
     sampleFields?: Record<string, string>,
