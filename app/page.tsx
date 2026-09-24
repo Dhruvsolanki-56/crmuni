@@ -4999,6 +4999,18 @@ export default function Home() {
         )
         .sort((a, b) => b.createdAt - a.createdAt)
     : [];
+  // The account is a grouping, not a replacement for a person's record.
+  // Show other distinct people only when the backend has explicitly linked
+  // them to the same account; never group by a display-name guess here.
+  const reviewLeadCompanyContacts = reviewLead?.accountId
+    ? dedupeByContact(
+        capturedLeads.filter(
+          (lead) =>
+            lead.accountId === reviewLead.accountId &&
+            lead.contactId !== reviewLead.contactId,
+        ),
+      ).sort((a, b) => b.createdAt - a.createdAt)
+    : [];
   const peoplePageCount = Math.max(
     1,
     Math.ceil(peopleRows.length / PEOPLE_PAGE_SIZE),
@@ -6015,6 +6027,31 @@ export default function Home() {
                             </li>
                           ))}
                         </ul>
+                      </div>
+                    ) : null}
+                    {reviewLeadCompanyContacts.length ? (
+                      <div className="related-contacts">
+                        <span>
+                          People at {reviewLead?.company}
+                          <small>
+                            {reviewLeadCompanyContacts.length} other{' '}
+                            {reviewLeadCompanyContacts.length === 1
+                              ? 'contact'
+                              : 'contacts'}
+                          </small>
+                        </span>
+                        <div>
+                          {reviewLeadCompanyContacts.map((lead) => (
+                            <button
+                              type="button"
+                              key={lead.id}
+                              onClick={() => openReview(lead)}
+                            >
+                              <strong>{lead.fullName}</strong>
+                              <small>{lead.role || 'Role not added'}</small>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     ) : null}
                     {reviewLead ? (
@@ -12031,6 +12068,31 @@ export default function Home() {
                               </li>
                             ))}
                           </ul>
+                        </div>
+                      ) : null}
+                      {reviewLeadCompanyContacts.length ? (
+                        <div className="related-contacts">
+                          <span>
+                            People at {reviewLead.company}
+                            <small>
+                              {reviewLeadCompanyContacts.length} other{' '}
+                              {reviewLeadCompanyContacts.length === 1
+                                ? 'contact'
+                                : 'contacts'}
+                            </small>
+                          </span>
+                          <div>
+                            {reviewLeadCompanyContacts.map((lead) => (
+                              <button
+                                type="button"
+                                key={lead.id}
+                                onClick={() => openReview(lead)}
+                              >
+                                <strong>{lead.fullName}</strong>
+                                <small>{lead.role || 'Role not added'}</small>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       ) : null}
                       {analysisError ? (
