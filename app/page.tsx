@@ -1299,7 +1299,7 @@ function VisitorCapture({
         <div className="settings-heading">
           <Camera />
           <div>
-            <h2>Capture a contact</h2>
+            <h2>Capture a person or company</h2>
             <p>
               Attending {activeEvent.name}. Scan a card or badge, or enter
               the basics manually — saved privately to your visitor
@@ -1322,7 +1322,7 @@ function VisitorCapture({
               <small>
                 {canFollowUpNow
                   ? 'Ready for the next person. Review this contact whenever you need.'
-                  : 'Capture a person at this company whenever you meet them.'}
+                  : 'Keep moving — add a person at this company whenever you meet one.'}
               </small>
             </span>
             <span className="visitor-capture-saved-actions">
@@ -1437,9 +1437,13 @@ function VisitorCapture({
           </div>
           <div className="field-block">
             <label htmlFor="visitor-lead-note">
-              Notes — what did they say, what did you promise?
+              Quick note <small>(optional)</small>
             </label>
-            <Textarea id="visitor-lead-note" name="note" />
+            <Textarea
+              id="visitor-lead-note"
+              name="note"
+              placeholder="What did you discuss or want to remember?"
+            />
           </div>
           <details
             className="more-details"
@@ -4214,9 +4218,16 @@ export default function Home() {
   }
 
   async function switchWorkspace(id: string) {
+    const destination = availableWorkspaces.find(
+      (workspace) => workspace.id === id,
+    );
     window.localStorage.setItem('revenue-workspace-id', id);
     window.localStorage.removeItem('revenue-event-id');
     setActiveEventId('');
+    // Navigation names differ by persona. Never carry an exhibitor-only
+    // screen such as Events into a visitor workspace (or vice versa): the
+    // first screen after a switch should always explain the next real action.
+    setActiveView(destination?.kind === 'visitor' ? 'visitor-home' : 'today');
     // Clear everything scoped to the previous workspace immediately so
     // nothing stale (next-best-actions, revenue figures) lingers on screen
     // while the new workspace's data is still loading.
@@ -4500,7 +4511,11 @@ export default function Home() {
         ...values,
       }),
     });
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as {
+      error?: string;
+      id?: string;
+      status?: string;
+    };
     if (!response.ok) {
       setNotice(data.error || `Could not ${isEditing ? 'update' : 'create'} event`);
       return;
@@ -5962,7 +5977,7 @@ export default function Home() {
               <NavItem
                 icon={Camera}
                 label="Capture"
-                description="Scan a card or save a person you meet"
+                description="Scan a card or save a person or company you meet"
                 active={activeView === 'visitor-capture'}
                 onClick={() => go('visitor-capture')}
               />
@@ -13215,7 +13230,7 @@ export default function Home() {
                       </div>
                       <div className="visitor-ready-actions">
                         <Button type="button" onClick={() => go('visitor-capture')}>
-                          <Camera /> Capture a contact
+                          <Camera /> Capture a person or company
                         </Button>
                         <Button
                           type="button"
@@ -13225,6 +13240,33 @@ export default function Home() {
                           My contacts
                         </Button>
                       </div>
+                      <details className="visitor-event-setup">
+                        <summary>
+                          <span>Explore this event</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="visitor-explore-actions">
+                          <p>
+                            Find exhibitors before you walk the floor, or keep a
+                            lightweight visit list. Neither adds anything to your
+                            contacts until you choose to capture it.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => go('visitor-discover')}
+                          >
+                            <Search /> Find exhibitors
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => go('visitor-plan')}
+                          >
+                            <CalendarDays /> Plan visits
+                          </Button>
+                        </div>
+                      </details>
                       <details className="visitor-event-setup">
                         <summary>
                           <span>Join or add another event</span>
@@ -13254,6 +13296,13 @@ export default function Home() {
                         onCreate={createVisitorEvent}
                         timezone={appContext?.workspace.timezone || 'Asia/Kolkata'}
                       />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => go('visitor-discover')}
+                      >
+                        <Search /> Browse published exhibitors
+                      </Button>
                     </article>
                   )}
                   <section className="event-list" aria-label="Your events">
