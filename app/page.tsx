@@ -12552,7 +12552,7 @@ export default function Home() {
                       {reviewLeadCompanyContacts.length ? (
                         <div className="related-contacts">
                           <span>
-                            People at {reviewLead.company}
+                        People at {reviewLead.company}
                             <small>
                               {reviewLeadCompanyContacts.length} other{' '}
                               {reviewLeadCompanyContacts.length === 1
@@ -12565,7 +12565,7 @@ export default function Home() {
                               <button
                                 type="button"
                                 key={lead.id}
-                                onClick={() => openReview(lead)}
+                                onClick={() => openVisitorContact(lead)}
                               >
                                 <strong>{lead.fullName}</strong>
                                 <small>{lead.role || 'Role not added'}</small>
