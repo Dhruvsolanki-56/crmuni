@@ -8889,9 +8889,8 @@ export default function Home() {
                           {editingEventId ? 'Edit event' : 'Prepare an event'}
                         </DialogTitle>
                         <DialogDescription>
-                          Configure the booth goal, qualification playbook,
-                          routing and follow-up standard before the team
-                          arrives.
+                          Start with its name. Add dates, playbook and routing
+                          only when they help this event.
                         </DialogDescription>
                       </div>
                     </div>
@@ -8910,71 +8909,78 @@ export default function Home() {
                           </button>
                         </output>
                       ) : null}
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="event-name">Event name</label>
-                          <Input
-                            id="event-name"
-                            name="name"
-                            required
-                            placeholder="IndustrialTech Expo 2027"
-                            onChange={(event) =>
-                              checkSimilarEvents(event.currentTarget.value)
-                            }
-                          />
-                          {similarEventMatches.length ? (
-                            <div className="similar-event-hint">
-                              <AlertTriangle size={13} />
-                              <span>
-                                {similarEventMatches.length === 1
-                                  ? 'An event with a similar name already exists: '
-                                  : 'Events with similar names already exist: '}
-                                {similarEventMatches.map((match, index) => (
-                                  <span key={match.id}>
-                                    {index > 0 ? ', ' : ''}
-                                    <button
-                                      type="button"
-                                      onClick={() => editEvent(match)}
-                                    >
-                                      {match.name} ({match.status})
-                                    </button>
-                                  </span>
-                                ))}
-                                . Configure one of these instead of creating a
-                                duplicate, if it&apos;s the same event.
-                              </span>
+                      <div className="field-block">
+                        <label htmlFor="event-name">Event name</label>
+                        <Input
+                          id="event-name"
+                          name="name"
+                          required
+                          placeholder="IndustrialTech Expo 2027"
+                          onChange={(event) =>
+                            checkSimilarEvents(event.currentTarget.value)
+                          }
+                        />
+                        {similarEventMatches.length ? (
+                          <div className="similar-event-hint">
+                            <AlertTriangle size={13} />
+                            <span>
+                              {similarEventMatches.length === 1
+                                ? 'An event with a similar name already exists: '
+                                : 'Events with similar names already exist: '}
+                              {similarEventMatches.map((match, index) => (
+                                <span key={match.id}>
+                                  {index > 0 ? ', ' : ''}
+                                  <button
+                                    type="button"
+                                    onClick={() => editEvent(match)}
+                                  >
+                                    {match.name} ({match.status})
+                                  </button>
+                                </span>
+                              ))}
+                              . Configure one of these instead of creating a
+                              duplicate, if it&apos;s the same event.
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                      <details
+                        className="more-details"
+                        open={Boolean(editingEventId)}
+                      >
+                        <summary>
+                          <span>Add dates or venue</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="more-details-body">
+                          <div className="field-block">
+                            <label htmlFor="event-venue">Venue</label>
+                            <Input
+                              id="event-venue"
+                              name="venue"
+                              placeholder="Bombay Exhibition Centre"
+                            />
+                          </div>
+                          <div className="field-grid">
+                            <div className="field-block">
+                              <label htmlFor="event-start">Starts</label>
+                              <Input
+                                id="event-start"
+                                name="startsOn"
+                                type="date"
+                              />
                             </div>
-                          ) : null}
+                            <div className="field-block">
+                              <label htmlFor="event-end">Ends</label>
+                              <Input
+                                id="event-end"
+                                name="endsOn"
+                                type="date"
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div className="field-block">
-                          <label htmlFor="event-venue">Venue</label>
-                          <Input
-                            id="event-venue"
-                            name="venue"
-                            placeholder="Bombay Exhibition Centre"
-                          />
-                        </div>
-                      </div>
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="event-start">Starts</label>
-                          <Input
-                            id="event-start"
-                            name="startsOn"
-                            type="date"
-                            required
-                          />
-                        </div>
-                        <div className="field-block">
-                          <label htmlFor="event-end">Ends</label>
-                          <Input
-                            id="event-end"
-                            name="endsOn"
-                            type="date"
-                            required
-                          />
-                        </div>
-                      </div>
+                      </details>
                       {/* Only the compact event identity is needed to create
                           a draft. The rest improves routing, automation, and
                           reporting later; it must never become a wall before
@@ -8984,7 +8990,7 @@ export default function Home() {
                         open={Boolean(editingEventId)}
                       >
                         <summary>
-                          <span>More details</span>
+                          <span>Set up playbook, routing or reporting</span>
                           <ChevronDown size={14} />
                         </summary>
                         <div className="more-details-body">
@@ -9219,7 +9225,7 @@ export default function Home() {
                       >
                         {editingEventId
                           ? 'Save event changes'
-                          : 'Create event workspace'}
+                          : 'Create event'}
                       </Button>
                     </form>
                     </DialogContent>
