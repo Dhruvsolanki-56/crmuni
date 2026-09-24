@@ -2898,6 +2898,7 @@ export default function Home() {
     setCommentMentions([]);
     void loadFollowups(lead.id);
     void loadLeadAssets(lead.id);
+    void loadMeetings();
     void loadComments(lead.id);
     void loadSettings();
   }
@@ -2909,6 +2910,7 @@ export default function Home() {
     setLeadAssets([]);
     void loadFollowups(lead.id);
     void loadLeadAssets(lead.id);
+    void loadMeetings();
   }
   async function loadComments(leadId: string) {
     const response = await apiFetch(
@@ -5460,6 +5462,15 @@ export default function Home() {
         )
         .sort((a, b) => b.createdAt - a.createdAt)
     : [];
+  const reviewContactLeadIds = new Set([
+    ...(reviewLead ? [reviewLead.id] : []),
+    ...reviewLeadOtherEncounters.map((lead) => lead.id),
+  ]);
+  const reviewContactMeetings = meetings
+    .filter((meeting) =>
+      meeting.leadId ? reviewContactLeadIds.has(meeting.leadId) : false,
+    )
+    .sort((a, b) => b.startsAt - a.startsAt);
   // The account is a grouping, not a replacement for a person's record.
   // Show other distinct people only when the backend has explicitly linked
   // them to the same account; never group by a display-name guess here.
@@ -6527,6 +6538,29 @@ export default function Home() {
                               >
                                 Download
                               </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+                    {reviewContactMeetings.length ? (
+                      <details className="review-extra-fields">
+                        <summary>
+                          Meetings ({reviewContactMeetings.length})
+                        </summary>
+                        <div className="knowledge-records">
+                          {reviewContactMeetings.map((meeting) => (
+                            <div key={meeting.id}>
+                              <span>
+                                <strong>{meeting.title}</strong>
+                                <small>
+                                  {dateTime(meeting.startsAt)} ·{' '}
+                                  {meeting.status}
+                                  {meeting.location
+                                    ? ` · ${meeting.location}`
+                                    : ''}
+                                </small>
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -12670,6 +12704,29 @@ export default function Home() {
                                 >
                                   Download
                                 </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
+                      {reviewContactMeetings.length ? (
+                        <details className="review-extra-fields">
+                          <summary>
+                            Meetings ({reviewContactMeetings.length})
+                          </summary>
+                          <div className="knowledge-records">
+                            {reviewContactMeetings.map((meeting) => (
+                              <div key={meeting.id}>
+                                <span>
+                                  <strong>{meeting.title}</strong>
+                                  <small>
+                                    {dateTime(meeting.startsAt)} ·{' '}
+                                    {meeting.status}
+                                    {meeting.location
+                                      ? ` · ${meeting.location}`
+                                      : ''}
+                                  </small>
+                                </span>
                               </div>
                             ))}
                           </div>
