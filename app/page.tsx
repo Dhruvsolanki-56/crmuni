@@ -1794,6 +1794,7 @@ export default function Home() {
   const [quotationDialogOpen, setQuotationDialogOpen] = useState(false);
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
   const [meetingLead, setMeetingLead] = useState<SavedLead | null>(null);
+  const [meetingLeadId, setMeetingLeadId] = useState('');
   const [similarEventMatches, setSimilarEventMatches] = useState<
     EventItem[]
   >([]);
@@ -4010,6 +4011,7 @@ export default function Home() {
     form.reset();
     setMeetingDialogOpen(false);
     setMeetingLead(null);
+    setMeetingLeadId('');
     setNotice('Meeting scheduled');
   }
 
@@ -7763,7 +7765,10 @@ export default function Home() {
                               type="button"
                               variant="outline"
                               onClick={() => {
-                                setMeetingLead(reviewLead);
+                                if (!reviewLead) return;
+                                const lead = reviewLead;
+                                setMeetingLead(lead);
+                                setMeetingLeadId(lead.id);
                                 setReviewLead(null);
                                 go('meetings');
                                 setMeetingDialogOpen(true);
@@ -9793,7 +9798,10 @@ export default function Home() {
                     open={meetingDialogOpen}
                     onOpenChange={(open) => {
                       setMeetingDialogOpen(open);
-                      if (!open) setMeetingLead(null);
+                      if (!open) {
+                        setMeetingLead(null);
+                        setMeetingLeadId('');
+                      }
                     }}
                   >
                     <DialogContent className="capture-dialog">
@@ -9861,7 +9869,10 @@ export default function Home() {
                             <select
                               id="meeting-lead"
                               name="leadId"
-                              defaultValue={meetingLead?.id || ''}
+                              value={meetingLeadId}
+                              onChange={(event) =>
+                                setMeetingLeadId(event.currentTarget.value)
+                              }
                             >
                               <option value="">No linked contact</option>
                               {capturedLeads
@@ -9913,11 +9924,11 @@ export default function Home() {
                       <Button
                         className="save-button"
                         type="submit"
-                        disabled={!activeEventId}
+                        disabled={!activeEventId && !meetingLeadId}
                       >
                         Schedule meeting
                       </Button>
-                      {!activeEventId ? (
+                      {!activeEventId && !meetingLeadId ? (
                         <p className="field-help">
                           Select an active event before creating an unlinked
                           meeting.
@@ -9942,6 +9953,7 @@ export default function Home() {
                           className="capture-button"
                           onClick={() => {
                             setMeetingLead(null);
+                            setMeetingLeadId('');
                             setMeetingDialogOpen(true);
                           }}
                         >
