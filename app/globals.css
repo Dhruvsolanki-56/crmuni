@@ -771,6 +771,7 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .entity-primary > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .entity-primary .initial-avatar.small { width: 32px; height: 32px; flex: none; font-size: var(--text-micro); }
 .entity-subtext { color: var(--color-text-subtle); font-weight: var(--weight-regular); font-size: var(--text-micro); }
+.entity-duplicate-hint { color: var(--warn-750); font-weight: var(--weight-semibold); }
 .entity-num { font-variant-numeric: tabular-nums; }
 
 /* Classify is a quiet affordance, not a button on every row. */

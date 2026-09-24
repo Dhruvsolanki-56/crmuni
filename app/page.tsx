@@ -5003,7 +5003,7 @@ export default function Home() {
       .join(' ')
       .toLowerCase()
       .includes(peopleTerm);
-  const contactRows = dedupeByContact(
+  const dedupedContactRows = dedupeByContact(
     capturedLeads
       .filter((item) => !accountFilter || leadInAccount(item, accountFilter))
       .filter(matchesContact)
@@ -5021,6 +5021,30 @@ export default function Home() {
         ? b.fullName.localeCompare(a.fullName)
         : b.createdAt - a.createdAt,
   );
+  // Historical imports can predate the durable-contact resolver. Give an
+  // owner a clear, reversible review path for exact account+name pairs, but
+  // never collapse them in the interface or database without that decision.
+  const contactRows = dedupedContactRows.map((lead) => {
+    if (lead.duplicateContactId || !lead.accountId || !lead.contactId)
+      return lead;
+    const sameName = dedupedContactRows.find(
+      (candidate) =>
+        candidate.id !== lead.id &&
+        candidate.accountId === lead.accountId &&
+        candidate.contactId &&
+        candidate.contactId !== lead.contactId &&
+        candidate.fullName.trim().toLowerCase() ===
+          lead.fullName.trim().toLowerCase(),
+    );
+    return sameName
+      ? {
+          ...lead,
+          duplicateContactId: sameName.contactId,
+          duplicateContactName: sameName.fullName,
+          duplicateContactCompany: sameName.company,
+        }
+      : lead;
+  });
   const accountRows = accounts
     .filter(
       (account) =>
@@ -7629,7 +7653,13 @@ export default function Home() {
                               </span>
                               <span>
                                 {lead.fullName}
-                                {lead.encounterCount && lead.encounterCount > 1 ? (
+                                {lead.duplicateContactId ? (
+                                  <small className="entity-subtext entity-duplicate-hint">
+                                    {' '}
+                                    · possible duplicate — review
+                                  </small>
+                                ) : lead.encounterCount &&
+                                  lead.encounterCount > 1 ? (
                                   <small className="entity-subtext">
                                     {' '}
                                     · met {lead.encounterCount} times
