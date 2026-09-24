@@ -11738,9 +11738,7 @@ export default function Home() {
                         Join event
                       </Button>
                     </form>
-                    <div className="or">
-                      <span>or create a private event</span>
-                    </div>
+                    <div className="or"><span>or create a private event</span></div>
                     <form
                       className="lead-form"
                       onSubmit={createVisitorEvent}
@@ -11756,30 +11754,14 @@ export default function Home() {
                           placeholder="IndustrialTech Expo 2027"
                         />
                       </div>
-                      <div className="field-grid">
-                        <div className="field-block">
-                          <label htmlFor="visitor-event-venue">Venue</label>
-                          <Input
-                            id="visitor-event-venue"
-                            name="venue"
-                            placeholder="Bombay Exhibition Centre"
-                          />
+                      <details className="more-details">
+                        <summary><span>Add dates or venue</span><ChevronDown size={14} /></summary>
+                        <div className="more-details-body">
+                        <div className="field-grid">
+                          <div className="field-block"><label htmlFor="visitor-event-venue">Venue</label><Input id="visitor-event-venue" name="venue" placeholder="Bombay Exhibition Centre" /></div>
+                          <div className="field-block"><label htmlFor="visitor-event-timezone">Timezone</label><Input id="visitor-event-timezone" name="timezone" defaultValue={appContext?.workspace.timezone || 'Asia/Kolkata'} /></div>
                         </div>
-                        <div className="field-block">
-                          <label htmlFor="visitor-event-timezone">
-                            Timezone
-                          </label>
-                          <Input
-                            id="visitor-event-timezone"
-                            name="timezone"
-                            defaultValue={
-                              appContext?.workspace.timezone ||
-                              'Asia/Kolkata'
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="field-grid">
+                        <div className="field-grid">
                         <div className="field-block">
                           <label htmlFor="visitor-event-starts">
                             Starts
@@ -11788,7 +11770,6 @@ export default function Home() {
                             id="visitor-event-starts"
                             name="startsOn"
                             type="date"
-                            required
                           />
                         </div>
                         <div className="field-block">
@@ -11797,10 +11778,11 @@ export default function Home() {
                             id="visitor-event-ends"
                             name="endsOn"
                             type="date"
-                            required
                           />
                         </div>
-                      </div>
+                        </div>
+                        </div>
+                      </details>
                       <Button type="submit" className="save-button">
                         Create private event
                       </Button>

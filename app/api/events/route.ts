@@ -326,11 +326,12 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     const name = clean(body.name, 180);
-    const startsOn = date(body.startsOn);
-    const endsOn = date(body.endsOn);
-    if (!name || !startsOn || !endsOn || endsOn < startsOn)
+    const today = new Date(now).toISOString().slice(0, 10);
+    const startsOn = date(body.startsOn) || today;
+    const endsOn = date(body.endsOn) || startsOn;
+    if (!name || endsOn < startsOn)
       return Response.json(
-        { error: 'Name and a valid date range are required.' },
+        { error: 'Enter an event name and a valid date range when dates are known.' },
         { status: 400 },
       );
     const id = crypto.randomUUID();
