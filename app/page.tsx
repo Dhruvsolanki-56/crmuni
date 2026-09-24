@@ -6210,6 +6210,14 @@ export default function Home() {
                               .
                             </span>
                           </p>
+                        ) : savedLead?.fullName === 'Unidentified visitor' &&
+                          savedLead.company !== 'Company pending' ? (
+                          <p className="identity-preview identity-preview-result">
+                            <Sparkles size={13} />
+                            <span>
+                              Saved as an account conversation. Add a person only when you know who you met.
+                            </span>
+                          </p>
                         ) : null}
                         <div className="saved-summary">
                           <span>
