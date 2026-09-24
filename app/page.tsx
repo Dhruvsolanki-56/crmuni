@@ -5819,19 +5819,24 @@ export default function Home() {
                                 />
                               </div>
                               {activeEvent?.leadFieldSchema.length ? (
-                                <div className="field-grid">
-                                  {activeEvent.leadFieldSchema.map((label) => (
-                                    <div className="field-block" key={label}>
-                                      <label htmlFor={`lead-custom-${label}`}>
-                                        {label}
-                                      </label>
-                                      <Input
-                                        id={`lead-custom-${label}`}
-                                        name={`custom:${label}`}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
+                                <details className="event-fields-details">
+                                  <summary>
+                                    Add event-specific details
+                                  </summary>
+                                  <div className="field-grid">
+                                    {activeEvent.leadFieldSchema.map((label) => (
+                                      <div className="field-block" key={label}>
+                                        <label htmlFor={`lead-custom-${label}`}>
+                                          {label}
+                                        </label>
+                                        <Input
+                                          id={`lead-custom-${label}`}
+                                          name={`custom:${label}`}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
                               ) : null}
                             </div>
                           </details>
