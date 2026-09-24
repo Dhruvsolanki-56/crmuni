@@ -11572,10 +11572,6 @@ export default function Home() {
                           <Button
                             type="button"
                             variant="outline"
-                            disabled={
-                              !reviewLead.email &&
-                              reviewLead.emailConsentStatus !== 'granted'
-                            }
                             onClick={() =>
                               operationsAction('acknowledge_alert', alert.id)
                             }
@@ -12602,6 +12598,10 @@ export default function Home() {
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={
+                              !reviewLead.email &&
+                              reviewLead.emailConsentStatus !== 'granted'
+                            }
                             onClick={() =>
                               setContactPermission(
                                 'email',
