@@ -18,8 +18,8 @@ test('owners, admins and active support sessions receive workspace-wide event ac
   }
 });
 
-test('operational roles are restricted to active event assignments', () => {
-  for (const role of ['manager', 'salesperson', 'marketing', 'viewer']) {
+test('operational and visitor roles are restricted to active event assignments', () => {
+  for (const role of ['manager', 'salesperson', 'marketing', 'viewer', 'visitor']) {
     const access = eventAccessClause(context(role), 'l.event_id');
     assert.equal(canAccessAllEvents(context(role)), false);
     assert.match(access.sql, /event_memberships/);
