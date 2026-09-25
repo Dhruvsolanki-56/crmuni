@@ -3314,6 +3314,15 @@ export default function Home() {
     status: 'granted' | 'withdrawn',
   ) {
     if (!reviewLead) return;
+    if (status === 'granted') {
+      const label = channel === 'email' ? 'email' : 'WhatsApp';
+      const confirmed = await askUser({
+        title: `Record ${label} permission`,
+        description: `Only continue if ${contactLabel(reviewLead)} clearly agreed to a ${label} follow-up. This records the permission; it does not send a message.`,
+        confirmLabel: 'Record confirmed permission',
+      });
+      if (!confirmed) return;
+    }
     const response = await apiFetch('/api/workspace', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -7425,7 +7434,7 @@ export default function Home() {
                             >
                               {reviewLead.emailConsentStatus === 'granted'
                                 ? 'Withdraw email permission'
-                                : 'Record email permission'}
+                                : 'Record confirmed email permission'}
                             </Button>
                           </div>
                           <div className="consent-cell">
@@ -7448,7 +7457,7 @@ export default function Home() {
                             >
                               {reviewLead.whatsappConsentStatus === 'granted'
                                 ? 'Withdraw WhatsApp permission'
-                                : 'Record WhatsApp permission'}
+                                : 'Record confirmed WhatsApp permission'}
                             </Button>
                           </div>
                         </div>
@@ -13818,7 +13827,7 @@ export default function Home() {
                             {reviewLead.emailConsentStatus === 'granted'
                               ? 'Withdraw email permission'
                               : reviewLead.email
-                                ? 'Record email permission'
+                                ? 'Record confirmed email permission'
                                 : 'Add email first'}
                           </Button>
                         </div>
@@ -13847,7 +13856,7 @@ export default function Home() {
                             {reviewLead.whatsappConsentStatus === 'granted'
                               ? 'Withdraw WhatsApp permission'
                               : reviewLead.phone
-                                ? 'Record WhatsApp permission'
+                                ? 'Record confirmed WhatsApp permission'
                                 : 'Add phone first'}
                           </Button>
                         </div>
