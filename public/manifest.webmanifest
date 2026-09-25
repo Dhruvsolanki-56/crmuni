@@ -1,0 +1,17 @@
+{
+  "name": "Revenue OS",
+  "short_name": "Revenue OS",
+  "description": "Capture exhibition conversations and keep the next promise visible.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8faf9",
+  "theme_color": "#0d4b3f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

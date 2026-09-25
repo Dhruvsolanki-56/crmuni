@@ -9,7 +9,12 @@ const inter = Inter({
 });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
-export const metadata: Metadata = { title: 'Revenue OS — Today', description: 'Turn every exhibition conversation into accountable revenue action.' };
+export const metadata: Metadata = {
+  title: 'Revenue OS — Today',
+  description: 'Turn every exhibition conversation into accountable revenue action.',
+  manifest: '/manifest.webmanifest',
+  themeColor: '#0d4b3f',
+};
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="en"><body className={`${inter.variable} ${geistMono.variable}`}>{children}</body></html>;

@@ -2382,6 +2382,14 @@ export default function Home() {
       window.removeEventListener('online', sync);
     };
   }, []);
+  // The outbox already makes a saved capture retry-safe. Registering this
+  // deliberately small service worker also keeps the application shell
+  // available when an exhibition connection disappears after the first load.
+  // It never caches API responses, which can contain workspace data.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+    void navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+  }, []);
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
