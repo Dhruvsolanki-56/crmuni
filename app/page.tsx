@@ -2942,11 +2942,24 @@ export default function Home() {
     window.setTimeout(() => setCaptureOpen(true), 200);
   }
 
-  // Capture is an event action. Never open a form that cannot be saved and
-  // make the rep work out why; take them to the one prerequisite instead.
-  function startCapture() {
-    if (activeEvent) {
+  // Capture is rendered on Today. Open it from every entry point in the same
+  // way, so a rep never clicks "Add contact" on People and gets no visible
+  // response just because the dialog lives on another page.
+  function openCaptureDialog() {
+    if (activeView === 'today') {
       setCaptureOpen(true);
+      return;
+    }
+    go('today');
+    window.setTimeout(() => setCaptureOpen(true), 0);
+  }
+
+  // Capture is an event action. If there is an active event available, the
+  // capture gate lets the rep choose it in place; only send them to Events
+  // when an event genuinely needs setting up or activating.
+  function startCapture() {
+    if (activeEvent || capturableEvents.length) {
+      openCaptureDialog();
       return;
     }
     go('events');
