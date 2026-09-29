@@ -2093,3 +2093,18 @@ select:not([multiple]):focus-visible { outline: none; border-color: var(--ring);
 .encounter-history-list li { display: grid; grid-template-columns: minmax(90px, auto) 1fr; column-gap: 12px; align-items: baseline; }
 .encounter-history-date { color: var(--text-500); font-size: var(--text-label); line-height: var(--lh-label); white-space: nowrap; }
 .encounter-history-note { color: var(--text-700); font-size: var(--text-sm); line-height: var(--lh-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* One-hand capture on a phone: every control in the capture dialog is a
+   44px touch target, and Save stays pinned at the bottom instead of
+   sitting below the fold after the fields and note. */
+@media (max-width: 640px) {
+  .capture-dialog input,
+  .capture-dialog select,
+  .capture-dialog button { min-height: 44px; }
+  .capture-dialog button[data-slot="dialog-close"],
+  .capture-dialog > button[aria-label="Close"] { min-width: 44px; min-height: 44px; }
+  .capture-dialog .save-button {
+    position: sticky; bottom: 0; z-index: 2;
+    box-shadow: 0 -10px 14px -6px var(--color-surface, #fff);
+  }
+}
