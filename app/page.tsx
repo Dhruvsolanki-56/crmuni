@@ -1421,7 +1421,7 @@ function VisitorCapture({
                 name="fullName"
                 placeholder="e.g. Neha Shah"
                 value={captureFields.fullName}
-                onChange={(event) => setCaptureFields((current) => ({ ...current, fullName: event.currentTarget.value }))}
+                onChange={(event) => { const { value } = event.currentTarget; setCaptureFields((current) => ({ ...current, fullName: value })); }}
               />
             </div>
             <div className="field-block">
@@ -1431,7 +1431,7 @@ function VisitorCapture({
                 name="company"
                 placeholder="e.g. ABC Pharma"
                 value={captureFields.company}
-                onChange={(event) => setCaptureFields((current) => ({ ...current, company: event.currentTarget.value }))}
+                onChange={(event) => { const { value } = event.currentTarget; setCaptureFields((current) => ({ ...current, company: value })); }}
               />
             </div>
           </div>
@@ -1544,7 +1544,7 @@ function VisitorCapture({
                   name="role"
                   placeholder="e.g. Product manager"
                   value={captureFields.role}
-                  onChange={(event) => setCaptureFields((current) => ({ ...current, role: event.currentTarget.value }))}
+                  onChange={(event) => { const { value } = event.currentTarget; setCaptureFields((current) => ({ ...current, role: value })); }}
                 />
               </div>
             </div>
@@ -6531,12 +6531,11 @@ export default function Home() {
                                 name="fullName"
                                 placeholder={attachment ? 'Found from card when available' : 'e.g. Rajesh Mehta'}
                                 value={leadCaptureFields.fullName}
-                                onChange={(event) =>
-                                  setLeadCaptureFields((current) => ({
-                                    ...current,
-                                    fullName: event.currentTarget.value,
-                                  }))
-                                }
+                                onChange={(event) => {
+                                  // Read before queueing: currentTarget is null by the time React runs the updater.
+                                  const { value } = event.currentTarget;
+                                  setLeadCaptureFields((current) => ({ ...current, fullName: value }));
+                                }}
                               />
                             </div>
                             <div className="field-block">
@@ -6546,12 +6545,11 @@ export default function Home() {
                                 name="company"
                                 placeholder={attachment ? 'Found from card when available' : 'e.g. ABC Pharma'}
                                 value={leadCaptureFields.company}
-                                onChange={(event) =>
-                                  setLeadCaptureFields((current) => ({
-                                    ...current,
-                                    company: event.currentTarget.value,
-                                  }))
-                                }
+                                onChange={(event) => {
+                                  // Read before queueing: currentTarget is null by the time React runs the updater.
+                                  const { value } = event.currentTarget;
+                                  setLeadCaptureFields((current) => ({ ...current, company: value }));
+                                }}
                                 onBlur={() =>
                                   void checkIdentityPreview(
                                     currentCaptureFields(),
@@ -6807,12 +6805,11 @@ export default function Home() {
                                   name="role"
                                   placeholder="e.g. Procurement Head"
                                   value={leadCaptureFields.role}
-                                  onChange={(event) =>
-                                    setLeadCaptureFields((current) => ({
-                                      ...current,
-                                      role: event.currentTarget.value,
-                                    }))
-                                  }
+                                  onChange={(event) => {
+                                    // Read before queueing: currentTarget is null by the time React runs the updater.
+                                    const { value } = event.currentTarget;
+                                    setLeadCaptureFields((current) => ({ ...current, role: value }));
+                                  }}
                                 />
                               </div>
                               {activeEvent?.leadFieldSchema.length ? (
