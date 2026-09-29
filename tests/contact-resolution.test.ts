@@ -67,3 +67,18 @@ test('a company alone is an account encounter, not a fabricated contact', () => 
   assert.equal(hasContactIdentity({ phone: '+91 9000000000' }), true);
   assert.equal(hasContactIdentity({ fullName: 'Neha Shah' }), true);
 });
+
+test('an email that belongs to a merged contact resolves to the person it was merged into', async () => {
+  // Lookup 1 finds the merged-away record; lookup 2 follows it to the survivor.
+  const result = await resolveContact(
+    fakeDatabase([
+      { id: 'contact-source', mergedIntoId: 'contact-target' } as never,
+      { id: 'contact-target' },
+    ]),
+    'w1',
+    { fullName: 'Dana Dup', email: 'dana.two@dupco.test', accountId: 'account-dupco' },
+  );
+  assert.equal(result.contactId, 'contact-target');
+  assert.equal(result.isNew, false);
+  assert.equal(result.matchedOn, 'email');
+});

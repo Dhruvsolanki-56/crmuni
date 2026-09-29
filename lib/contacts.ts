@@ -45,6 +45,31 @@ export function hasContactIdentity(input: {
   );
 }
 
+type ContactRow = { id: string; mergedIntoId?: string | null };
+
+// A merged contact keeps its email/phone, so a later capture with that exact
+// email must land on the person it was merged into - not create a third record
+// and undo the merge the user just confirmed. Bounded so a corrupt cycle cannot
+// loop.
+async function survivingContactId(
+  db: D1Database,
+  workspaceId: string,
+  start: ContactRow,
+): Promise<string> {
+  let current = start;
+  for (let hop = 0; hop < 5 && current.mergedIntoId; hop++) {
+    const next = await db
+      .prepare(
+        `SELECT id, merged_into_id AS mergedIntoId FROM contacts WHERE id=? AND workspace_id=?`,
+      )
+      .bind(current.mergedIntoId, workspaceId)
+      .first<ContactRow>();
+    if (!next) break;
+    current = next;
+  }
+  return current.id;
+}
+
 export async function resolveContact(
   db: D1Database,
   workspaceId: string,
@@ -62,13 +87,13 @@ export async function resolveContact(
   if (email) {
     const match = await db
       .prepare(
-        `SELECT id FROM contacts WHERE workspace_id=? AND email=? AND merged_into_id IS NULL ORDER BY created_at ASC LIMIT 1`,
+        `SELECT id, merged_into_id AS mergedIntoId FROM contacts WHERE workspace_id=? AND email=? ORDER BY (merged_into_id IS NULL) DESC, created_at ASC LIMIT 1`,
       )
       .bind(workspaceId, email)
-      .first<{ id: string }>();
+      .first<ContactRow>();
     if (match)
       return {
-        contactId: match.id,
+        contactId: await survivingContactId(db, workspaceId, match),
         isNew: false,
         matchedOn: 'email',
         suggestedContactId: null,
@@ -79,13 +104,13 @@ export async function resolveContact(
   if (phone) {
     const match = await db
       .prepare(
-        `SELECT id FROM contacts WHERE workspace_id=? AND phone=? AND merged_into_id IS NULL ORDER BY created_at ASC LIMIT 1`,
+        `SELECT id, merged_into_id AS mergedIntoId FROM contacts WHERE workspace_id=? AND phone=? ORDER BY (merged_into_id IS NULL) DESC, created_at ASC LIMIT 1`,
       )
       .bind(workspaceId, phone)
-      .first<{ id: string }>();
+      .first<ContactRow>();
     if (match)
       return {
-        contactId: match.id,
+        contactId: await survivingContactId(db, workspaceId, match),
         isNew: false,
         matchedOn: 'phone',
         suggestedContactId: null,
