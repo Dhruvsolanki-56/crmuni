@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   title: 'Revenue OS — Today',
   description: 'Turn every exhibition conversation into accountable revenue action.',
   manifest: '/manifest.webmanifest',
+};
+
+export const viewport: Viewport = {
   themeColor: '#0d4b3f',
 };
 

@@ -1876,6 +1876,7 @@ export default function Home() {
       name: string | null;
     } | null;
     account: { name: string; contactCount: number } | null;
+    similarAccount?: { name: string; contactCount: number } | null;
   } | null>(null);
   const identityPreviewRun = useRef(0);
   const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
@@ -2727,6 +2728,7 @@ export default function Home() {
           name: string | null;
         } | null;
         account: { name: string; contactCount: number } | null;
+        similarAccount?: { name: string; contactCount: number } | null;
       };
       if (run !== identityPreviewRun.current) return;
       setIdentityPreview(data);
@@ -6564,6 +6566,7 @@ export default function Home() {
                               backend does is visible while it happens. */}
                           {identityPreview?.contact?.recognized ||
                           identityPreview?.contact?.possibleMatch ||
+                          identityPreview?.similarAccount ||
                           identityPreview?.account ? (
                             <p className="identity-preview" aria-live="polite">
                               <Sparkles size={13} />
@@ -6605,6 +6608,41 @@ export default function Home() {
                                     ? 'contact'
                                     : 'contacts'}
                                   .
+                                </span>
+                              ) : null}
+                              {identityPreview.similarAccount ? (
+                                <span>
+                                  {' '}
+                                  Similar to{' '}
+                                  <strong>
+                                    {identityPreview.similarAccount.name}
+                                  </strong>{' '}
+                                  ({identityPreview.similarAccount.contactCount}{' '}
+                                  {identityPreview.similarAccount.contactCount ===
+                                  1
+                                    ? 'contact'
+                                    : 'contacts'}
+                                  ) —{' '}
+                                  <button
+                                    type="button"
+                                    className="classify-link"
+                                    onClick={() => {
+                                      const similar =
+                                        identityPreview.similarAccount?.name;
+                                      const field =
+                                        leadForm.current?.elements.namedItem(
+                                          'company',
+                                        );
+                                      if (similar && field instanceof HTMLInputElement) {
+                                        field.value = similar;
+                                        void checkIdentityPreview(
+                                          currentCaptureFields(),
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    Use this company
+                                  </button>
                                 </span>
                               ) : null}
                             </p>

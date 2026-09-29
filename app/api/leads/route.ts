@@ -11,7 +11,7 @@ import {
   storageUnavailableResponse,
 } from '@/lib/db';
 import { validateUpload } from '@/lib/file-validation';
-import { accountIdentity } from '@/lib/accounts';
+import { accountIdentity, companyMatchKey } from '@/lib/accounts';
 import { hasContactIdentity, resolveContact } from '@/lib/contacts';
 import {
   enforceStorageEntitlement,
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     if (!fullName && !email && !phone && !company)
       return Response.json({ contact: null, account: null });
     const account = company
-      ? await accountIdentity(context.workspace.id, company)
+      ? await accountIdentity(context.workspace.id, company, database())
       : null;
     const [contactMatch, accountRow] = await Promise.all([
       fullName || email || phone
@@ -127,8 +127,32 @@ export async function GET(request: Request) {
           name: matchedName,
         }
       : null;
+    // Near-duplicate company names ("Acme Pvt Ltd" vs "Acme Private
+    // Limited") are different accounts to the strict identity hash. Surface
+    // the closest existing one as a hint only - the user decides, nothing merges.
+    let similarAccount: { name: string; contactCount: number } | null = null;
+    const matchKey = company ? companyMatchKey(company) : '';
+    if (matchKey && account && !accountRow) {
+      const candidates = await database()
+        .prepare(
+          `SELECT a.name, a.normalized_name AS normalizedName, (SELECT COUNT(*) FROM contacts c WHERE c.primary_account_id=a.id AND c.merged_into_id IS NULL) AS contactCount FROM accounts a WHERE a.workspace_id=? LIMIT 2000`,
+        )
+        .bind(context.workspace.id)
+        .all<{ name: string; normalizedName: string; contactCount: number }>();
+      const hit = candidates.results.find(
+        (row) =>
+          row.normalizedName !== account.normalized &&
+          companyMatchKey(row.normalizedName) === matchKey,
+      );
+      if (hit)
+        similarAccount = {
+          name: hit.name,
+          contactCount: Number(hit.contactCount || 0),
+        };
+    }
     return Response.json({
       contact: contactPreview,
+      similarAccount,
       account: accountRow
         ? { name: accountRow.name, contactCount: Number(accountRow.contactCount || 0) }
         : null,
@@ -499,7 +523,7 @@ export async function POST(request: Request) {
     phone,
   });
   const account = suppliedCompany
-    ? await accountIdentity(context.workspace.id, suppliedCompany)
+    ? await accountIdentity(context.workspace.id, suppliedCompany, database())
     : null;
   const duplicate = await database()
     .prepare(

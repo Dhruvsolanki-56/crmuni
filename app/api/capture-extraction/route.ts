@@ -234,7 +234,7 @@ export async function POST(request: Request) {
     const transcript = acceptedFields.includes('transcript')
       ? clean(extraction?.transcript, 12000)
       : '';
-    const account = await accountIdentity(context.workspace.id, company);
+    const account = await accountIdentity(context.workspace.id, company, db);
     const now = Date.now();
     const statements = [
       db

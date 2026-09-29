@@ -616,7 +616,7 @@ export async function POST(request: Request) {
       }>();
     const emailChanged = (existing?.email || '') !== email;
     const phoneChanged = (existing?.phone || '') !== phone;
-    const account = await accountIdentity(context.workspace.id, company);
+    const account = await accountIdentity(context.workspace.id, company, db);
     // A lead is an event encounter. Its durable contact is the current
     // person profile shared across encounters and events. If this is the
     // first time a person is identified on an account-only encounter, create
