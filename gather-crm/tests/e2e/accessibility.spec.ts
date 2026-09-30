@@ -29,17 +29,15 @@ async function inspectRoute(page: Page, route: string, width: number) {
     return issues;
   });
   expect(audit, `${route} at ${width}px`).toEqual([]);
-  if (route === '/home') {
-    await page.keyboard.press('Tab');
-    const focus = await page.evaluate(() => {
-      const element = document.activeElement;
-      if (!element || element === document.body) return { focused: false, visible: false };
-      const style = getComputedStyle(element);
-      return { focused: true, visible: style.outlineStyle !== 'none' && style.outlineWidth !== '0px' || style.boxShadow !== 'none' };
-    });
-    expect(focus.focused, `keyboard focus target at ${width}px`).toBe(true);
-    expect(focus.visible, `visible focus indication at ${width}px`).toBe(true);
-  }
+  await page.keyboard.press('Tab');
+  const focus = await page.evaluate(() => {
+    const element = document.activeElement;
+    if (!element || element === document.body) return { focused: false, visible: false };
+    const style = getComputedStyle(element);
+    return { focused: true, visible: style.outlineStyle !== 'none' && style.outlineWidth !== '0px' || style.boxShadow !== 'none' };
+  });
+  expect(focus.focused, `keyboard focus target for ${route} at ${width}px`).toBe(true);
+  expect(focus.visible, `visible focus indication for ${route} at ${width}px`).toBe(true);
 }
 
 test('company and private attendee routes retain named controls, labeled fields, landmarks, and keyboard focus on desktop and phone', async ({ page }) => {
