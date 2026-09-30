@@ -1408,12 +1408,23 @@ export function markContactReplied(actorId: string, workspaceId: string, contact
   assertWorkspaceAccess(actorId, workspaceId);
   assertContactAccess(actorId, workspaceId, contactId);
   return db.transaction(() => {
-    const result = db.prepare(`UPDATE contacts SET stage='replied',lost_reason=NULL,version=version+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE workspace_id=? AND id=? AND deleted_at IS NULL AND archived_at IS NULL`).run(workspaceId, contactId);
-    if (!result.changes) return false;
-    db.prepare(`UPDATE emails SET status='replied' WHERE workspace_id=? AND contact_id=? AND status='sent' AND id=(
-      SELECT id FROM emails WHERE workspace_id=? AND contact_id=? AND status='sent' ORDER BY sent_to_server_at DESC LIMIT 1)`)
-      .run(workspaceId, contactId, workspaceId, contactId);
+    const contact = db.prepare(`SELECT stage,lost_reason FROM contacts WHERE workspace_id=? AND id=? AND deleted_at IS NULL AND archived_at IS NULL`)
+      .get(workspaceId, contactId) as { stage: string; lost_reason: string | null } | undefined;
+    if (!contact) return false;
+
+    const latestSentEmail = db.prepare(`SELECT id FROM emails WHERE workspace_id=? AND contact_id=? AND status='sent' ORDER BY sent_to_server_at DESC LIMIT 1`)
+      .get(workspaceId, contactId) as { id: string } | undefined;
+    const contactChanged = contact.stage !== 'replied' || contact.lost_reason !== null;
+    if (!contactChanged && !latestSentEmail) return true;
+
+    if (contactChanged) {
+      db.prepare(`UPDATE contacts SET stage='replied',lost_reason=NULL,version=version+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE workspace_id=? AND id=? AND deleted_at IS NULL AND archived_at IS NULL`).run(workspaceId, contactId);
+    }
+    if (latestSentEmail) {
+      db.prepare(`UPDATE emails SET status='replied' WHERE workspace_id=? AND contact_id=? AND id=? AND status='sent'`)
+        .run(workspaceId, contactId, latestSentEmail.id);
+    }
     db.prepare(`INSERT INTO audit_events(id,workspace_id,actor_user_id,action,target_type,target_id) VALUES (?,?,?,'contact_replied','contact',?)`)
       .run(randomUUID(), workspaceId, actorId, contactId);
     return true;

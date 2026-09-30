@@ -319,8 +319,11 @@ test('one captured lead completes the sample-to-won lifecycle under one shared c
   await context.grantPermissions(['microphone']);
   await page.goto('/');
   await page.getByRole('button', { name: /Maya Chen/ }).click();
+  await expect(page.getByRole('link', { name: 'Companies' })).toBeVisible();
 
-  const companyBefore = await (await page.request.get('/api/companies/demo-ns-acme')).json() as { company: { id: string; deal_value_minor: number }; people: Array<{ id: string }> };
+  const companyBeforeResponse = await page.request.get('/api/companies/demo-ns-acme');
+  expect(companyBeforeResponse.status()).toBe(200);
+  const companyBefore = await companyBeforeResponse.json() as { company: { id: string; deal_value_minor: number }; people: Array<{ id: string }> };
   const unique = Date.now();
   const leadName = `Sample Buyer ${unique}`;
   const recipient = `sample-buyer-${unique}@acmepackaging.example`;
@@ -374,6 +377,15 @@ test('one captured lead completes the sample-to-won lifecycle under one shared c
   await expect(page.getByRole('heading', { name: leadName })).toBeVisible();
   await page.getByRole('button', { name: 'They replied' }).click();
   await expect.poll(async () => (((await page.request.get(`/api/contacts/${contactId}`)).json()) as Promise<{ person: { stage: string } }>).then((value) => value.person.stage)).toBe('replied');
+  const replyState = await (await page.request.get(`/api/contacts/${contactId}`)).json() as { person: { version: number }; timeline: Array<{ kind: string; detail: string }> };
+  const replyCsrf = await (await page.request.get('/api/auth/csrf')).json() as { csrfToken: string };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const repeatedReply = await page.request.post(`/api/contacts/${contactId}/reply`, { headers: { 'X-CSRF-Token': replyCsrf.csrfToken } });
+    expect(repeatedReply.status()).toBe(200);
+  }
+  const repeatedReplyState = await (await page.request.get(`/api/contacts/${contactId}`)).json() as { person: { version: number }; timeline: Array<{ kind: string; detail: string }> };
+  expect(repeatedReplyState.person.version).toBe(replyState.person.version);
+  expect(repeatedReplyState.timeline.filter((item) => item.kind === 'reply')).toHaveLength(1);
 
   const meetingNote = `Sample review meeting ${unique}`;
   const meetingTime = await page.evaluate(() => {
