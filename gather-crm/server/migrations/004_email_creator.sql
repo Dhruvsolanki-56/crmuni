@@ -1,1 +1,0 @@
-ALTER TABLE emails ADD COLUMN created_by TEXT REFERENCES users(id) ON DELETE SET NULL;
